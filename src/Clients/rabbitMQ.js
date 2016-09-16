@@ -105,7 +105,7 @@ export default class Client {
 
         // configure error exchange
         this.channel.assertExchange(this.config.amqpSettings.errorQueue, 'direct', {
-            durable: true
+            durable: false
         });
 
         // create error queue
@@ -121,7 +121,7 @@ export default class Client {
         {
             // configure audit exchange
             this.channel.assertExchange(this.config.amqpSettings.auditQueue, 'direct', {
-                durable: true
+                durable: false
             });
 
             // create error audit

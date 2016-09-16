@@ -243,7 +243,7 @@ describe("RabbitMQ Client", function() {
                 settings.amqpSettings.errorQueue,
                 "direct",
                 sinon.match({
-                    durable: true
+                    durable: false
                 })
             ));
 
@@ -275,7 +275,7 @@ describe("RabbitMQ Client", function() {
                 settings.amqpSettings.auditQueue,
                 "direct",
                 sinon.match({
-                    durable: true
+                    durable: false
                 })
             ));
 
@@ -307,7 +307,7 @@ describe("RabbitMQ Client", function() {
                 settings.amqpSettings.auditQueue,
                 "direct",
                 sinon.match({
-                    durable: true
+                    durable: false
                 })
             ));
 
