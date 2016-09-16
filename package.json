@@ -1,6 +1,6 @@
 {
-  "name": "@twatson83/service-connect",
-  "version": "1.0.0",
+  "name": "service-connect",
+  "version": "0.0.2",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -10,7 +10,9 @@
     "examples.commands.consumer": "node ./examples/commands/consumer.js",
     "examples.commands.sender": "node ./examples/commands/sender.js"
   },
-  "author": "",
+  "author": "Tim Watson",
+  "email": "tswatson123@gmail.com",
+  "url": "https://github.com/twatson83",
   "license": "ISC",
   "devDependencies": {
     "babel-cli": "^6.11.4",
@@ -26,5 +28,10 @@
   },
   "dependencies": {
     "amqplib": "^0.4.2"
-  }
+  },
+  "repository" :
+  {
+    "type" : "git", "url" : "https://github.com/twatson83/ServiceConnect-NodeJS"
+  },
+  "keywords": [ "service", "bus", "message", "messaging", "rabbitmq", "event", "publish", "subscribe", "listen", "dispatch"]
 }
