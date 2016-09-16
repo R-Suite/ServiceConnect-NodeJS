@@ -49,7 +49,7 @@ var bus = new Bus({
 });
 ```
 
-##### 2. Receive your message
+##### 2. Receive message
 
 Again, we create the bus. This time however we add a handler function to the handlers object inside the configuration.  The second way of defining a handler is by using ```bus.on("ConsumerCommand", function(message, headers) {});``` were the first arg is the message type to consume and the second is the callback function.
 
