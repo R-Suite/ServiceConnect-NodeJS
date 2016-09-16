@@ -9,7 +9,7 @@ var bus = new Bus({
             name: 'ServiceConnect.Samples.Sender',
             autoDelete: true
         },
-        host: "amqp://devadmin:l0rdw3asel@ruffer-f330852"
+        host: "amqp://guest:guest@localhost"
     },
     events: {
         connected: function(){

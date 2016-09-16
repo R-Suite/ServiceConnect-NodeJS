@@ -9,7 +9,7 @@ var bus = new Bus({
             name: 'ServiceConnect.Samples.Consumer',
             autoDelete: true
         },
-        host: "amqp://devadmin:l0rdw3asel@ruffer-f330852"
+        host: "amqp://guest:guest@localhost"
     },
     handlers: {
         "ConsumerCommand": [
@@ -25,7 +25,6 @@ var bus = new Bus({
             stdin.addListener("data", function(d) {
                 if (d.toString().trim() == "exit"){
                     bus.close();
-                    process.exit()
                 }
             });
         }
