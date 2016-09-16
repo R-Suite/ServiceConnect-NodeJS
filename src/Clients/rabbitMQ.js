@@ -309,7 +309,6 @@ export default class Client {
      * Closes RabbitMQ channel.
      */
     close(){
-        console.info("Closing Bus");
         if(this.config.amqpSettings.queue.autoDelete){
             this.channel.deleteQueue(this.config.amqpSettings.queue.name + ".Retries");
         }

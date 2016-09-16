@@ -9,7 +9,7 @@ var bus = new Bus({
             name: 'ServiceConnect.Samples.Consumer',
             autoDelete: true
         },
-        host: "amqp://guest:guest@localhost"
+        host: "amqp://devadmin:l0rdw3asel@ruffer-f330852"
     },
     handlers: {
         "ConsumerCommand": [
