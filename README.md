@@ -61,9 +61,7 @@ var Bus = require('../../index.js').Bus;
 
 var bus = new Bus({
     amqpSettings: {
-        queue: {
-            name: 'ServiceConnect.Samples.Consumer'
-        }
+        queue: {  name: 'ServiceConnect.Samples.Consumer'  }
     }
 });
 
