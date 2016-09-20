@@ -1,4 +1,4 @@
-var Bus = require('../../index.js').Bus;
+var Bus = require('../../index.js');
 var stdin = process.openStdin();
 
 console.log("Starting Sender");
@@ -6,8 +6,7 @@ console.log("Starting Sender");
 var bus = new Bus({
     amqpSettings: {
         queue: {
-            name: 'ServiceConnect.Samples.Sender',
-            autoDelete: true
+            name: 'ServiceConnect.Samples.Sender'
         },
         host: "amqp://guest:guest@localhost"
     }

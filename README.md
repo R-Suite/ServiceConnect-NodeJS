@@ -70,7 +70,6 @@ var bus = new Bus({
 bus.init(function(){
 
     bus.addHandler("ConsumerCommand", function(message, headers) {
-        console.log("Handler 2");
         console.log(message);
     });
 

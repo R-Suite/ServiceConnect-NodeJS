@@ -1,4 +1,4 @@
-var Bus = require('../../index.js').Bus;
+var Bus = require('../../index.js');
 var stdin = process.openStdin();
 
 console.log("Starting Consumer");
