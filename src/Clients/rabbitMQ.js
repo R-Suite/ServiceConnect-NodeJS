@@ -1,9 +1,10 @@
 import {mergeDeep, guid} from '../utils';
 import amqp from 'amqplib/callback_api';
 import os from 'os';
+import EventEmitter from 'events';
 
 /** Class representing the rabbitMQ client. */
-export default class Client {
+export default class Client extends EventEmitter {
 
     /**
      * Sets config and connects to RabbitMQ
@@ -11,7 +12,8 @@ export default class Client {
      * @param  {Object} config
      * @param (function) consumeMessageCallback
      */
-    constructor(config, consumeMessageCallback){
+    constructor(config, consumeMessageCallback) {
+        super();
         this.config = config;
         this.consumeMessageCallback = consumeMessageCallback;
         this._consumeMessage = this._consumeMessage.bind(this);
@@ -20,9 +22,7 @@ export default class Client {
         this.removeType = this.removeType.bind(this);
         this.publish = this.publish.bind(this);
         this.send = this.send.bind(this);
-        this.publish = this.publish.bind(this);
         this._getHeaders = this._getHeaders.bind(this);
-        this._consumeMessage = this._consumeMessage.bind(this);
         this._processMessage = this._processMessage.bind(this);
         this.close = this.close.bind(this);
     }
@@ -39,13 +39,13 @@ export default class Client {
 
         amqp.connect(this.config.amqpSettings.host, options, (err, conn) => {
             if (err){
-                this.config.events.error(err);
+                this.emit("error", err);
                 return;
             }
             this.connection = conn;
             this.connection.createChannel((err, channel) => {
                 if (err){
-                    this.config.events.error(err);
+                    this.emit("error", err);
                     return;
                 }
                 this.channel = channel;
@@ -136,7 +136,7 @@ export default class Client {
             noAck: this.config.amqpSettings.queue.noAck
         });
 
-        this.config.events.connected();
+        this.emit("connected");
     }
 
     /**
@@ -220,7 +220,7 @@ export default class Client {
     _consumeMessage(rawMessage){
         try {
             if (!rawMessage.properties.headers.TypeName){
-                this.config.events.error({ error: "Message does not contain TypeName", message: rawMessage});
+                this.emit("error", { error: "Message does not contain TypeName", message: rawMessage});
                 throw {
                     error: "Message does not contain TypeName",
                     message: rawMessage

@@ -26,10 +26,6 @@ let settings = {
         auditQueue: "audit",
         auditEnabled: false
     },
-    events: {
-        error: e => console.error(e),
-        connected: () => console.info("Bus connected")
-    },
     handlers: {
         // "message type": [ array of callbacks ]
     },

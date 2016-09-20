@@ -1,8 +1,9 @@
 import settings from './settings';
 import {mergeDeep} from './utils';
+import EventEmitter from 'events';
 
 /** Class representing a the message bus. */
-export class Bus {
+export class Bus extends EventEmitter {
 
     /**
      * Sets config and creates client
@@ -10,22 +11,28 @@ export class Bus {
      * @param  {Object} config
      */
     constructor(config) {
+        super();
         this.config = mergeDeep(settings, config);
         this._consumeMessage = this._consumeMessage.bind(this);
-        this.on = this.on.bind(this);
-        this.off = this.off.bind(this);
+        this.addHandler = this.addHandler.bind(this);
+        this.removeHandler = this.removeHandler.bind(this);
         this.send = this.send.bind(this);
         this.publish = this.publish.bind(this);
         this._processHandlers = this._processHandlers.bind(this);
-        this._createClient();
+        this.on('error', console.log);
     }
 
     /**
      * Creates AMQP client and fires connected event when client has connected
      */
-    _createClient() {
+    init(cb) {
         this.client = new this.config.client(this.config, this._consumeMessage);
         this.client.connect();
+        this.client.on("connected", () => {
+            this.emit("connected");
+            if(cb) cb();
+        });
+        this.client.on("error", ex => this.emit("error", ex));
     }
 
     /**
@@ -33,7 +40,7 @@ export class Bus {
      * @param {String} message
      * @param  {Function} callback
      */
-    on(message, callback){
+    addHandler(message, callback){
         var type = message.replace(/\./g, "");
         this.client.consumeType(type);
         this.config.handlers[message] = this.config.handlers[message] || [];
@@ -46,7 +53,7 @@ export class Bus {
      * @param {String} message
      * @param  {Function} callback
      */
-    off(message, callback){
+    removeHandler(message, callback){
         this.config.handlers[message] = this.config
                                             .handlers[message]
                                             .filter(c => c !== callback);
@@ -124,7 +131,7 @@ export class Bus {
                 } catch(e) {
                     result.success = false;
                     result.exception = e;
-                    this.config.events.error(e);
+                    this.emit("error", e);
                 }
             });
         }

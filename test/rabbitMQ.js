@@ -38,13 +38,13 @@ describe("RabbitMQ Client", function() {
         it("should call error callback if error occurs during connect", function(){
 
             var errorCb = sinon.stub();
-            settings.events.error = errorCb;
 
             sinon.stub(amqp, 'connect', (host, options, cb) => {
                 cb("Error");
             });
 
             var client = new Client(settings, () =>{});
+            client.on("error", errorCb);
             client.connect();
             assert.isTrue(errorCb.calledWith("Error"));
 
@@ -71,7 +71,6 @@ describe("RabbitMQ Client", function() {
         it("should call error callback if error occurs during create channel", function(){
 
             var errorCb = sinon.stub();
-            settings.events.error = errorCb;
 
             var fakeConnection = { createChannel: (cb) => {
                 cb("Error");
@@ -82,6 +81,7 @@ describe("RabbitMQ Client", function() {
             });
 
             var client = new Client(settings, () =>{});
+            client.on("error", errorCb);
             client.connect();
 
             assert.isTrue(errorCb.calledWith("Error"));
@@ -351,9 +351,9 @@ describe("RabbitMQ Client", function() {
             settings.amqpSettings.queue.name = "TestQueue";
             settings.amqpSettings.auditEnabled = false;
             var cb = sinon.stub();
-            settings.events.connected = cb;
 
             var client = new Client(settings, () => {});
+            client.on("connected", cb);
             client.channel = fakeChannel;
             client._createQueues();
 
@@ -534,11 +534,22 @@ describe("RabbitMQ Client", function() {
 
     describe("publish", function(){
 
+        var publishStub;
+        var assertExchangeStub;
+
+        beforeEach(function(){
+            publishStub = sinon.stub(fakeChannel, "publish");
+            assertExchangeStub = sinon.stub(fakeChannel, "assertExchange");
+        });
+
+        afterEach(function(){
+            fakeChannel.publish.restore();
+            fakeChannel.assertExchange.restore();
+        });
+
         it("should publish the message", function(){
             settings.amqpSettings.queue.name = "TestQueue";
             settings.amqpSettings.auditEnabled = false;
-
-            var publishStub = sinon.stub(fakeChannel, "publish");
 
             var client = new Client(settings, () =>{});
             client.channel = fakeChannel;
@@ -558,14 +569,11 @@ describe("RabbitMQ Client", function() {
                 sinon.match.any
             ));
 
-            fakeChannel.publish.restore();
         });
 
         it("should publish the message with the correct headers", function(){
             settings.amqpSettings.queue.name = "TestQueue";
             settings.amqpSettings.auditEnabled = false;
-
-            var publishStub = sinon.stub(fakeChannel, "publish");
 
             var client = new Client(settings, () =>{});
             client.channel = fakeChannel;
@@ -594,15 +602,12 @@ describe("RabbitMQ Client", function() {
                     }
                 })
             ));
-
-            fakeChannel.publish.restore();
         });
 
         it("should assert that the exchange exists before publishing", function(){
             settings.amqpSettings.queue.name = "TestQueue";
             settings.amqpSettings.auditEnabled = false;
 
-            var assertExchangeStub = sinon.stub(fakeChannel, "assertExchange");
 
             var client = new Client(settings, () =>{});
             client.channel = fakeChannel;
@@ -620,8 +625,6 @@ describe("RabbitMQ Client", function() {
                     durable: true
                 })
             ));
-
-            fakeChannel.assertExchange.restore();
         });
 
     });

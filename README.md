@@ -23,6 +23,10 @@ A simple, easy to use asynchronous messaging framework for Node.JS.  It provides
     - Scatter Gather
     - Routing Slip
     - Message Aggregation
+    - Content based routing
+    - Message expiration
+    - Aggregator
+    - Streaming
 
 ## Simple example
 
@@ -40,18 +44,17 @@ var Bus = require('../../index.js').Bus;
 var bus = new Bus({
     amqpSettings: {
         queue: { name: 'ServiceConnect.Samples.Sender' }
-    },
-    events: {
-        connected: function(){
-            bus.send('ServiceConnect.Samples.Consumer', "ConsumerCommand", { data: count });
-        }
     }
+});
+
+bus.init(function(){
+    bus.send('ServiceConnect.Samples.Consumer', "ConsumerCommand", { data: count });
 });
 ```
 
 ##### 2. Receive message
 
-Again, we create the bus. This time however we add a handler function to the handlers object inside the configuration.  The second way of defining a handler is by using ```bus.on("ConsumerCommand", function(message, headers) {});``` were the first arg is the message type to consume and the second is the callback function.
+Again, we create the bus. This time however we add a message handler by using ```bus.addHandler("ConsumerCommand", function(message, headers) {});``` were the first arg is the message type to consume and the second is the callback function.
 
 ```js
 var Bus = require('../../index.js').Bus;
@@ -61,19 +64,15 @@ var bus = new Bus({
         queue: {
             name: 'ServiceConnect.Samples.Consumer'
         }
-    },
-    handlers: {
-        "ConsumerCommand": [
-            function(message, headers) {
-                console.log("Handler 1");
-                console.log(message);
-            }
-        ]
     }
 });
 
-bus.on("ConsumerCommand", function(message, headers) {
-    console.log("Handler 2");
-    console.log(message);
+bus.init(function(){
+
+    bus.addHandler("ConsumerCommand", function(message, headers) {
+        console.log("Handler 2");
+        console.log(message);
+    });
+
 });
 ```

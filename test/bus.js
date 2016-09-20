@@ -22,6 +22,8 @@ describe("Bus", function() {
                     "LogCommand": [console.log]
                 }
             });
+            bus.init();
+
             // Queue
             expect(bus.config.amqpSettings.queue.name).to.equal("ServiceConnectWebTest");
             expect(bus.config.amqpSettings.queue.durable).to.equal(true);
@@ -53,9 +55,39 @@ describe("Bus", function() {
             expect(bus.config.amqpSettings.auditQueue).to.equal("audit");
             expect(bus.config.amqpSettings.auditEnabled).to.equal(false);
         });
+    });
+
+    describe("init", function() {
+
+        var connectStub;
+
+        beforeEach(function(){
+            connectStub = sinon.stub(settings.client.prototype, 'connect');
+        });
+
+        afterEach(function(){
+            settings.client.prototype.connect.restore();
+        });
 
         it("should create and connect to client", function() {
-            var stub = sinon.stub(settings.client.prototype, 'connect');
+            let bus = new Bus({
+                amqpSettings: {
+                    queue: {
+                        name: 'ServiceConnectWebTest'
+                    }
+                },
+                handlers: {
+                    "LogCommand": [console.log]
+                }
+            });
+            bus.init();
+
+            expect(bus.client).to.not.be.undefined;
+            assert.isTrue(connectStub.called);
+        });
+
+        it("should bind connected event", function() {
+            var connected = sinon.stub();
 
             let bus = new Bus({
                 amqpSettings: {
@@ -67,16 +99,91 @@ describe("Bus", function() {
                     "LogCommand": [console.log]
                 }
             });
+            bus.on("connected", connected);
+            bus.init();
+            bus.client.emit("connected");
+
+            assert.isTrue(connected.called);
+        });
+
+        it("should call callback argument on connected", function() {
+            var connected = sinon.stub();
+
+            let bus = new Bus({
+                amqpSettings: {
+                    queue: {
+                        name: 'ServiceConnectWebTest'
+                    }
+                },
+                handlers: {
+                    "LogCommand": [console.log]
+                }
+            });
+            bus.init(connected);
+            bus.client.emit("connected");
+
+            assert.isTrue(connected.called);
+        });
+
+        it("should bind error event", function() {
+            var error = sinon.stub();
+
+            let bus = new Bus({
+                amqpSettings: {
+                    queue: {
+                        name: 'ServiceConnectWebTest'
+                    }
+                },
+                handlers: {
+                    "LogCommand": [console.log]
+                }
+            });
+            bus.on("error", error);
+            bus.init();
+            bus.client.emit("error", "error message");
+
+            assert.isTrue(error.calledWith("error message"));
+        });
+    });
+
+    describe("addHandler", function() {
+
+        var connectStub;
+
+        beforeEach(function(){
+            connectStub = sinon.stub(settings.client.prototype, 'connect');
+        });
+
+        afterEach(function(){
+            settings.client.prototype.connect.restore();
+        });
+
+        it("should create and connect to client", function() {
+            let bus = new Bus({
+                amqpSettings: {
+                    queue: {
+                        name: 'ServiceConnectWebTest'
+                    }
+                },
+                handlers: {
+                    "LogCommand": [console.log]
+                }
+            });
+            bus.init();
 
             expect(bus.client).to.not.be.undefined;
-            assert.isTrue(stub.called);
-
-            settings.client.prototype.connect.restore();
+            assert.isTrue(connectStub.called);
         });
 
     });
 
-    describe("on", function(){
+    describe("addHandler", function(){
+
+        var consumeTypeStub;
+        beforeEach(function(){
+            sinon.stub(settings.client.prototype, 'connect');
+            consumeTypeStub = sinon.stub(settings.client.prototype, 'consumeType');
+        });
 
         afterEach(function(){
             settings.client.prototype.connect.restore();
@@ -84,9 +191,6 @@ describe("Bus", function() {
         });
 
         it("should call consumeType on client", function(){
-            sinon.stub(settings.client.prototype, 'connect');
-            var stub = sinon.stub(settings.client.prototype, 'consumeType');
-
             let bus = new Bus({
                 amqpSettings: {
                     queue: {
@@ -97,16 +201,14 @@ describe("Bus", function() {
                     "LogCommand": [console.log]
                 }
             });
+            bus.init();
 
-            bus.on("Test.Message", () => {});
+            bus.addHandler("Test.Message", () => {});
 
-            assert.isTrue(stub.calledWith("TestMessage"));
+            assert.isTrue(consumeTypeStub.calledWith("TestMessage"));
         });
 
         it("should add the message type and callback to the handler map", function(){
-            sinon.stub(settings.client.prototype, 'connect');
-            sinon.stub(settings.client.prototype, 'consumeType');
-
             let bus = new Bus({
                 amqpSettings: {
                     queue: {
@@ -117,13 +219,20 @@ describe("Bus", function() {
                     "LogCommand": [console.log]
                 }
             });
+            bus.init();
             var cb = () => {};
-            bus.on("Test.Message",cb );
+            bus.addHandler("Test.Message",cb );
             expect(bus.config.handlers["Test.Message"][0]).to.equal(cb);
         })
     });
 
-    describe("off", function(){
+    describe("removeHandler", function(){
+
+        var removeTypeStub;
+        beforeEach(function(){
+            sinon.stub(settings.client.prototype, 'connect');
+            removeTypeStub = sinon.stub(settings.client.prototype, 'removeType');
+        });
 
         afterEach(function(){
             settings.client.prototype.connect.restore();
@@ -131,9 +240,6 @@ describe("Bus", function() {
         });
 
         it("should remove handler mapping from handler dictionary", function(){
-            sinon.stub(settings.client.prototype, 'connect');
-            sinon.stub(settings.client.prototype, 'removeType');
-
             var cb = () => {};
             var cb2 = () => {};
             let bus = new Bus({
@@ -147,17 +253,15 @@ describe("Bus", function() {
                     "Test.Message2": [() => {}]
                 }
             });
+            bus.init();
 
-            bus.off("Test.Message", cb);
+            bus.removeHandler("Test.Message", cb);
             expect(bus.config.handlers["Test.Message"]).to.have.length(1);
             expect(bus.config.handlers["Test.Message"][0]).to.equal(cb2);
             expect(bus.config.handlers["Test.Message2"]).to.not.equal.undefined;
         });
 
         it("if all callbacks have been removed for a type then removeType should be called on client", function(){
-            sinon.stub(settings.client.prototype, 'connect');
-            var stub = sinon.stub(settings.client.prototype, 'removeType');
-
             var cb = () => {};
             let bus = new Bus({
                 amqpSettings: {
@@ -170,15 +274,14 @@ describe("Bus", function() {
                     "Test.Message2": [() => {}]
                 }
             });
+            bus.init();
 
-            bus.off("Test.Message",cb );
-            assert.isTrue(stub.calledWith("TestMessage"));
+            bus.removeHandler("Test.Message",cb );
+            assert.isTrue(removeTypeStub.calledWith("TestMessage"));
         });
 
         it("if all callbacks have not been removed for a message type then removeType should not be " +
            "called on the client", function(){
-            sinon.stub(settings.client.prototype, 'connect');
-            var stub = sinon.stub(settings.client.prototype, 'removeType');
 
             var cb = () => {};
             var cb2 = () => {};
@@ -193,9 +296,10 @@ describe("Bus", function() {
                     "Test.Message2": [() => {}]
                 }
             });
+            bus.init();
 
-            bus.off("Test.Message", cb);
-            assert.isFalse(stub.calledWith("TestMessage"));
+            bus.removeHandler("Test.Message", cb);
+            assert.isFalse(removeTypeStub.calledWith("TestMessage"));
         });
 
     });
@@ -222,6 +326,7 @@ describe("Bus", function() {
                     "LogCommand": [console.log]
                 }
             });
+            bus.init();
 
             var isHandled = bus.isHandled("LogCommand");
 
@@ -241,6 +346,8 @@ describe("Bus", function() {
                 }
             });
 
+            bus.init();
+
             var isHandled = bus.isHandled("LogCommand2");
 
             expect(isHandled).to.equal.false;
@@ -258,6 +365,7 @@ describe("Bus", function() {
                     "LogCommand": []
                 }
             });
+            bus.init();
 
             var isHandled = bus.isHandled("LogCommand");
 
@@ -268,8 +376,10 @@ describe("Bus", function() {
 
     describe("send", function(){
 
+        var stub;
         beforeEach(function() {
             sinon.stub(settings.client.prototype, 'connect');
+            stub = sinon.stub(settings.client.prototype, 'send');
         });
 
         afterEach(function() {
@@ -277,7 +387,6 @@ describe("Bus", function() {
         });
 
         it("should send message to client", function(){
-            var stub = sinon.stub(settings.client.prototype, 'send');
             let bus = new Bus(),
                 endpoint = "TestEndpoint",
                 type = "MessageType",
@@ -285,6 +394,7 @@ describe("Bus", function() {
                     data: "1234"
                 },
                 headers = { "Token": 1234567 };
+            bus.init();
 
             bus.send(endpoint, type, message, headers);
 
@@ -297,16 +407,18 @@ describe("Bus", function() {
 
     describe("publish", function(){
 
+        var stub;
         beforeEach(function() {
             sinon.stub(settings.client.prototype, 'connect');
+            stub = sinon.stub(settings.client.prototype, 'publish');
         });
 
         afterEach(function() {
             settings.client.prototype.connect.restore();
+            settings.client.prototype.publish.restore();
         });
 
         it("should publish message to client", function(){
-            var stub = sinon.stub(settings.client.prototype, 'publish');
             let bus = new Bus(),
                 type = "MessageType",
                 message = {
@@ -314,11 +426,10 @@ describe("Bus", function() {
                 },
                 headers = { "Token": 1234567 };
 
+            bus.init();
             bus.publish(type, message, headers);
 
             assert.isTrue(stub.calledWith(type, message, headers));
-
-            settings.client.prototype.publish.restore();
         });
 
     });
@@ -350,6 +461,7 @@ describe("Bus", function() {
                     "LogCommand2": [ cb3 ]
                 }
             });
+            bus.init();
 
             bus._consumeMessage(message, headers, type);
 
@@ -366,6 +478,7 @@ describe("Bus", function() {
                 type = "LogCommand";
 
             let bus = new Bus();
+            bus.init();
 
             var result = bus._consumeMessage(message, headers, type);
 
@@ -388,13 +501,14 @@ describe("Bus", function() {
                     "LogCommand2": [ cb3 ]
                 }
             });
+            bus.init();
 
             var result = bus._consumeMessage(message, headers, type);
 
             expect(result.success).to.equal(true);
         });
 
-        it("should return error a handler throws an exception", function(){
+        it("should return error if a handler throws an exception", function(){
 
             var cb1 = sinon.stub(),
                 cb2 = sinon.stub(),
@@ -415,9 +529,11 @@ describe("Bus", function() {
                     "LogCommand2": [ cb3 ]
                 }
             });
+            bus.init();
 
             var result = bus._consumeMessage(message, headers, type);
 
+            console.log(result);
             expect(result.success).to.equal(false);
             expect(result.exception.error).to.equal("cb1 error");
         });
@@ -441,11 +557,11 @@ describe("Bus", function() {
                 handlers: {
                     "LogCommand": [ cb1, cb2 ],
                     "LogCommand2": [ cb3 ]
-                },
-                events: {
-                    error: error
                 }
-            });
+            });;
+            bus.init();
+
+            bus.on("error", error);
 
             bus._consumeMessage(message, headers, type);
 
@@ -455,23 +571,24 @@ describe("Bus", function() {
 
     describe("close", function(){
 
+        var stub;
         beforeEach(function() {
             sinon.stub(settings.client.prototype, 'connect');
+            stub = sinon.stub(settings.client.prototype, 'close');
         });
 
         afterEach(function() {
             settings.client.prototype.connect.restore();
+            settings.client.prototype.close.restore();
         });
 
         it("should close the client", function(){
-            var stub = sinon.stub(settings.client.prototype, 'close');
             let bus = new Bus();
+            bus.init();
 
             bus.close();
 
             assert.isTrue(stub.called);
-
-            settings.client.prototype.close.restore();
         });
 
     });
