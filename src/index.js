@@ -19,6 +19,7 @@ export class Bus extends EventEmitter {
         this.send = this.send.bind(this);
         this.publish = this.publish.bind(this);
         this._processHandlers = this._processHandlers.bind(this);
+        this.isHandled = this.isHandled.bind(this);
         this.on('error', console.log);
     }
 
@@ -54,12 +55,14 @@ export class Bus extends EventEmitter {
      * @param  {Function} callback
      */
     removeHandler(message, callback){
-        this.config.handlers[message] = this.config
-                                            .handlers[message]
-                                            .filter(c => c !== callback);
+        if (this.config.handlers[message]){
+            this.config.handlers[message] = this.config
+                .handlers[message]
+                .filter(c => c !== callback);
 
-        if (this.config.handlers[message] === undefined || this.config.handlers[message].length === 0){
-            this.client.removeType(message.replace(/\./g, ""));
+            if (this.config.handlers[message] === undefined || this.config.handlers[message].length === 0){
+                this.client.removeType(message.replace(/\./g, ""));
+            }
         }
     }
 
