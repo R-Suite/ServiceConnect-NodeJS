@@ -14,7 +14,7 @@
   "author": "Tim Watson",
   "email": "tswatson123@gmail.com",
   "url": "https://github.com/twatson83",
-  "license": "ISC",
+  "license": "MIT",
   "devDependencies": {
     "babel-cli": "^6.11.4",
     "babel-core": "^6.13.2",
