@@ -434,6 +434,162 @@ describe("Bus", function() {
 
     });
 
+    describe("sendRequest", function(){
+
+        var stub;
+        beforeEach(function() {
+            sinon.stub(settings.client.prototype, 'connect');
+            stub = sinon.stub(settings.client.prototype, 'send');
+        });
+
+        afterEach(function() {
+            settings.client.prototype.connect.restore();
+            settings.client.prototype.send.restore();
+        });
+
+        it("should send message to client", function(){
+            let bus = new Bus(),
+                endpoint = "TestEndpoint",
+                type = "MessageType",
+                message = {
+                    data: "1234"
+                },
+                headers = { "Token": 1234567 },
+                callback = ()=> {};
+            bus.init();
+
+            bus.sendRequest(endpoint, type, message, callback, headers);
+
+            assert.isTrue(stub.calledWith(endpoint, type, message, sinon.match({
+                "Token": 1234567,
+                "RequestMessageId": Object.keys(bus.requestReplyCallbacks)[0]
+            })));
+        });
+
+        it("should add request to callback dictionary", function(){
+            let bus = new Bus(),
+                endpoint = "TestEndpoint",
+                type = "MessageType",
+                message = {
+                    data: "1234"
+                },
+                headers = { "Token": 1234567 },
+                callback = () => {};
+            bus.init();
+            bus.sendRequest(endpoint, type, message, callback, headers);
+
+            console.log(bus.requestReplyCallbacks)
+
+            expect(bus.requestReplyCallbacks[headers["RequestMessageId"]].endpointCount).to.equal(1);
+            expect(bus.requestReplyCallbacks[headers["RequestMessageId"]].processedCount).to.equal(0);
+            expect(bus.requestReplyCallbacks[headers["RequestMessageId"]].callback).to.equal(callback);
+        });
+
+        it("expected replies should be equal to number of endpoints passed into sendRequest", function(){
+            let bus = new Bus(),
+                endpoints = ["TestEndpoint1", "TestEndpoint2"],
+                type = "MessageType",
+                message = {
+                    data: "1234"
+                },
+                headers = { "Token": 1234567 },
+                callback = () => {};
+            bus.init();
+            bus.sendRequest(endpoints, type, message, callback, headers);
+
+            expect(bus.requestReplyCallbacks[headers["RequestMessageId"]].endpointCount).to.equal(2);
+        });
+
+    });
+
+    describe("publishRequest", function(){
+
+        var stub, sendStub;
+        beforeEach(function() {
+            sinon.stub(settings.client.prototype, 'connect');
+            stub = sinon.stub(settings.client.prototype, 'publish');
+            sendStub = sinon.stub(settings.client.prototype, 'send');
+        });
+
+        afterEach(function() {
+            settings.client.prototype.connect.restore();
+            settings.client.prototype.publish.restore();
+            settings.client.prototype.send.restore();
+        });
+
+        it("should publish message to client", function(){
+            let bus = new Bus(),
+                type = "MessageType",
+                message = {
+                    data: "1234"
+                },
+                headers = { "Token": 1234567 },
+                callback = sinon.stub();
+
+            bus.init();
+            bus.publishRequest(type, message, callback, 1, null, headers);
+
+            assert.isTrue(!callback.called);
+            assert.isTrue(stub.calledWith(type, message, headers));
+        });
+
+        it("should add request configuration", function(){
+            let bus = new Bus(),
+                type = "MessageType",
+                message = {
+                    data: "1234"
+                },
+                headers = { "Token": 1234567 },
+                callback = sinon.stub();
+
+            bus.init();
+            bus.publishRequest(type, message, callback, 1, null, headers);
+
+            expect(bus.requestReplyCallbacks[headers["RequestMessageId"]].processedCount).to.equal(0);
+            expect(bus.requestReplyCallbacks[headers["RequestMessageId"]].callback).to.equal(callback);
+        });
+
+        it("should remove request configuration after timeout", function(){
+            let bus = new Bus(),
+                type = "MessageType",
+                message = {
+                    data: "1234"
+                },
+                headers = { },
+                count = 0;
+
+            bus.init();
+            bus.publishRequest(type, message, () => {}, null, 1);
+
+            var timeout = setTimeout(function(){
+                if (bus.requestReplyCallbacks[headers["RequestMessageId"]] === undefined) {
+                    assert(true);
+                    done();
+                } else {
+                    clearTimeout(timeout);
+                    assert(false);
+                    done();
+                }
+                count++;
+            }, 2);
+        });
+
+        it("should set expected replies", function(){
+            let bus = new Bus(),
+                type = "MessageType",
+                message = {
+                    data: "1234"
+                },
+                headers = { };
+
+            bus.init();
+            bus.publishRequest(type, message, () => {}, 2, null, headers);
+
+            expect(bus.requestReplyCallbacks[headers["RequestMessageId"]].endpointCount).to.equal(2);
+        });
+
+    });
+
     describe("_consumeMessage", function(){
 
         beforeEach(function() {
@@ -506,6 +662,34 @@ describe("Bus", function() {
             var result = bus._consumeMessage(message, headers, type);
 
             expect(result.success).to.equal(true);
+        });
+
+        it("reply callback should send message to source address", function(){
+
+            var stub1 = sinon.stub(settings.client.prototype, 'send');
+
+            var replyMessage = {message: 123},
+                cb1 = (message, headers, type, replyCallback) => {
+                    replyCallback("TestReply", replyMessage);
+                },
+                message = {
+                    data: "12345"
+                },
+                headers = { token: 123, SourceAddress: "Source" },
+                type = "LogCommand";
+
+            let bus = new Bus({
+                handlers: {
+                    "LogCommand": [ cb1 ]
+                }
+            });
+            bus.init();
+
+            bus._consumeMessage(message, headers, type);
+
+            assert.isTrue(stub1.calledWith("Source", "TestReply", replyMessage, headers));
+
+            settings.client.prototype.send.restore();
         });
 
         it("should return error if a handler throws an exception", function(){

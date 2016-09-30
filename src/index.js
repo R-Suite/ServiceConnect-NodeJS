@@ -1,5 +1,5 @@
 import settings from './settings';
-import {mergeDeep} from './utils';
+import {mergeDeep, guid} from './utils';
 import EventEmitter from 'events';
 
 /** Class representing a the message bus. */
@@ -21,6 +21,7 @@ export class Bus extends EventEmitter {
         this._processHandlers = this._processHandlers.bind(this);
         this.isHandled = this.isHandled.bind(this);
         this.on('error', console.log);
+        this.requestReplyCallbacks = {};
     }
 
     /**
@@ -97,6 +98,60 @@ export class Bus extends EventEmitter {
     }
 
     /**
+     * Sends a command to the specified endpoint(s) and waits for one or more replies.
+     * The method behaves like a regular blocking RPC method.
+     * @param {string|Array} endpoint
+     * @param {string} type
+     * @param {Object} message
+     * @param {function} callback
+     * @param {Object|undefined} headers
+     */
+    sendRequest(endpoint, type, message, callback, headers ={}){
+        var messageId = guid();
+
+        let endpoints = Array.isArray(endpoint) ? endpoint : [endpoint];
+
+        this.requestReplyCallbacks[messageId] = {
+            endpointCount: endpoints.length,
+            processedCount: 0,
+            callback
+        };
+        headers["RequestMessageId"] = messageId;
+        this.client.send(endpoint, type, message, headers);
+    }
+
+    /**
+     * Publishes an event and wait for replies.
+     * @param {string} type
+     * @param {Object} message
+     * @param {function} callback
+     * @param {int|null} expected
+     * @param {int|null} timeout
+     * @param {Object|null} headers
+     */
+    publishRequest(type, message, callback, expected = null, timeout = 10000, headers ={}){
+        var messageId = guid();
+
+        this.requestReplyCallbacks[messageId] = {
+            endpointCount: expected === null ? -1 : expected,
+            processedCount: 0,
+            callback
+        };
+        headers["RequestMessageId"] = messageId;
+
+        this.client.publish(type, message, headers);
+
+        if (timeout !== null) {
+            this.requestReplyCallbacks[messageId].timeout = setTimeout(() => {
+                if (this.requestReplyCallbacks[messageId]){
+                    clearTimeout(this.requestReplyCallbacks[messageId].timeout);
+                    delete this.requestReplyCallbacks[messageId];
+                }
+            }, timeout);
+        }
+    }
+
+    /**
      * Callback called when consuming a message.  Calls handler callbacks.
      * @param  {Object} message
      * @param  {Object} headers
@@ -104,14 +159,18 @@ export class Bus extends EventEmitter {
      * @return  {Object} result
      */
     _consumeMessage(message, headers, type){
-        let result;
+        let result = {
+            success: true
+        };
         try {
-            result = this._processHandlers(message, headers, type);
-        } catch(ex) {
+            this._processHandlers(message, headers, type);
+            this._processRequestReplies(message, headers, type);
+        } catch(e) {
             result = {
-                exception: ex,
+                exception: e,
                 success: false
             };
+            this.emit("error", e);
         }
 
         return result;
@@ -121,24 +180,50 @@ export class Bus extends EventEmitter {
      * Finds all handlers interested in the message type and calls handler callback function.
      * @param  {Object} message
      * @param  {Object} headers
-     * @param  {String} type
-     * @return {Object} result
+     * @param  {string} type
      */
     _processHandlers(message, headers, type) {
-        var handlers = this.config.handlers[type],
-            result = { success: true };
+        var handlers = this.config.handlers[type];
         if (handlers){
-            handlers.map(handler => {
-                try {
-                    handler(message, headers, type);
-                } catch(e) {
-                    result.success = false;
-                    result.exception = e;
-                    this.emit("error", e);
-                }
-            });
+            var replyCallback = this._getReplyCallback(headers);
+            handlers.map(handler => handler(message, headers, type, replyCallback));
         }
-        return result;
+    }
+
+    /**
+     * Finds the callback passed to sendRequest or publishRequest and calls it.
+     * @param  {Object} message
+     * @param  {Object} headers
+     * @param  {Object} type
+     */
+    _processRequestReplies(message, headers, type) {
+        if (headers["ResponseMessageId"]){
+            var configuration = this.requestReplyCallbacks[headers["ResponseMessageId"]];
+            if (configuration){
+                configuration.callback(message, type, headers);
+                configuration.processedCount++;
+                if (configuration.processedCount >= configuration.endpointCount){
+                    if (this.requestReplyCallbacks[headers["ResponseMessageId"]].timeout){
+                        clearTimeout(this.requestReplyCallbacks[headers["ResponseMessageId"]].timeout);
+                    }
+                    delete this.requestReplyCallbacks[headers["ResponseMessageId"]];
+                }
+            }
+        }
+    }
+
+    /**
+     * Returns a reply function to be used by handlers.  The reply function will set the ResponseMessageId in the
+     * headers and send the reply back to the source address.
+     * @param {Object} headers
+     * @return {function(*=, *=)}
+     * @private
+     */
+    _getReplyCallback(headers) {
+        return (type, message) => {
+            headers["ResponseMessageId"] = headers["RequestMessageId"];
+            this.send(headers["SourceAddress"], type, message, headers);
+        }
     }
 
     /**

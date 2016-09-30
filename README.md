@@ -10,6 +10,8 @@ A simple, easy to use asynchronous messaging framework for Node.JS.  It provides
 * Messaging Patterns
     - Point to Point (Sending commands)
     - Publish/Subscribe (Publishing events)
+    - Request Reply (RPC)
+    - Scatter Gather (Publish event and receive multiple replies)
 * Retries
 * Auditing
 * Error handling
@@ -17,16 +19,17 @@ A simple, easy to use asynchronous messaging framework for Node.JS.  It provides
 
 ## Todo
 
+* Documentation
 * Messaging Patterns
     - Process Manager
     - Recipient List
-    - Scatter Gather
     - Routing Slip
     - Message Aggregation
     - Content based routing
     - Message expiration
     - Aggregator
     - Streaming
+* Filters
 
 ## Simple example
 

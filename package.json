@@ -1,15 +1,26 @@
 {
   "name": "service-connect",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "",
   "main": "index.js",
   "scripts": {
     "build": "babel -d ./lib ./src -s",
     "test": "./node_modules/.bin/mocha --reporter spec --compilers js:babel-core/register",
-    "examples.commands.consumer.debug": "node %NODE_DEBUG_OPTION% ./examples/commands/consumer.js",
-    "examples.commands.sender.debug": "node %NODE_DEBUG_OPTION% ./examples/commands/sender.js",
-    "examples.commands.consumer": "node ./examples/commands/consumer.js",
-    "examples.commands.sender": "node ./examples/commands/sender.js"
+    "examples.commands.consumer": "node ./examples/Commands/consumer.js",
+    "examples.commands.sender": "node ./examples/Commands/sender.js",
+    "examples.competing-consumers.consumer1": "node ./examples/CompetingConsumers/consumer1.js",
+    "examples.competing-consumers.consumer2": "node ./examples/CompetingConsumers/consumer2.js",
+    "examples.competing-consumers.sender": "node ./examples/CompetingConsumers/sender.js",
+    "examples.events.consumer1": "node ./examples/Events/consumer1.js",
+    "examples.events.consumer2": "node ./examples/Events/consumer2.js",
+    "examples.events.sender": "node ./examples/Events/publisher.js",
+    "examples.request-reply.request": "node ./examples/RequestReply/requester.js",
+    "examples.request-reply.reply": "node ./examples/RequestReply/replier.js",
+    "examples.scatter-gather.request": "node ./examples/ScatterGather/requester.js",
+    "examples.scatter-gather.reply1": "node ./examples/ScatterGather/replier1.js",
+    "examples.scatter-gather.reply2": "node ./examples/ScatterGather/replier2.js",
+    "examples.retries.consumer": "node ./examples/Retries/consumer.js",
+    "examples.retries.sender": "node ./examples/Retries/sender.js"
   },
   "author": "Tim Watson",
   "email": "tswatson123@gmail.com",
@@ -27,6 +38,7 @@
     "chai": "^3.5.0",
     "jsdoc": "^3.4.1",
     "mocha": "^3.0.2",
+    "promise": "^7.1.1",
     "sinon": "^1.17.5"
   },
   "dependencies": {
