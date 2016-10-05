@@ -13,7 +13,7 @@ var bus = new Bus({
 });
 
 var printHelpText = function(){
-    console.log("Enter")
+    console.log("Enter");
     console.log("1 To publish message with timeout only (default).");
     console.log("2 To publish message with expected replies only.");
     console.log("3 To publish message with timeout and expected replies.");
@@ -35,7 +35,7 @@ bus.init(function(){
             case "1":
 
                 console.log("Unknown number of replies with timeout of 0.5 seconds");
-                bus.publishRequest("ExampleRequest", { data: count }, function(message, type, headers){
+                bus.publishRequest("ExampleRequest", { data: count }, function(message){
                     console.log("Received Reply.");
                     console.log(message);
                     console.log();
@@ -45,7 +45,7 @@ bus.init(function(){
             case "2":
 
                 console.log("Expect 2 replies with no timeout");
-                bus.publishRequest("ExampleRequest", { data: count }, function(message, type, headers){
+                bus.publishRequest("ExampleRequest", { data: count }, function(message){
                     console.log("Received Reply.");
                     console.log(message);
                     console.log();
@@ -54,7 +54,7 @@ bus.init(function(){
                 break;
             case "3":
                 console.log("Expect 2 replies but timeout after " + (count % 2 === 0 ? 500 : 2000) + " milliseconds");
-                bus.publishRequest("ExampleRequest", { data: count }, function(message, type, headers){
+                bus.publishRequest("ExampleRequest", { data: count }, function(message){
                     console.log("Received Reply.");
                     console.log(message);
                     console.log();
@@ -67,10 +67,3 @@ bus.init(function(){
     });
 
 });
-
-
-
-
-
-
-

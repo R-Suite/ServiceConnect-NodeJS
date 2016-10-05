@@ -155,7 +155,7 @@ export class Bus extends EventEmitter {
      * Callback called when consuming a message.  Calls handler callbacks.
      * @param  {Object} message
      * @param  {Object} headers
-     * @param  {Object} type
+     * @param  {string} type
      * @return  {Object} result
      */
     _consumeMessage(message, headers, type){

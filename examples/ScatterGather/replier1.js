@@ -32,6 +32,3 @@ bus.init(function(){
     });
 
 });
-
-
-

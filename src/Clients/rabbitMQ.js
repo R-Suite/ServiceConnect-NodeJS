@@ -10,7 +10,7 @@ export default class Client extends EventEmitter {
      * Sets config and connects to RabbitMQ
      * @constructor
      * @param  {Object} config
-     * @param (function) consumeMessageCallback
+     * @param (Function) consumeMessageCallback
      */
     constructor(config, consumeMessageCallback) {
         super();
@@ -142,8 +142,7 @@ export default class Client extends EventEmitter {
     /**
      * Starts consuming the message type.  Creates a durable exchange named @message of type fanout.
      * Binds the clients queue to the exchange.
-     * @param {String} message
-     * @param  {Function} callback
+     * @param {string} type
      */
     consumeType(type){
         this.channel.assertExchange(type, 'fanout', {

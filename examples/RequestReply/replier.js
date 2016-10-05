@@ -30,6 +30,3 @@ bus.init(function(){
     });
 
 });
-
-
-

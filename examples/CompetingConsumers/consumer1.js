@@ -14,7 +14,7 @@ var bus = new Bus({
 
 bus.init(function(){
 
-    bus.addHandler("ConsumerCommand", function(message, type, headers){
+    bus.addHandler("ConsumerCommand", function(message){
         console.log("Consumer 1: Received message")
         console.log(message);
     });
@@ -27,6 +27,3 @@ bus.init(function(){
     });
 
 });
-
-
-

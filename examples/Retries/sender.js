@@ -26,9 +26,4 @@ bus.init(function(){
         count++;
     });
 
-})
-
-
-
-
-
+});

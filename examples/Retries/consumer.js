@@ -16,8 +16,8 @@ bus.init(function(){
 
     var retryCount = 0;
 
-    bus.addHandler("ConsumerCommand", function(message, type, headers){
-        console.log("Received message")
+    bus.addHandler("ConsumerCommand", function(message){
+        console.log("Received message");
         console.log(message);
         if (retryCount > 0){
             console.log("Retry attempt " + retryCount);
@@ -34,6 +34,3 @@ bus.init(function(){
     });
 
 });
-
-
-

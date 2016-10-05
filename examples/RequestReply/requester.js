@@ -21,7 +21,7 @@ bus.init(function(){
             bus.close();
             process.exit()
         }
-        bus.sendRequest('ServiceConnect.Samples.Consumer', "ExampleRequest", { data: count }, function(message, type, headers){
+        bus.sendRequest('ServiceConnect.Samples.Consumer', "ExampleRequest", { data: count }, function(message){
             console.log("Received Reply.");
             console.log(message);
         });
@@ -29,9 +29,4 @@ bus.init(function(){
         count++;
     });
 
-})
-
-
-
-
-
+});

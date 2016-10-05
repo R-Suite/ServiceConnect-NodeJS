@@ -1,8 +1,5 @@
 # Service-Connect
 
-[![Join the chat at https://gitter.im/R-Suite/ServiceConnect](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/R-Suite/ServiceConnect?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
-
-
 A simple, easy to use asynchronous messaging framework for Node.JS.  It provides a interface for using common asynchronous messaging patterns over different protocols.  It currently supports AMQP and has been tested on RabbitMQ.  The plan is to support more protocols in the future.
 
 ## Current Features
