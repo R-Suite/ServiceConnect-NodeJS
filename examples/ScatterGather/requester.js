@@ -8,7 +8,7 @@ var bus = new Bus({
         queue: {
             name: 'ServiceConnect.Samples.Sender'
         },
-        host: "amqp://guest:guest@lonappdev04"
+        host: "amqp://guest:guest@localhost"
     }
 });
 

@@ -44,7 +44,9 @@ export class Bus extends EventEmitter {
      */
     addHandler(message, callback){
         var type = message.replace(/\./g, "");
-        this.client.consumeType(type);
+        if(type !== "*"){
+            this.client.consumeType(type);
+        }
         this.config.handlers[message] = this.config.handlers[message] || [];
         this.config.handlers[message].push(callback);
     }
@@ -61,7 +63,8 @@ export class Bus extends EventEmitter {
                 .handlers[message]
                 .filter(c => c !== callback);
 
-            if (this.config.handlers[message] === undefined || this.config.handlers[message].length === 0){
+            if (message !== "*" && (this.config.handlers[message] === undefined ||
+                                    this.config.handlers[message].length === 0)){
                 this.client.removeType(message.replace(/\./g, ""));
             }
         }
@@ -184,6 +187,11 @@ export class Bus extends EventEmitter {
      */
     _processHandlers(message, headers, type) {
         var handlers = this.config.handlers[type];
+
+        if (this.config.handlers["*"] !== undefined && this.config.handlers["*"] !== null){
+            handlers = [...handlers, ...this.config.handlers["*"]];
+        }
+
         if (handlers){
             var replyCallback = this._getReplyCallback(headers);
             handlers.map(handler => handler(message, headers, type, replyCallback));

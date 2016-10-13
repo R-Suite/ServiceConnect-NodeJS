@@ -223,7 +223,42 @@ describe("Bus", function() {
             var cb = () => {};
             bus.addHandler("Test.Message",cb );
             expect(bus.config.handlers["Test.Message"][0]).to.equal(cb);
-        })
+        });
+
+        it("* message type should not call consumeType on client", function(){
+            let bus = new Bus({
+                amqpSettings: {
+                    queue: {
+                        name: 'ServiceConnectWebTest'
+                    }
+                },
+                handlers: {
+                    "LogCommand": [console.log]
+                }
+            });
+            bus.init();
+
+            bus.addHandler("*", () => {});
+
+            assert.isFalse(consumeTypeStub.called);
+        });
+
+        it("should add * message type and callback to the handler map", function(){
+            let bus = new Bus({
+                amqpSettings: {
+                    queue: {
+                        name: 'ServiceConnectWebTest'
+                    }
+                },
+                handlers: {
+                    "LogCommand": [console.log]
+                }
+            });
+            bus.init();
+            var cb = () => {};
+            bus.addHandler("*",cb );
+            expect(bus.config.handlers["*"][0]).to.equal(cb);
+        });
     });
 
     describe("removeHandler", function(){
@@ -605,6 +640,7 @@ describe("Bus", function() {
             var cb1 = sinon.stub(),
                 cb2 = sinon.stub(),
                 cb3 = sinon.stub(),
+                cb4 = sinon.stub(),
                 message = {
                     data: "12345"
                 },
@@ -614,7 +650,8 @@ describe("Bus", function() {
             let bus = new Bus({
                 handlers: {
                     "LogCommand": [ cb1, cb2 ],
-                    "LogCommand2": [ cb3 ]
+                    "LogCommand2": [ cb3 ],
+                    "*": [ cb4 ]
                 }
             });
             bus.init();
@@ -624,6 +661,7 @@ describe("Bus", function() {
             assert.isTrue(cb1.calledWith(message, headers, type));
             assert.isTrue(cb2.calledWith(message, headers, type));
             assert.isFalse(cb3.called);
+            assert.isTrue(cb4.calledWith(message, headers, type));
         });
 
         it("should return success if there are no message handlers", function(){

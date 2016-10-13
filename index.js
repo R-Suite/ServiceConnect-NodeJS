@@ -1,1 +1,1 @@
-module.exports = require("./lib/index.js").Bus
+module.exports = require("./lib/index.js").Bus;
