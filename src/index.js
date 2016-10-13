@@ -12,7 +12,8 @@ export class Bus extends EventEmitter {
      */
     constructor(config) {
         super();
-        this.config = mergeDeep(settings, config);
+        this.id = guid();
+        this.config = mergeDeep(settings(), config);
         this._consumeMessage = this._consumeMessage.bind(this);
         this.addHandler = this.addHandler.bind(this);
         this.removeHandler = this.removeHandler.bind(this);
@@ -186,13 +187,13 @@ export class Bus extends EventEmitter {
      * @param  {string} type
      */
     _processHandlers(message, headers, type) {
-        var handlers = this.config.handlers[type];
+        var handlers = this.config.handlers[type] || [];
 
         if (this.config.handlers["*"] !== undefined && this.config.handlers["*"] !== null){
             handlers = [...handlers, ...this.config.handlers["*"]];
         }
 
-        if (handlers){
+        if (handlers.length > 0){
             var replyCallback = this._getReplyCallback(headers);
             handlers.map(handler => handler(message, headers, type, replyCallback));
         }

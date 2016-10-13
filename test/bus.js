@@ -7,6 +7,8 @@ import settings from '../src/settings';
 let expect = chai.expect;
 let assert = chai.assert;
 
+var settingsObject = settings();
+
 describe("Bus", function() {
 
     describe("Constructor", function() {
@@ -62,11 +64,11 @@ describe("Bus", function() {
         var connectStub;
 
         beforeEach(function(){
-            connectStub = sinon.stub(settings.client.prototype, 'connect');
+            connectStub = sinon.stub(settingsObject.client.prototype, 'connect');
         });
 
         afterEach(function(){
-            settings.client.prototype.connect.restore();
+            settingsObject.client.prototype.connect.restore();
         });
 
         it("should create and connect to client", function() {
@@ -151,11 +153,11 @@ describe("Bus", function() {
         var connectStub;
 
         beforeEach(function(){
-            connectStub = sinon.stub(settings.client.prototype, 'connect');
+            connectStub = sinon.stub(settingsObject.client.prototype, 'connect');
         });
 
         afterEach(function(){
-            settings.client.prototype.connect.restore();
+            settingsObject.client.prototype.connect.restore();
         });
 
         it("should create and connect to client", function() {
@@ -181,13 +183,13 @@ describe("Bus", function() {
 
         var consumeTypeStub;
         beforeEach(function(){
-            sinon.stub(settings.client.prototype, 'connect');
-            consumeTypeStub = sinon.stub(settings.client.prototype, 'consumeType');
+            sinon.stub(settingsObject.client.prototype, 'connect');
+            consumeTypeStub = sinon.stub(settingsObject.client.prototype, 'consumeType');
         });
 
         afterEach(function(){
-            settings.client.prototype.connect.restore();
-            settings.client.prototype.consumeType.restore();
+            settingsObject.client.prototype.connect.restore();
+            settingsObject.client.prototype.consumeType.restore();
         });
 
         it("should call consumeType on client", function(){
@@ -265,13 +267,13 @@ describe("Bus", function() {
 
         var removeTypeStub;
         beforeEach(function(){
-            sinon.stub(settings.client.prototype, 'connect');
-            removeTypeStub = sinon.stub(settings.client.prototype, 'removeType');
+            sinon.stub(settingsObject.client.prototype, 'connect');
+            removeTypeStub = sinon.stub(settingsObject.client.prototype, 'removeType');
         });
 
         afterEach(function(){
-            settings.client.prototype.connect.restore();
-            settings.client.prototype.removeType.restore();
+            settingsObject.client.prototype.connect.restore();
+            settingsObject.client.prototype.removeType.restore();
         });
 
         it("should remove handler mapping from handler dictionary", function(){
@@ -342,11 +344,11 @@ describe("Bus", function() {
     describe("isHandled", function(){
 
         beforeEach(function(){
-            sinon.stub(settings.client.prototype, 'connect');
+            sinon.stub(settingsObject.client.prototype, 'connect');
         });
 
         afterEach(function(){
-            settings.client.prototype.connect.restore();
+            settingsObject.client.prototype.connect.restore();
         });
 
         it("should return true if message type is mapped to a callback", function(){
@@ -413,12 +415,12 @@ describe("Bus", function() {
 
         var stub;
         beforeEach(function() {
-            sinon.stub(settings.client.prototype, 'connect');
-            stub = sinon.stub(settings.client.prototype, 'send');
+            sinon.stub(settingsObject.client.prototype, 'connect');
+            stub = sinon.stub(settingsObject.client.prototype, 'send');
         });
 
         afterEach(function() {
-            settings.client.prototype.connect.restore();
+            settingsObject.client.prototype.connect.restore();
         });
 
         it("should send message to client", function(){
@@ -435,7 +437,7 @@ describe("Bus", function() {
 
             assert.isTrue(stub.calledWith(endpoint, type, message, headers));
 
-            settings.client.prototype.send.restore();
+            settingsObject.client.prototype.send.restore();
         });
 
     });
@@ -444,13 +446,13 @@ describe("Bus", function() {
 
         var stub;
         beforeEach(function() {
-            sinon.stub(settings.client.prototype, 'connect');
-            stub = sinon.stub(settings.client.prototype, 'publish');
+            sinon.stub(settingsObject.client.prototype, 'connect');
+            stub = sinon.stub(settingsObject.client.prototype, 'publish');
         });
 
         afterEach(function() {
-            settings.client.prototype.connect.restore();
-            settings.client.prototype.publish.restore();
+            settingsObject.client.prototype.connect.restore();
+            settingsObject.client.prototype.publish.restore();
         });
 
         it("should publish message to client", function(){
@@ -473,13 +475,13 @@ describe("Bus", function() {
 
         var stub;
         beforeEach(function() {
-            sinon.stub(settings.client.prototype, 'connect');
-            stub = sinon.stub(settings.client.prototype, 'send');
+            sinon.stub(settingsObject.client.prototype, 'connect');
+            stub = sinon.stub(settingsObject.client.prototype, 'send');
         });
 
         afterEach(function() {
-            settings.client.prototype.connect.restore();
-            settings.client.prototype.send.restore();
+            settingsObject.client.prototype.connect.restore();
+            settingsObject.client.prototype.send.restore();
         });
 
         it("should send message to client", function(){
@@ -541,15 +543,15 @@ describe("Bus", function() {
 
         var stub, sendStub;
         beforeEach(function() {
-            sinon.stub(settings.client.prototype, 'connect');
-            stub = sinon.stub(settings.client.prototype, 'publish');
-            sendStub = sinon.stub(settings.client.prototype, 'send');
+            sinon.stub(settingsObject.client.prototype, 'connect');
+            stub = sinon.stub(settingsObject.client.prototype, 'publish');
+            sendStub = sinon.stub(settingsObject.client.prototype, 'send');
         });
 
         afterEach(function() {
-            settings.client.prototype.connect.restore();
-            settings.client.prototype.publish.restore();
-            settings.client.prototype.send.restore();
+            settingsObject.client.prototype.connect.restore();
+            settingsObject.client.prototype.publish.restore();
+            settingsObject.client.prototype.send.restore();
         });
 
         it("should publish message to client", function(){
@@ -628,11 +630,11 @@ describe("Bus", function() {
     describe("_consumeMessage", function(){
 
         beforeEach(function() {
-            sinon.stub(settings.client.prototype, 'connect');
+            sinon.stub(settingsObject.client.prototype, 'connect');
         });
 
         afterEach(function() {
-            settings.client.prototype.connect.restore();
+            settingsObject.client.prototype.connect.restore();
         });
 
         it("should process the correct message handlers", function(){
@@ -704,7 +706,7 @@ describe("Bus", function() {
 
         it("reply callback should send message to source address", function(){
 
-            var stub1 = sinon.stub(settings.client.prototype, 'send');
+            var stub1 = sinon.stub(settingsObject.client.prototype, 'send');
 
             var replyMessage = {message: 123},
                 cb1 = (message, headers, type, replyCallback) => {
@@ -727,7 +729,7 @@ describe("Bus", function() {
 
             assert.isTrue(stub1.calledWith("Source", "TestReply", replyMessage, headers));
 
-            settings.client.prototype.send.restore();
+            settingsObject.client.prototype.send.restore();
         });
 
         it("should return error if a handler throws an exception", function(){
@@ -780,7 +782,7 @@ describe("Bus", function() {
                     "LogCommand": [ cb1, cb2 ],
                     "LogCommand2": [ cb3 ]
                 }
-            });;
+            });
             bus.init();
 
             bus.on("error", error);
@@ -795,13 +797,13 @@ describe("Bus", function() {
 
         var stub;
         beforeEach(function() {
-            sinon.stub(settings.client.prototype, 'connect');
-            stub = sinon.stub(settings.client.prototype, 'close');
+            sinon.stub(settingsObject.client.prototype, 'connect');
+            stub = sinon.stub(settingsObject.client.prototype, 'close');
         });
 
         afterEach(function() {
-            settings.client.prototype.connect.restore();
-            settings.client.prototype.close.restore();
+            settingsObject.client.prototype.connect.restore();
+            settingsObject.client.prototype.close.restore();
         });
 
         it("should close the client", function(){
