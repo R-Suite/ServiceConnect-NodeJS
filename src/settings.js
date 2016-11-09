@@ -1,4 +1,4 @@
-import client from './Clients/rabbitMQ';
+import client from './clients/rabbitMQ';
 
 export default function setting() {
     return {

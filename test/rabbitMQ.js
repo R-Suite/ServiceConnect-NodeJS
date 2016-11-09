@@ -1,5 +1,5 @@
 import 'babel-polyfill'
-import Client from '../src/Clients/rabbitMQ';
+import Client from '../src/clients/rabbitMQ';
 import chai from 'chai';
 import sinon from 'sinon';
 import amqp from 'amqplib/callback_api';

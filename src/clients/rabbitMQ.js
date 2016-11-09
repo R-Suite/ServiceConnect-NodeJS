@@ -241,21 +241,23 @@ export default class Client extends EventEmitter {
      * @param  {Object} rawMessage
      */
     _processMessage(rawMessage){
-        let result;
+        let result,
+            headers = rawMessage.properties.headers;
 
         try {
-            rawMessage.properties.headers.TimeReceived = new Date().toISOString();
-            rawMessage.properties.headers.DestinationMachine = os.hostname();
-            rawMessage.properties.headers.DestinationAddress = this.config.amqpSettings.queue.name;
+
+            headers.TimeReceived = headers.TimeReceived || new Date().toISOString();
+            headers.DestinationMachine = headers.DestinationMachine || os.hostname();
+            headers.DestinationAddress = headers.DestinationAddress || this.config.amqpSettings.queue.name;
 
             let message = JSON.parse(rawMessage.content.toString());
 
             result = this.consumeMessageCallback(
                 message,
-                rawMessage.properties.headers,
-                rawMessage.properties.headers.TypeName);
+                headers,
+                headers.TypeName);
 
-            rawMessage.properties.headers.TimeProcessed = new Date().toISOString();
+            headers.TimeProcessed = headers.TimeProcessed || new Date().toISOString();
 
             // forward to audit queue is audit is enabled
             if(result.success && this.config.amqpSettings.auditEnabled) {
@@ -263,7 +265,7 @@ export default class Client extends EventEmitter {
                     this.config.amqpSettings.auditQueue,
                     rawMessage.content,
                     {
-                        headers: rawMessage.properties.headers,
+                        headers: headers,
                         messageId: rawMessage.properties.messageId
                     });
             }
@@ -277,27 +279,27 @@ export default class Client extends EventEmitter {
 
         if(!result.success) {
             let retryCount = 0;
-            if(rawMessage.properties.headers.RetryCount !== undefined){
-                retryCount = rawMessage.properties.headers.RetryCount;
+            if(headers.RetryCount !== undefined){
+                retryCount = headers.RetryCount;
             }
 
             if (retryCount < this.config.amqpSettings.maxRetries){
                 retryCount++;
-                rawMessage.properties.headers.RetryCount = retryCount;
+                headers.RetryCount = retryCount;
                 this.channel.sendToQueue(
                     this.config.amqpSettings.queue.name + ".Retries",
                     rawMessage.content,
                     {
-                        headers: rawMessage.properties.headers,
+                        headers: headers,
                         messageId: rawMessage.properties.messageId
                     });
             } else {
-                rawMessage.properties.headers.Exception = result.exception;
+                headers.Exception = result.exception;
                 this.channel.sendToQueue(
                     this.config.amqpSettings.errorQueue,
                     rawMessage.content,
                     {
-                        headers: rawMessage.properties.headers,
+                        headers: headers,
                         messageId: rawMessage.properties.messageId
                     });
             }
