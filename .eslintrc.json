@@ -5,6 +5,10 @@
         "node": true
     },
     "extends": "eslint:recommended",
+    "parser": "babel-eslint",
+    "rules": {
+      "strict": 0
+    },
     "parserOptions": {
         "ecmaFeatures": {
             "experimentalObjectRestSpread": true,

@@ -201,7 +201,8 @@ export class Bus extends EventEmitter {
      * @param  {string} type
      */
     _processHandlers(message, headers, type) {
-        let handlers = this.config.handlers[type] || [], promises = [];
+        let handlers = this.config.handlers[type] || [],
+            promises = [];
 
         if (this.config.handlers["*"] !== undefined && this.config.handlers["*"] !== null){
             handlers = [...handlers, ...this.config.handlers["*"]];

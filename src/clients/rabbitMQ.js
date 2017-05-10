@@ -2,7 +2,7 @@ import {mergeDeep, guid} from '../utils';
 import amqp from 'amqplib/callback_api';
 import os from 'os';
 import EventEmitter from 'events';
-require("babel-polyfill");;
+require("babel-polyfill");
 
 /** Class representing the rabbitMQ client. */
 export default class Client extends EventEmitter {
@@ -256,7 +256,7 @@ export default class Client extends EventEmitter {
             let message = JSON.parse(rawMessage.content.toString());
 
             try {
-              let resolved = await this.consumeMessageCallback(
+              await this.consumeMessageCallback(
                   message,
                   headers,
                   headers.TypeName);
