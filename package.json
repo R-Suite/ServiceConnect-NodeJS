@@ -7,7 +7,7 @@
     "build": "babel -d ./lib ./src -s",
     "test": "./node_modules/.bin/mocha --reporter spec --compilers js:babel-core/register",
     "eslint": "eslint -c .eslintrc.json src examples",
-    "examples.commands.consumer": "node ./examples/Commands/consumer.js",
+    "examples.commands.consumer": "node --inspect=5859 ./examples/Commands/consumer.js",
     "examples.commands.sender": "node ./examples/Commands/sender.js",
     "examples.competing-consumers.consumer1": "node ./examples/CompetingConsumers/consumer1.js",
     "examples.competing-consumers.consumer2": "node ./examples/CompetingConsumers/consumer2.js",
@@ -42,7 +42,7 @@
     "jsdoc": "^3.4.1",
     "mocha": "^3.0.2",
     "promise": "^7.1.1",
-    "sinon": "^1.17.5"
+    "sinon": "2.2.0"
   },
   "dependencies": {
     "amqplib": "^0.4.2"

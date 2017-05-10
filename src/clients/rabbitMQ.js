@@ -2,6 +2,7 @@ import {mergeDeep, guid} from '../utils';
 import amqp from 'amqplib/callback_api';
 import os from 'os';
 import EventEmitter from 'events';
+require("babel-polyfill");;
 
 /** Class representing the rabbitMQ client. */
 export default class Client extends EventEmitter {
@@ -217,20 +218,22 @@ export default class Client extends EventEmitter {
      * @param  {Object} rawMessage
      */
     _consumeMessage(rawMessage){
-        try {
-            if (!rawMessage.properties.headers.TypeName){
-                this.emit("error", { error: "Message does not contain TypeName", message: rawMessage});
-                throw {
-                    error: "Message does not contain TypeName",
-                    message: rawMessage
-                }
+        if (!rawMessage.properties.headers.TypeName){
+            this.emit("error", { error: "Message does not contain TypeName", message: rawMessage});
+            throw {
+                error: "Message does not contain TypeName",
+                message: rawMessage
             }
-            this._processMessage(rawMessage)
-        } finally {
+        }
+
+        this._processMessage(rawMessage)
+          .then(() => {})
+          .catch(() => {})
+          .then(() => {
             if(!this.config.amqpSettings.queue.noAck){
                 this.channel.ack(rawMessage);
             }
-        }
+          });
     }
 
     /**
@@ -240,8 +243,8 @@ export default class Client extends EventEmitter {
      * enabled a copy of the message is sent to the audit queue.
      * @param  {Object} rawMessage
      */
-    _processMessage(rawMessage){
-        let result,
+    async _processMessage(rawMessage) {
+        let result = null,
             headers = rawMessage.properties.headers;
 
         try {
@@ -252,15 +255,22 @@ export default class Client extends EventEmitter {
 
             let message = JSON.parse(rawMessage.content.toString());
 
-            result = this.consumeMessageCallback(
-                message,
-                headers,
-                headers.TypeName);
+            try {
+              let resolved = await this.consumeMessageCallback(
+                  message,
+                  headers,
+                  headers.TypeName);
+            } catch (ex) {
+              result = {
+                  exception: ex,
+                  success: false
+              };
+            }
 
             headers.TimeProcessed = headers.TimeProcessed || new Date().toISOString();
 
             // forward to audit queue is audit is enabled
-            if(result.success && this.config.amqpSettings.auditEnabled) {
+            if(result === null && this.config.amqpSettings.auditEnabled) {
                 this.channel.sendToQueue(
                     this.config.amqpSettings.auditQueue,
                     rawMessage.content,
@@ -277,7 +287,7 @@ export default class Client extends EventEmitter {
             };
         }
 
-        if(!result.success) {
+        if(result !== null) {
             let retryCount = 0;
             if(headers.RetryCount !== undefined){
                 retryCount = headers.RetryCount;

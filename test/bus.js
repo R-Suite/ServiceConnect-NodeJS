@@ -637,8 +637,7 @@ describe("Bus", function() {
             settingsObject.client.prototype.connect.restore();
         });
 
-        it("should process the correct message handlers", function(){
-
+        it("should process the correct message handlers", function(done){
             var cb1 = sinon.stub(),
                 cb2 = sinon.stub(),
                 cb3 = sinon.stub(),
@@ -658,15 +657,21 @@ describe("Bus", function() {
             });
             bus.init();
 
-            bus._consumeMessage(message, headers, type);
-
-            assert.isTrue(cb1.calledWith(message, headers, type));
-            assert.isTrue(cb2.calledWith(message, headers, type));
-            assert.isFalse(cb3.called);
-            assert.isTrue(cb4.calledWith(message, headers, type));
+            bus._consumeMessage(message, headers, type)
+              .then(r => {
+                assert.isTrue(cb1.calledWith(message, headers, type));
+                assert.isTrue(cb2.calledWith(message, headers, type));
+                assert.isFalse(cb3.called);
+                assert.isTrue(cb4.calledWith(message, headers, type));
+                done();
+              })
+              .catch(e => {
+                assert(false);
+                done();
+              });
         });
 
-        it("should return success if there are no message handlers", function(){
+        it("should successfully resolve promise if there are no message handlers", function(done){
             var message = {
                     data: "12345"
                 },
@@ -678,10 +683,16 @@ describe("Bus", function() {
 
             var result = bus._consumeMessage(message, headers, type);
 
-            expect(result.success).to.equal(true);
+            result.then(() => {
+              assert(true);
+              done();
+            }).catch(() => {
+              assert(false);
+              done();
+            });
         });
 
-        it("should return success after processing all message handlers", function(){
+        it("should successfully resolve promise after processing all message handlers", function(done){
             var cb1 = sinon.stub(),
                 cb2 = sinon.stub(),
                 cb3 = sinon.stub(),
@@ -701,10 +712,47 @@ describe("Bus", function() {
 
             var result = bus._consumeMessage(message, headers, type);
 
-            expect(result.success).to.equal(true);
+            result.then(() => {
+              assert(true);
+              done();
+            }).catch(() => {
+              console.log(`error ${i}`);
+              assert(false);
+              done();
+            });
         });
 
-        it("reply callback should send message to source address", function(){
+        it("should successfully resolve promise after processing handlers that return promises", done => {
+            var cb1 = sinon.stub().returns(new Promise((res, _) => res())),
+                cb2 = sinon.stub().returns(new Promise((res, _) => res())),
+                cb3 = sinon.stub(),
+                message = {
+                    data: "12345"
+                },
+                headers = { token: 123 },
+                type = "LogCommand";
+
+            let bus = new Bus({
+                handlers: {
+                    "LogCommand": [ cb1, cb2 ],
+                    "LogCommand2": [ cb3 ]
+                }
+            });
+            bus.init();
+
+            var result = bus._consumeMessage(message, headers, type);
+
+            result.then(() => {
+              assert(true);
+              done();
+            }).catch(() => {
+              console.log(`error ${i}`);
+              assert(false);
+              done();
+            });
+        });
+
+        it("reply callback should send message to source address", function(done){
 
             var stub1 = sinon.stub(settingsObject.client.prototype, 'send');
 
@@ -725,14 +773,20 @@ describe("Bus", function() {
             });
             bus.init();
 
-            bus._consumeMessage(message, headers, type);
+            bus._consumeMessage(message, headers, type)
+              .then(r => {
+                assert.isTrue(stub1.calledWith("Source", "TestReply", replyMessage, headers));
+                settingsObject.client.prototype.send.restore();
+                done();
+              })
+              .catch(e => {
+                assert(false);
+                done();
+              });
 
-            assert.isTrue(stub1.calledWith("Source", "TestReply", replyMessage, headers));
-
-            settingsObject.client.prototype.send.restore();
         });
 
-        it("should return error if a handler throws an exception", function(){
+        it("should throw error if a handler throws an exception", function(done){
 
             var cb1 = sinon.stub(),
                 cb2 = sinon.stub(),
@@ -755,14 +809,52 @@ describe("Bus", function() {
             });
             bus.init();
 
-            var result = bus._consumeMessage(message, headers, type);
-
-            console.log(result);
-            expect(result.success).to.equal(false);
-            expect(result.exception.error).to.equal("cb1 error");
+            bus._consumeMessage(message, headers, type)
+              .then(r => {
+                assert(false);
+                done();
+              })
+              .catch(e => {
+                expect(e.exception.error).to.equal("cb1 error");
+                done();
+              });
         });
 
-        it("if a handler throws an exception the error callback method should be called", function(){
+        it("should throw error if a handler returns a rejected promise", function(done){
+
+            var cb1 = sinon.stub().returns(new Promise((_, rej) => rej())),
+                cb2 = sinon.stub(),
+                cb3 = sinon.stub(),
+                message = {
+                    data: "12345"
+                },
+                headers = { token: 123 },
+                type = "LogCommand";
+
+            cb1.throws({
+                error: "cb1 error"
+            });
+
+            let bus = new Bus({
+                handlers: {
+                    "LogCommand": [ cb1, cb2 ],
+                    "LogCommand2": [ cb3 ]
+                }
+            });
+            bus.init();
+
+            bus._consumeMessage(message, headers, type)
+              .then(r => {
+                assert(false);
+                done();
+              })
+              .catch(e => {
+                expect(e.exception.error).to.equal("cb1 error");
+                done();
+              });
+        });
+
+        it("if a handler throws an exception the error callback method should be called", function(done){
             var cb1 = sinon.stub(),
                 cb2 = sinon.stub(),
                 cb3 = sinon.stub(),
@@ -787,9 +879,16 @@ describe("Bus", function() {
 
             bus.on("error", error);
 
-            bus._consumeMessage(message, headers, type);
+            bus._consumeMessage(message, headers, type)
+              .then(_ => {
+                assert(false);
+                done();
+              })
+              .catch(e => {
+                assert.isTrue(error.called);
+                done();
+              });
 
-            assert.isTrue(error.called);
         });
     });
 

@@ -14,6 +14,7 @@ export class Bus extends EventEmitter {
         super();
         this.id = guid();
         this.config = mergeDeep(settings(), config);
+        this.init = this.init.bind(this);
         this._consumeMessage = this._consumeMessage.bind(this);
         this.addHandler = this.addHandler.bind(this);
         this.removeHandler = this.removeHandler.bind(this);
@@ -36,6 +37,7 @@ export class Bus extends EventEmitter {
             if(cb) cb();
         });
         this.client.on("error", ex => this.emit("error", ex));
+        return this;
     }
 
     /**
@@ -162,22 +164,34 @@ export class Bus extends EventEmitter {
      * @param  {string} type
      * @return  {Object} result
      */
-    _consumeMessage(message, headers, type){
-        let result = {
-            success: true
-        };
-        try {
-            this._processHandlers(message, headers, type);
-            this._processRequestReplies(message, headers, type);
-        } catch(e) {
-            result = {
+     _consumeMessage(message, headers, type){
+        return new Promise((resolve, reject) => {
+
+          let promises = [];
+          try {
+              promises = [
+                ...this._processHandlers(message, headers, type),
+                this._processRequestReplies(message, headers, type)
+              ];
+          } catch(e) {
+              this.emit("error", e);
+              reject({
                 exception: e,
                 success: false
-            };
-            this.emit("error", e);
-        }
+              });
+              return;
+          }
 
-        return result;
+          Promise.all(promises)
+            .then(res => resolve(res))
+            .catch(err => {
+              this.emit("error", err);
+              reject({
+                exception: err,
+                success: false
+              });
+            });
+        });
     }
 
     /**
@@ -187,7 +201,7 @@ export class Bus extends EventEmitter {
      * @param  {string} type
      */
     _processHandlers(message, headers, type) {
-        var handlers = this.config.handlers[type] || [];
+        let handlers = this.config.handlers[type] || [], promises = [];
 
         if (this.config.handlers["*"] !== undefined && this.config.handlers["*"] !== null){
             handlers = [...handlers, ...this.config.handlers["*"]];
@@ -195,8 +209,10 @@ export class Bus extends EventEmitter {
 
         if (handlers.length > 0){
             var replyCallback = this._getReplyCallback(headers);
-            handlers.map(handler => handler(message, headers, type, replyCallback));
+            promises = handlers.map(h => h(message, headers, type, replyCallback));
         }
+
+        return promises;
     }
 
     /**
@@ -205,11 +221,12 @@ export class Bus extends EventEmitter {
      * @param  {Object} headers
      * @param  {Object} type
      */
-    _processRequestReplies(message, headers, type) {
+     _processRequestReplies(message, headers, type) {
+        let promise = null;
         if (headers["ResponseMessageId"]){
-            var configuration = this.requestReplyCallbacks[headers["ResponseMessageId"]];
+            let configuration = this.requestReplyCallbacks[headers["ResponseMessageId"]];
             if (configuration){
-                configuration.callback(message, type, headers);
+                promise = configuration.callback(message, type, headers);
                 configuration.processedCount++;
                 if (configuration.processedCount >= configuration.endpointCount){
                     if (this.requestReplyCallbacks[headers["ResponseMessageId"]].timeout){
@@ -219,6 +236,7 @@ export class Bus extends EventEmitter {
                 }
             }
         }
+        return promise;
     }
 
     /**

@@ -15,8 +15,19 @@ var bus = new Bus({
 bus.init(function(){
 
     bus.addHandler("ConsumerCommand", function(message){
-        console.log("Received message");
-        console.log(message);
+        return new Promise((resolve, reject) => {
+          console.log("Received message with promise 1");
+          console.log(message);
+          resolve();
+        });
+    });
+
+    bus.addHandler("ConsumerCommand", function(message){
+        return new Promise((resolve, reject) => {
+          console.log("Received message with promise 2");
+          console.log(message);
+          resolve();
+        });
     });
 
     console.log("Enter 'exit' to stop.");

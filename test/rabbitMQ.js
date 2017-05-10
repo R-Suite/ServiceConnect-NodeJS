@@ -639,10 +639,9 @@ describe("RabbitMQ Client", function() {
 
     });
 
-    describe("_consumeMessage", function(){
+    describe("_processMessage", function() {
 
         var message;
-
         beforeEach(function(){
             message = {
                 content: new Buffer(JSON.stringify({
@@ -657,20 +656,263 @@ describe("RabbitMQ Client", function() {
             };
         });
 
-        it("should set the correct headings", function(){
+        it("should set the correct headings", function(done){
             var settingsObject = settings();
             settingsObject.amqpSettings.queue.name = "TestQueue";
 
             var client = new Client(settingsObject, () =>{} );
             client.channel = fakeChannel;
             client.consumeMessageCallback = sinon.stub().returns({ success: true });
-            client._consumeMessage(message);
+            client._processMessage(message)
+              .then(r => {
+                expect(message.properties.headers.DestinationMachine).to.equal(os.hostname());
+                expect(message.properties.headers.DestinationAddress).to.equal("TestQueue");
+                expect(message.properties.headers.TimeProcessed).to.not.be.undefined;
+                expect(message.properties.headers.TimeReceived).to.not.be.undefined;
+                done();
+              })
+              .catch(err => {
+                assert(false);
+                done();
+              });
+        });
 
-            expect(message.properties.headers.DestinationMachine).to.equal(os.hostname());
-            expect(message.properties.headers.DestinationAddress).to.equal("TestQueue");
+        it("should call the consumeMessageCallback function", function(done){
+            var settingsObject = settings();
+            settingsObject.amqpSettings.queue.name = "TestQueue";
 
-            expect(message.properties.headers.TimeProcessed).to.not.be.undefined;
-            expect(message.properties.headers.TimeReceived).to.not.be.undefined;
+            var client = new Client(settingsObject, () =>{});
+            client.channel = fakeChannel;
+            client.consumeMessageCallback = sinon.stub().returns({ success: true });
+
+            client._processMessage(message)
+              .then(r => {
+                assert.isTrue(client.consumeMessageCallback.calledWith(
+                    sinon.match(JSON.parse(message.content.toString())),
+                    sinon.match(message.properties.headers),
+                    sinon.match(message.properties.headers.TypeName)));
+                done();
+              })
+              .catch(err => {
+                assert(false);
+                done();
+              });
+        });
+
+        it("if successful and auditing is enabled should send message to audit queue", function(done){
+            var settingsObject = settings();
+            settingsObject.amqpSettings.queue.name = "TestQueue";
+            settingsObject.amqpSettings.auditEnabled = true;
+
+            var sendToQueueStub = sinon.stub(fakeChannel, "sendToQueue");
+
+            var client = new Client(settingsObject, () =>{});
+            client.channel = fakeChannel;
+            client.consumeMessageCallback = sinon.stub().returns({ success: true });
+
+            client._processMessage(message)
+              .then(r => {
+                assert.isTrue(sendToQueueStub.calledWith(
+                    settingsObject.amqpSettings.auditQueue,
+                    message.content,
+                    sinon.match({
+                        headers: message.properties.headers,
+                        messageId: message.properties.messageId
+                    })
+                ));
+
+                fakeChannel.sendToQueue.restore();
+                done();
+              })
+              .catch(err => {
+                assert(false);
+                fakeChannel.sendToQueue.restore();
+                done();
+              });
+        });
+
+        it("if successful and auditing is disabled should not send message to audit queue", function(done){
+            var settingsObject = settings();
+            settingsObject.amqpSettings.queue.name = "TestQueue";
+            settingsObject.amqpSettings.auditEnabled = false;
+
+            var sendToQueueStub = sinon.stub(fakeChannel, "sendToQueue");
+
+            var client = new Client(settingsObject, () =>{});
+            client.channel = fakeChannel;
+            client.consumeMessageCallback = sinon.stub().returns({ success: true });
+
+            client._processMessage(message)
+              .then(r => {
+                assert.isFalse(sendToQueueStub.called);
+                fakeChannel.sendToQueue.restore();
+                done();
+              })
+              .catch(err => {
+                console.log(err);
+                fakeChannel.sendToQueue.restore();
+                done();
+              });
+        });
+
+        it("if consumeMessageCallback is not successful should send message to retry queue with retry count set to 1", function(done){
+            var settingsObject = settings();
+            settingsObject.amqpSettings.queue.name = "TestQueue";
+            settingsObject.amqpSettings.auditEnabled = false;
+
+            var sendToQueueStub = sinon.stub(fakeChannel, "sendToQueue");
+
+            var client = new Client(settingsObject, () =>{});
+            client.channel = fakeChannel;
+            client.consumeMessageCallback = sinon.stub().returns(new Promise((_, r) => r()));
+
+            client._processMessage(message)
+              .then(r => {
+                assert.isTrue(sendToQueueStub.calledWith(
+                    "TestQueue.Retries",
+                    message.content,
+                    sinon.match({
+                        headers: message.properties.headers,
+                        messageId: message.properties.messageId
+                    })
+                ));
+
+                expect(message.properties.headers.RetryCount).to.equal(1);
+
+                fakeChannel.sendToQueue.restore();
+                done();
+              })
+              .catch(err => {
+                fakeChannel.sendToQueue.restore();
+                assert(false);
+                done();
+              });
+        });
+
+        it("if result is not successful and headers already contain RetryCount should increment RetryCount " +
+            "and assign to headers", function(done){
+            var settingsObject = settings();
+            settingsObject.amqpSettings.queue.name = "TestQueue";
+            settingsObject.amqpSettings.auditEnabled = false;
+            message.properties.headers.RetryCount = 1;
+
+            var sendToQueueStub = sinon.stub(fakeChannel, "sendToQueue");
+
+            var client = new Client(settingsObject, () =>{});
+            client.channel = fakeChannel;
+            client.consumeMessageCallback = sinon.stub().returns(new Promise((_, r) => r()));
+
+            client._processMessage(message)
+              .then(r => {
+                assert.isTrue(sendToQueueStub.calledWith(
+                    "TestQueue.Retries",
+                    message.content,
+                    sinon.match({
+                        headers: message.properties.headers,
+                        messageId: message.properties.messageId
+                    })
+                ));
+
+                expect(message.properties.headers.RetryCount).to.equal(2);
+
+                fakeChannel.sendToQueue.restore();
+                done();
+              })
+              .catch(err => {
+                fakeChannel.sendToQueue.restore();
+                assert(false);
+                done();
+              });
+        });
+
+        it("if consumeMessageCallback is not successful and retry count has reached max should send message " +
+            "to error queue", function(done){
+            var settingsObject = settings();
+            settingsObject.amqpSettings.queue.name = "TestQueue";
+            settingsObject.amqpSettings.auditEnabled = false;
+            message.properties.headers.RetryCount = 3;
+
+            var sendToQueueStub = sinon.stub(fakeChannel, "sendToQueue");
+
+            var client = new Client(settingsObject, () =>{});
+            client.channel = fakeChannel;
+            client.consumeMessageCallback = sinon.stub().returns(new Promise((_, r) => r()));
+
+            client._processMessage(message)
+              .then(r => {
+                fakeChannel.sendToQueue.restore();
+
+                assert.isTrue(sendToQueueStub.calledWith(
+                    settingsObject.amqpSettings.errorQueue,
+                    message.content,
+                    sinon.match({
+                        headers: message.properties.headers,
+                        messageId: message.properties.messageId
+                    })
+                ));
+                done();
+              })
+              .catch(err => {
+                fakeChannel.sendToQueue.restore();
+                assert(false);
+                done();
+              });
+        });
+
+        it("if consumeMessageCallback is not successful and retry count has reached max should add Exception " +
+            "to headers", function(done){
+            var settingsObject = settings();
+            settingsObject.amqpSettings.queue.name = "TestQueue";
+            settingsObject.amqpSettings.auditEnabled = false;
+            message.properties.headers.RetryCount = 3;
+
+            var sendToQueueStub = sinon.stub(fakeChannel, "sendToQueue");
+
+            var client = new Client(settingsObject, () =>{});
+            client.channel = fakeChannel;
+            client.consumeMessageCallback = sinon.stub().returns(new Promise((_, r) => r("Error")));
+
+            client._processMessage(message)
+              .then(r => {
+
+                assert.isTrue(sendToQueueStub.calledWith(
+                    settingsObject.amqpSettings.errorQueue,
+                    message.content,
+                    sinon.match({
+                        headers: message.properties.headers,
+                        messageId: message.properties.messageId
+                    })
+                ));
+
+                expect(message.properties.headers.Exception).to.equal("Error");
+                fakeChannel.sendToQueue.restore();
+
+                done();
+              })
+              .catch(err => {
+                fakeChannel.sendToQueue.restore();
+                assert(false);
+                done();
+              });
+        });
+
+    });
+
+    describe("_consumeMessage", function(){
+
+        var message;
+        beforeEach(function(){
+            message = {
+                content: new Buffer(JSON.stringify({
+                    data: 123
+                }), "utf-8"),
+                properties: {
+                    headers: {
+                        TypeName: "LogCommand"
+                    },
+                    messageId: 1
+                }
+            };
         });
 
         it("should throw exception if the typename is not in the headers", function(){
@@ -692,290 +934,42 @@ describe("RabbitMQ Client", function() {
             }));
         });
 
-        it("should ack message if exception is thrown", function(){
+        it("should ack message if exception is thrown", function(done){
             var settingsObject = settings();
             settingsObject.amqpSettings.queue.name = "TestQueue";
-            message.properties.headers.TypeName = undefined;
+            message.properties.headers.TypeName = "TestType";
 
-            var ackStub = sinon.stub(fakeChannel, "ack");
+            var ackStub = sinon.stub(fakeChannel, "ack").callsFake(p => {
+              expect(p).to.equal(message);
+              fakeChannel.ack.restore();
+              done();
+            });
 
             var client = new Client(settingsObject, () =>{});
             client.channel = fakeChannel;
-            client.consumeMessageCallback = sinon.stub().returns({ success: true });
-
-            try{
-                client._consumeMessage(message);
-            } catch(e) {}
-
-            assert.isTrue(ackStub.calledWith(message));
-
-            fakeChannel.ack.restore();
-        });
-
-        it("should call the consumeMessageCallback function", function(){
-            var settingsObject = settings();
-            settingsObject.amqpSettings.queue.name = "TestQueue";
-
-            var client = new Client(settingsObject, () =>{});
-            client.channel = fakeChannel;
-            client.consumeMessageCallback = sinon.stub().returns({ success: true });
+            client._processMessage = sinon.stub().returns(new Promise((_, rej) => rej()));
 
             client._consumeMessage(message);
-
-            assert.isTrue(client.consumeMessageCallback.calledWith(
-                sinon.match(JSON.parse(message.content.toString())),
-                sinon.match(message.properties.headers),
-                sinon.match(message.properties.headers.TypeName)));
         });
 
-        it("if successful and auditing is enabled should send message to audit queue", function(){
-            var settingsObject = settings();
-            settingsObject.amqpSettings.queue.name = "TestQueue";
-            settingsObject.amqpSettings.auditEnabled = true;
-
-            var sendToQueueStub = sinon.stub(fakeChannel, "sendToQueue");
-
-            var client = new Client(settingsObject, () =>{});
-            client.channel = fakeChannel;
-            client.consumeMessageCallback = sinon.stub().returns({ success: true });
-
-            client._consumeMessage(message);
-
-            assert.isTrue(sendToQueueStub.calledWith(
-                settingsObject.amqpSettings.auditQueue,
-                message.content,
-                sinon.match({
-                    headers: message.properties.headers,
-                    messageId: message.properties.messageId
-                })
-            ));
-
-            fakeChannel.sendToQueue.restore();
-        });
-
-        it("if successful and auditing is disabled should not send message to audit queue", function(){
-            var settingsObject = settings();
-            settingsObject.amqpSettings.queue.name = "TestQueue";
-            settingsObject.amqpSettings.auditEnabled = false;
-
-            var sendToQueueStub = sinon.stub(fakeChannel, "sendToQueue");
-
-            var client = new Client(settingsObject, () =>{});
-            client.channel = fakeChannel;
-            client.consumeMessageCallback = sinon.stub().returns({ success: true });
-
-            client._consumeMessage(message);
-
-            assert.isFalse(sendToQueueStub.called);
-
-            fakeChannel.sendToQueue.restore();
-        });
-
-        it("if consumeMessageCallback is not successful should send message to retry queue with retry count set to 1", function(){
-            var settingsObject = settings();
-            settingsObject.amqpSettings.queue.name = "TestQueue";
-            settingsObject.amqpSettings.auditEnabled = false;
-
-            var sendToQueueStub = sinon.stub(fakeChannel, "sendToQueue");
-
-            var client = new Client(settingsObject, () =>{});
-            client.channel = fakeChannel;
-            client.consumeMessageCallback = sinon.stub().returns({ success: false, exception: "Error" });
-
-            client._consumeMessage(message);
-
-            assert.isTrue(sendToQueueStub.calledWith(
-                "TestQueue.Retries",
-                message.content,
-                sinon.match({
-                    headers: message.properties.headers,
-                    messageId: message.properties.messageId
-                })
-            ));
-
-            expect(message.properties.headers.RetryCount).to.equal(1);
-
-            fakeChannel.sendToQueue.restore();
-        });
-
-        it("if result is not successful and headers already contain RetryCount should increment RetryCount " +
-            "and assign to headers", function(){
-            var settingsObject = settings();
-            settingsObject.amqpSettings.queue.name = "TestQueue";
-            settingsObject.amqpSettings.auditEnabled = false;
-            message.properties.headers.RetryCount = 1;
-
-            var sendToQueueStub = sinon.stub(fakeChannel, "sendToQueue");
-
-            var client = new Client(settingsObject, () =>{});
-            client.channel = fakeChannel;
-            client.consumeMessageCallback = sinon.stub().returns({ success: false, exception: "Error" });
-
-            client._consumeMessage(message);
-
-            assert.isTrue(sendToQueueStub.calledWith(
-                "TestQueue.Retries",
-                message.content,
-                sinon.match({
-                    headers: message.properties.headers,
-                    messageId: message.properties.messageId
-                })
-            ));
-
-            expect(message.properties.headers.RetryCount).to.equal(2);
-
-            fakeChannel.sendToQueue.restore();
-        });
-
-        it("if consumeMessageCallback is not successful and retry count has reached max should send message " +
-            "to error queue", function(){
-            var settingsObject = settings();
-            settingsObject.amqpSettings.queue.name = "TestQueue";
-            settingsObject.amqpSettings.auditEnabled = false;
-            message.properties.headers.RetryCount = 3;
-
-            var sendToQueueStub = sinon.stub(fakeChannel, "sendToQueue");
-
-            var client = new Client(settingsObject, () =>{});
-            client.channel = fakeChannel;
-            client.consumeMessageCallback = sinon.stub().returns({ success: false, exception: "Error" });
-
-            client._consumeMessage(message);
-
-            assert.isTrue(sendToQueueStub.calledWith(
-                settingsObject.amqpSettings.errorQueue,
-                message.content,
-                sinon.match({
-                    headers: message.properties.headers,
-                    messageId: message.properties.messageId
-                })
-            ));
-
-            fakeChannel.sendToQueue.restore();
-        });
-
-        it("if consumeMessageCallback is not successful and retry count has reached max should add Exception " +
-            "to headers", function(){
-            var settingsObject = settings();
-            settingsObject.amqpSettings.queue.name = "TestQueue";
-            settingsObject.amqpSettings.auditEnabled = false;
-            message.properties.headers.RetryCount = 3;
-
-            var sendToQueueStub = sinon.stub(fakeChannel, "sendToQueue");
-
-            var client = new Client(settingsObject, () =>{});
-            client.channel = fakeChannel;
-            client.consumeMessageCallback = sinon.stub().returns({ success: false, exception: "Error" });
-
-            client._consumeMessage(message);
-
-            assert.isTrue(sendToQueueStub.calledWith(
-                settingsObject.amqpSettings.errorQueue,
-                message.content,
-                sinon.match({
-                    headers: message.properties.headers,
-                    messageId: message.properties.messageId
-                })
-            ));
-
-            expect(message.properties.headers.Exception).to.equal("Error");
-
-            fakeChannel.sendToQueue.restore();
-        });
-
-        it("if consumeMessageCallback throws exception should send message to retry queue", function(){
-            var settingsObject = settings();
-            settingsObject.amqpSettings.queue.name = "TestQueue";
-            settingsObject.amqpSettings.auditEnabled = false;
-
-            var sendToQueueStub = sinon.stub(fakeChannel, "sendToQueue");
-
-            var client = new Client(settingsObject, () =>{});
-            client.channel = fakeChannel;
-            client.consumeMessageCallback = sinon.stub().throws("Error");
-
-            client._consumeMessage(message);
-
-            assert.isTrue(sendToQueueStub.calledWith(
-                settingsObject.amqpSettings.queue.name + ".Retries",
-                message.content,
-                sinon.match({
-                    headers: message.properties.headers,
-                    messageId: message.properties.messageId
-                })
-            ));
-
-            expect(message.properties.headers.RetryCount).to.equal(1);
-
-            fakeChannel.sendToQueue.restore();
-        });
-
-        it("if consumeMessageCallback throws exception and retry count has reached max should send message " +
-            "to error queue", function(){
-            var settingsObject = settings();
-            settingsObject.amqpSettings.queue.name = "TestQueue";
-            settingsObject.amqpSettings.auditEnabled = false;
-            message.properties.headers.RetryCount = 3;
-
-            var sendToQueueStub = sinon.stub(fakeChannel, "sendToQueue");
-
-            var client = new Client(settingsObject, () =>{});
-            client.channel = fakeChannel;
-            var error = { error: "Error"};
-            client.consumeMessageCallback = sinon.stub().throws(error);
-
-            client._consumeMessage(message);
-
-            assert.isTrue(sendToQueueStub.calledWith(
-                settingsObject.amqpSettings.errorQueue,
-                message.content,
-                sinon.match({
-                    headers: message.properties.headers,
-                    messageId: message.properties.messageId
-                })
-            ));
-
-            expect(message.properties.headers.Exception).to.equal(error);
-
-            fakeChannel.sendToQueue.restore();
-        });
-
-        it("if noAck is true then should not ack the message", function(){
-            var settingsObject = settings();
-            settingsObject.amqpSettings.queue.name = "TestQueue";
-            settingsObject.amqpSettings.queue.noAck = true;
-            settingsObject.amqpSettings.auditEnabled = false;
-
-            var ackStub = sinon.stub(fakeChannel, "ack");
-
-            var client = new Client(settingsObject, () =>{});
-            client.channel = fakeChannel;
-            client.consumeMessageCallback = sinon.stub().returns({ success: true });
-
-            client._consumeMessage(message);
-
-            assert.isFalse(ackStub.called);
-
-            fakeChannel.ack.restore();
-        });
-
-        it("should ack after processing the message if noAck is false", function(){
+        it("should ack after processing the message if noAck is false", function(done){
             var settingsObject = settings();
             settingsObject.amqpSettings.queue.name = "TestQueue";
             settingsObject.amqpSettings.queue.noAck = false;
             settingsObject.amqpSettings.auditEnabled = false;
 
-            var ackStub = sinon.stub(fakeChannel, "ack");
+            var ackStub = sinon.stub(fakeChannel, "ack").callsFake(p => {
+              expect(p).to.equal(message);
+              fakeChannel.ack.restore();
+              done();
+            });
 
             var client = new Client(settingsObject, () =>{});
             client.channel = fakeChannel;
-            client.consumeMessageCallback = sinon.stub().returns({ success: true });
+            client._processMessage = sinon.stub().returns(new Promise((res, _) => res()));
 
             client._consumeMessage(message);
 
-            assert.isTrue(ackStub.called);
-
-            fakeChannel.ack.restore();
         });
     });
 
