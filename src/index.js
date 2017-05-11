@@ -135,7 +135,7 @@ export class Bus extends EventEmitter {
      * @param {int|null} timeout
      * @param {Object|null} headers
      */
-    publishRequest(type, message, callback, expected = null, timeout = 10000, headers ={}){
+    publishRequest(type, message, callback, expected = null, timeout = 10000, headers = {}){
         var messageId = guid();
 
         this.requestReplyCallbacks[messageId] = {
@@ -162,36 +162,68 @@ export class Bus extends EventEmitter {
      * @param  {Object} message
      * @param  {Object} headers
      * @param  {string} type
-     * @return  {Object} result
+     * @return {Object} result
      */
      _consumeMessage(message, headers, type){
-        return new Promise((resolve, reject) => {
 
-          let promises = [];
-          try {
-              promises = [
-                ...this._processHandlers(message, headers, type),
-                this._processRequestReplies(message, headers, type)
-              ];
-          } catch(e) {
-              this.emit("error", e);
-              reject({
-                exception: e,
-                success: false
-              });
-              return;
+        return Promise.resolve()
+            .then(() => this._processFilters(
+                this.config.filters.before,
+                message,
+                headers,
+                type
+            ))
+            .catch(err => this._messageErrorHandler(err))
+            .then(p => { if(!p) throw "Before filter returned false"; })
+            .catch(e => this._logFilterError(e))
+            .then(() => Promise.all([
+              ...this._processHandlers(message, headers, type),
+              this._processRequestReplies(message, headers, type)
+            ]))
+            .catch(err => this._messageErrorHandler(err))
+            .then(() => this._processFilters(
+                this.config.filters.after,
+                message,
+                headers,
+                type
+            ))
+            .catch(err => this._messageErrorHandler(err))
+            .then(p => { if(!p) throw "Asfter filter returned false" })
+            .catch(e => this._logFilterError(e));
+    }
+
+    async _processFilters(filters, message, headers, type) {
+        for (var i = 0; i < filters.length; i++) {
+          let result = await filters[i](message, headers, type, this);
+          if (result === false) {
+            return false;
           }
+        }
+        return true;
+    }
 
-          Promise.all(promises)
-            .then(res => resolve(res))
-            .catch(err => {
-              this.emit("error", err);
-              reject({
-                exception: err,
-                success: false
-              });
-            });
-        });
+    _messageErrorHandler(e) {
+      if (e!== null && typeof e === 'object' && e.breakError === true) {
+          return Promise.reject(e);
+      }
+      this.emit("error", e);
+      return Promise.reject({
+        breakError: true,
+        retry: true,
+        exception: e
+      });
+    }
+
+    _logFilterError(e) {
+      if (e!== null && typeof e === 'object' && e.breakError === true) {
+          return Promise.reject(e);
+      }
+      console.log(e);
+      return Promise.reject({
+        breakError: true,
+        retry: false,
+        exception: e
+      });
     }
 
     /**

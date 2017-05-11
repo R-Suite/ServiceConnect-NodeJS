@@ -27,9 +27,13 @@ export default function setting() {
             auditQueue: "audit",
             auditEnabled: false
         },
+        filters: {
+          after: [],
+          before: []
+        },
         handlers: {
             // "message type": [ array of callbacks ]
         },
-        client: client // AMQP client
+        client: client, // AMQP client
     };
 }

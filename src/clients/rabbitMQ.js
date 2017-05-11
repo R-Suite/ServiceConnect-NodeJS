@@ -260,11 +260,15 @@ export default class Client extends EventEmitter {
                   message,
                   headers,
                   headers.TypeName);
-            } catch (ex) {
-              result = {
-                  exception: ex,
-                  success: false
-              };
+            } catch (e) {
+              if (e === null || e === undefined ||
+                  (e !== null && e != undefined && typeof e !== 'object')  ||
+                  (e !== null && e != undefined && typeof e === 'object' && e.retry !== false)) {
+                result = {
+                    exception: e,
+                    success: false
+                };
+              }
             }
 
             headers.TimeProcessed = headers.TimeProcessed || new Date().toISOString();

@@ -9,6 +9,8 @@
     "eslint": "eslint -c .eslintrc.json src examples",
     "examples.commands.consumer": "node --inspect=5859 ./examples/Commands/consumer.js",
     "examples.commands.sender": "node ./examples/Commands/sender.js",
+    "examples.filters.consumer": "node --inspect=5859 ./examples/Filters/consumer.js",
+    "examples.filters.sender": "node ./examples/Filters/sender.js",
     "examples.competing-consumers.consumer1": "node ./examples/CompetingConsumers/consumer1.js",
     "examples.competing-consumers.consumer2": "node ./examples/CompetingConsumers/consumer2.js",
     "examples.competing-consumers.sender": "node ./examples/CompetingConsumers/sender.js",

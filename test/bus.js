@@ -671,6 +671,273 @@ describe("Bus", function() {
               });
         });
 
+        it("should process the correct message handlers after processing filters", function(done){
+            var cb1 = sinon.stub(),
+                cb2 = sinon.stub(),
+                cb3 = sinon.stub(),
+                cb4 = sinon.stub(),
+                message = {
+                    data: "12345"
+                },
+                headers = { token: 123 },
+                type = "LogCommand";
+
+            let beforeFilters = [
+              () => true,
+              () => new Promise((r,_) => r(true))
+            ];
+
+            let bus = new Bus({
+                handlers: {
+                    "LogCommand": [ cb1, cb2 ],
+                    "LogCommand2": [ cb3 ],
+                    "*": [ cb4 ]
+                },
+                filters: {
+                  before: beforeFilters
+                }
+            });
+            bus.init();
+
+            bus._consumeMessage(message, headers, type)
+              .then(r => {
+                assert.isTrue(cb1.calledWith(message, headers, type));
+                assert.isTrue(cb2.calledWith(message, headers, type));
+                assert.isFalse(cb3.called);
+                assert.isTrue(cb4.calledWith(message, headers, type));
+                done();
+              })
+              .catch(e => {
+                assert(false);
+                done();
+              });
+        });
+
+        it("should not process any message handlers if before filters return false", function(done){
+            var cb1 = sinon.stub(),
+                cb2 = sinon.stub(),
+                cb3 = sinon.stub(),
+                cb4 = sinon.stub(),
+                message = {
+                    data: "12345"
+                },
+                headers = { token: 123 },
+                type = "LogCommand";
+
+            let beforeFilters = [
+              () => false,
+              () => new Promise((r,_) => r(true))
+            ];
+
+            let bus = new Bus({
+                handlers: {
+                    "LogCommand": [ cb1, cb2 ],
+                    "LogCommand2": [ cb3 ],
+                    "*": [ cb4 ]
+                },
+                filters: {
+                  before: beforeFilters
+                }
+            });
+            bus.init();
+
+            bus._consumeMessage(message, headers, type)
+              .then(r => {
+                assert(false);
+                done();
+              })
+              .catch(e => {
+                assert.isFalse(cb1.called);
+                assert.isFalse(cb2.called);
+                assert.isFalse(cb3.called);
+                assert.isFalse(cb4.called);
+                done();
+              });
+        });
+
+        it("should not process any message handlers if before filters return a promise that resolves to false", function(done){
+            var cb1 = sinon.stub(),
+                cb2 = sinon.stub(),
+                cb3 = sinon.stub(),
+                cb4 = sinon.stub(),
+                message = {
+                    data: "12345"
+                },
+                headers = { token: 123 },
+                type = "LogCommand";
+
+            let beforeFilters = [
+              () => true,
+              () => new Promise((r,_) => r(false))
+            ];
+
+            let bus = new Bus({
+                handlers: {
+                    "LogCommand": [ cb1, cb2 ],
+                    "LogCommand2": [ cb3 ],
+                    "*": [ cb4 ]
+                },
+                filters: {
+                  before: beforeFilters
+                }
+            });
+            bus.init();
+
+            bus._consumeMessage(message, headers, type)
+              .then(r => {
+                assert(false);
+                done();
+              })
+              .catch(e => {
+                assert.isFalse(cb1.called);
+                assert.isFalse(cb2.called);
+                assert.isFalse(cb3.called);
+                assert.isFalse(cb4.called);
+                done();
+              });
+        });
+
+        it("should not process any message handlers if before filter throws exception", function(done){
+            var cb1 = sinon.stub(),
+                cb2 = sinon.stub(),
+                cb3 = sinon.stub(),
+                cb4 = sinon.stub(),
+                message = {
+                    data: "12345"
+                },
+                headers = { token: 123 },
+                type = "LogCommand";
+
+            let beforeFilters = [
+              () => true,
+              () =>  { throw "Error"; }
+            ];
+
+            let bus = new Bus({
+                handlers: {
+                    "LogCommand": [ cb1, cb2 ],
+                    "LogCommand2": [ cb3 ],
+                    "*": [ cb4 ]
+                },
+                filters: {
+                  before: beforeFilters
+                }
+            });
+            bus.init();
+
+            bus._consumeMessage(message, headers, type)
+              .then(r => {
+                assert(false);
+                done();
+              })
+              .catch(e => {
+                assert.isFalse(cb1.called);
+                assert.isFalse(cb2.called);
+                assert.isFalse(cb3.called);
+                assert.isFalse(cb4.called);
+                done();
+              });
+        });
+
+        it("should not process any message handlers if before filter returns a promise that is rejected", function(done){
+            var cb1 = sinon.stub(),
+                cb2 = sinon.stub(),
+                cb3 = sinon.stub(),
+                cb4 = sinon.stub(),
+                message = {
+                    data: "12345"
+                },
+                headers = { token: 123 },
+                type = "LogCommand";
+
+            let beforeFilters = [
+              () => true,
+              () => new Promise((_, r) => r())
+            ];
+
+            let bus = new Bus({
+                handlers: {
+                    "LogCommand": [ cb1, cb2 ],
+                    "LogCommand2": [ cb3 ],
+                    "*": [ cb4 ]
+                },
+                filters: {
+                  before: beforeFilters
+                }
+            });
+            bus.init();
+
+            bus._consumeMessage(message, headers, type)
+              .then(r => {
+                assert(false);
+                done();
+              })
+              .catch(e => {
+                assert.isFalse(cb1.called);
+                assert.isFalse(cb2.called);
+                assert.isFalse(cb3.called);
+                assert.isFalse(cb4.called);
+                done();
+              });
+        });
+
+        it("should process before and after filters in order", function(done){
+            var cb1 = sinon.stub(),
+                message = {
+                    data: "12345"
+                },
+                headers = { token: 123 },
+                type = "LogCommand";
+
+            let beforeCalls = [];
+            let beforeFilters = [
+              () => beforeCalls.push(1),
+              () => beforeCalls.push(2),
+              () => beforeCalls.push(3),
+              () => beforeCalls.push(4),
+            ];
+
+            let afterCalls = [];
+            let afterFilters= [
+              () => afterCalls.push(1),
+              () => afterCalls.push(2),
+              () => afterCalls.push(3),
+              () => afterCalls.push(4),
+            ];
+
+            let bus = new Bus({
+                handlers: {
+                    "LogCommand": [ cb1 ],
+                },
+                filters: {
+                  before: beforeFilters,
+                  after: afterFilters
+                }
+            });
+            bus.init();
+
+            bus._consumeMessage(message, headers, type)
+              .then(r => {
+                expect(beforeCalls).to.deep.equal([
+                    1,
+                    2,
+                    3,
+                    4
+                ]);
+                expect(afterCalls).to.deep.equal([
+                    1,
+                    2,
+                    3,
+                    4
+                ]);
+                done();
+              })
+              .catch(e => {
+                assert(false);
+                done();
+              });
+        });
+
         it("should successfully resolve promise if there are no message handlers", function(done){
             var message = {
                     data: "12345"
@@ -815,7 +1082,7 @@ describe("Bus", function() {
                 done();
               })
               .catch(e => {
-                expect(e.exception.error).to.equal("cb1 error");
+                assert(true);
                 done();
               });
         });
@@ -849,7 +1116,7 @@ describe("Bus", function() {
                 done();
               })
               .catch(e => {
-                expect(e.exception.error).to.equal("cb1 error");
+                assert(true);
                 done();
               });
         });
