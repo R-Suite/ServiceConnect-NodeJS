@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "build": "babel -d ./lib ./src -s",
-    "test": "./node_modules/.bin/mocha --reporter spec --compilers js:babel-core/register",
+    "test": "./node_modules/.bin/mocha --reporter mocha-sonarqube-reporter --reporter-options output=xunit.xml --compilers js:babel-core/register ",
     "eslint": "eslint -c .eslintrc.json src examples",
     "examples.commands.consumer": "node --inspect=5859 ./examples/Commands/consumer.js",
     "examples.commands.sender": "node ./examples/Commands/sender.js",
@@ -44,6 +44,7 @@
     "eslint-plugin-react": "^6.3.0",
     "jsdoc": "^3.4.1",
     "mocha": "^3.0.2",
+    "mocha-sonarqube-reporter": "^1.0.1",
     "promise": "^7.1.1",
     "sinon": "2.2.0"
   },
