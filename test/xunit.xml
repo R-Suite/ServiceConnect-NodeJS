@@ -1,14 +1,14 @@
 <testExecutions version="1">
 <file path="test\bus.js">
-<testCase name="Constructor: should create build config" duration="5"/>
+<testCase name="Constructor: should create build config" duration="9"/>
 <testCase name="init: should create and connect to client" duration="1"/>
 <testCase name="init: should bind connected event" duration="0"/>
-<testCase name="init: should call callback argument on connected" duration="0"/>
-<testCase name="init: should bind error event" duration="2"/>
-<testCase name="addHandler: should create and connect to client" duration="1"/>
-<testCase name="addHandler: should call consumeType on client" duration="1"/>
-<testCase name="addHandler: should add the message type and callback to the handler map" duration="1"/>
-<testCase name="addHandler: * message type should not call consumeType on client" duration="0"/>
+<testCase name="init: should call callback argument on connected" duration="1"/>
+<testCase name="init: should bind error event" duration="1"/>
+<testCase name="addHandler: should create and connect to client" duration="0"/>
+<testCase name="addHandler: should call consumeType on client" duration="0"/>
+<testCase name="addHandler: should add the message type and callback to the handler map" duration="0"/>
+<testCase name="addHandler: * message type should not call consumeType on client" duration="1"/>
 <testCase name="addHandler: should add * message type and callback to the handler map" duration="0"/>
 <testCase name="removeHandler: should remove handler mapping from handler dictionary" duration="0"/>
 <testCase name="removeHandler: if all callbacks have been removed for a type then removeType should be called on client" duration="0"/>
@@ -18,64 +18,64 @@
 <testCase name="isHandled: should return false if message type has 0 callbacks" duration="0"/>
 <testCase name="send: should send message to client" duration="0"/>
 <testCase name="publish: should publish message to client" duration="0"/>
-<testCase name="sendRequest: should send message to client" duration="1"/>
-<testCase name="sendRequest: should add request to callback dictionary" duration="2"/>
+<testCase name="sendRequest: should send message to client" duration="0"/>
+<testCase name="sendRequest: should add request to callback dictionary" duration="1"/>
 <testCase name="sendRequest: expected replies should be equal to number of endpoints passed into sendRequest" duration="0"/>
-<testCase name="publishRequest: should publish message to client" duration="0"/>
-<testCase name="publishRequest: should add request configuration" duration="0"/>
+<testCase name="publishRequest: should publish message to client" duration="1"/>
+<testCase name="publishRequest: should add request configuration" duration="1"/>
 <testCase name="publishRequest: should remove request configuration after timeout" duration="0"/>
-<testCase name="publishRequest: should set expected replies" duration="1"/>
-<testCase name="_consumeMessage: should process the correct message handlers" duration="3"/>
+<testCase name="publishRequest: should set expected replies" duration="0"/>
+<testCase name="_consumeMessage: should process the correct message handlers" duration="4"/>
 <testCase name="_consumeMessage: should process the correct message handlers after processing filters" duration="1"/>
 <testCase name="_consumeMessage: should not process any message handlers if before filters return false" duration="1"/>
 <testCase name="_consumeMessage: should not process any message handlers if before filters return a promise that resolves to false" duration="0"/>
-<testCase name="_consumeMessage: should not process any message handlers if before filter throws exception" duration="0"/>
+<testCase name="_consumeMessage: should not process any message handlers if before filter throws exception" duration="1"/>
 <testCase name="_consumeMessage: should not process any message handlers if before filter returns a promise that is rejected" duration="1"/>
 <testCase name="_consumeMessage: should process before and after filters in order" duration="1"/>
 <testCase name="_consumeMessage: should successfully resolve promise if there are no message handlers" duration="0"/>
-<testCase name="_consumeMessage: should successfully resolve promise after processing all message handlers" duration="1"/>
+<testCase name="_consumeMessage: should successfully resolve promise after processing all message handlers" duration="0"/>
 <testCase name="_consumeMessage: should successfully resolve promise after processing handlers that return promises" duration="1"/>
-<testCase name="_consumeMessage: reply callback should send message to source address" duration="0"/>
+<testCase name="_consumeMessage: reply callback should send message to source address" duration="1"/>
 <testCase name="_consumeMessage: should throw error if a handler throws an exception" duration="0"/>
 <testCase name="_consumeMessage: should throw error if a handler returns a rejected promise" duration="0"/>
 <testCase name="_consumeMessage: if a handler throws an exception the error callback method should be called" duration="0"/>
-<testCase name="close: should close the client" duration="0"/>
+<testCase name="close: should close the client" duration="1"/>
 </file>
 <file path="test\rabbitMQ.js">
-<testCase name="connect: should connect to the amqp client" duration="29"/>
+<testCase name="connect: should connect to the amqp client" duration="30"/>
 <testCase name="connect: should call error callback if error occurs during connect" duration="1"/>
 <testCase name="connect: should create channel after connecting" duration="1"/>
 <testCase name="connect: should call error callback if error occurs during create channel" duration="1"/>
 <testCase name="connect: should create queues after creating channel" duration="1"/>
 <testCase name="_createQueues: should create the queues" duration="1"/>
-<testCase name="_createQueues: should bind the queue to the message types defined in the handlers configuration" duration="2"/>
-<testCase name="_createQueues: should configure retries" duration="1"/>
+<testCase name="_createQueues: should bind the queue to the message types defined in the handlers configuration" duration="1"/>
+<testCase name="_createQueues: should configure retries" duration="2"/>
 <testCase name="_createQueues: should configure errors" duration="1"/>
 <testCase name="_createQueues: should configure auditing if enabled" duration="1"/>
 <testCase name="_createQueues: should not configure auditing if disabled" duration="1"/>
 <testCase name="_createQueues: should begin consuming messages" duration="1"/>
 <testCase name="_createQueues: should trigger the connected callback function defined in the configuration" duration="0"/>
 <testCase name="consumeType: should create a exchange with the same name as the supplied type" duration="1"/>
-<testCase name="consumeType: should bind the queue to the new exchange" duration="1"/>
-<testCase name="removeType: should unbind the queue from the exchange with name equal to the supplied type name" duration="1"/>
+<testCase name="consumeType: should bind the queue to the new exchange" duration="0"/>
+<testCase name="removeType: should unbind the queue from the exchange with name equal to the supplied type name" duration="0"/>
 <testCase name="send: should send a message to the supplied endpoint" duration="1"/>
-<testCase name="send: should send the correct message headings" duration="1"/>
+<testCase name="send: should send the correct message headings" duration="0"/>
 <testCase name="send: should send a message to the supplied endpoints if an array of endpoints is passed" duration="1"/>
 <testCase name="publish: should publish the message" duration="0"/>
 <testCase name="publish: should publish the message with the correct headers" duration="0"/>
 <testCase name="publish: should assert that the exchange exists before publishing" duration="0"/>
-<testCase name="_processMessage: should set the correct headings" duration="2"/>
+<testCase name="_processMessage: should set the correct headings" duration="1"/>
 <testCase name="_processMessage: should call the consumeMessageCallback function" duration="1"/>
 <testCase name="_processMessage: if successful and auditing is enabled should send message to audit queue" duration="1"/>
 <testCase name="_processMessage: if successful and auditing is disabled should not send message to audit queue" duration="1"/>
 <testCase name="_processMessage: if consumeMessageCallback is not successful should send message to retry queue with retry count set to 1" duration="1"/>
-<testCase name="_processMessage: if result is not successful and headers already contain RetryCount should increment RetryCount and assign to headers" duration="1"/>
-<testCase name="_processMessage: if consumeMessageCallback is not successful and retry count has reached max should send message to error queue" duration="2"/>
-<testCase name="_processMessage: if consumeMessageCallback is not successful and retry count has reached max should add Exception to headers" duration="0"/>
-<testCase name="_consumeMessage: should throw exception if the typename is not in the headers" duration="0"/>
-<testCase name="_consumeMessage: should ack message if exception is thrown" duration="2"/>
-<testCase name="_consumeMessage: should ack after processing the message if noAck is false" duration="1"/>
-<testCase name="close: should close the channel" duration="1"/>
+<testCase name="_processMessage: if result is not successful and headers already contain RetryCount should increment RetryCount and assign to headers" duration="2"/>
+<testCase name="_processMessage: if consumeMessageCallback is not successful and retry count has reached max should send message to error queue" duration="1"/>
+<testCase name="_processMessage: if consumeMessageCallback is not successful and retry count has reached max should add Exception to headers" duration="1"/>
+<testCase name="_consumeMessage: should throw exception if the typename is not in the headers" duration="1"/>
+<testCase name="_consumeMessage: should ack message if exception is thrown" duration="1"/>
+<testCase name="_consumeMessage: should ack after processing the message if noAck is false" duration="0"/>
+<testCase name="close: should close the channel" duration="0"/>
 <testCase name="close: should delete the retry queue if autoDelete is enabled" duration="0"/>
 </file>
 </testExecutions>
