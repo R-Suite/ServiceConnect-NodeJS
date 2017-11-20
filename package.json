@@ -27,8 +27,10 @@
   },
   "config": {
     "mocha-sonar-reporter": {
-      "outputfile": "test/xunit.xml"
-    }
+            "classname": "Test",
+            "testdir": "test",
+            "outputfile": "reports/xunit.xml"
+        }
   },
   "author": "Tim Watson",
   "email": "tswatson123@gmail.com",
