@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" uuid="6b5a81f2-a71d-4183-8a25-a2706a1d3381" xsi:noNamespaceSchemaLocation="http://www.jetbrains.com/teamcity/schemas/10.0/project-config.xsd">
+  <name>ServiceConnect NodeJS</name>
+  <parameters />
+  <project-extensions>
+    <extension id="PROJECT_EXT_2" type="">
+      <parameters>
+        <param name="id" value="5307783c-ed66-478f-b18f-d840742b54e9" />
+        <param name="jdbcPassword" value="zxx323c53f7fbc967a7" />
+        <param name="jdbcUrl" value="jdbc:mysql://192.168.57.30:3306/sonar?useUnicode=true&amp;characterEncoding=utf8&amp;rewriteBatchedStatements=true&amp;useConfigs=maxPerformance" />
+        <param name="jdbcUsername" value="sonarsql" />
+        <param name="name" value="Test" />
+        <param name="url" value="http://192.168.57.30:9000" />
+      </parameters>
+    </extension>
+    <extension id="PROJECT_EXT_4" type="versionedSettings">
+      <parameters>
+        <param name="buildSettings" value="ALWAYS_USE_CURRENT" />
+        <param name="enabled" value="true" />
+        <param name="rootId" value="ServiceConnectNodeJS_HttpsGithubComRSuiteServiceConnectNodeJSRefsHeadsMaster" />
+        <param name="showChanges" value="false" />
+      </parameters>
+    </extension>
+  </project-extensions>
+  <cleanup />
+</project>
+

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<build-type xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" uuid="0bf489f4-4d69-4c72-b508-f5916465273d" xsi:noNamespaceSchemaLocation="http://www.jetbrains.com/teamcity/schemas/10.0/project-config.xsd">
+  <name>Build</name>
+  <description />
+  <settings>
+    <parameters />
+    <build-runners>
+      <runner id="RUNNER_1" name="Install dependencies" type="simpleRunner">
+        <parameters>
+          <param name="script.content" value="npm install" />
+          <param name="teamcity.step.mode" value="default" />
+          <param name="use.custom.script" value="true" />
+        </parameters>
+      </runner>
+      <runner id="RUNNER_2" name="Build" type="simpleRunner">
+        <parameters>
+          <param name="script.content" value="npm build" />
+          <param name="teamcity.step.mode" value="default" />
+          <param name="use.custom.script" value="true" />
+        </parameters>
+      </runner>
+      <runner id="RUNNER_7" name="Test" type="simpleRunner">
+        <parameters>
+          <param name="script.content" value="npm run test" />
+          <param name="teamcity.step.mode" value="default" />
+          <param name="use.custom.script" value="true" />
+        </parameters>
+      </runner>
+      <runner id="RUNNER_3" name="Sonar" type="sonar-plugin">
+        <parameters>
+          <param name="sonarProjectKey" value="%teamcity.project.id%" />
+          <param name="sonarProjectName" value="%system.teamcity.projectName%" />
+          <param name="sonarProjectSources" value="src" />
+          <param name="sonarProjectTests" value="test" />
+          <param name="sonarProjectVersion" value="%build.number%" />
+          <param name="sonarServer" value="5307783c-ed66-478f-b18f-d840742b54e9" />
+          <param name="teamcity.step.mode" value="default" />
+        </parameters>
+      </runner>
+    </build-runners>
+    <vcs-settings>
+      <vcs-entry-ref root-id="ServiceConnectNodeJS_HttpsGithubComRSuiteServiceConnectNodeJSRefsHeadsMaster" />
+    </vcs-settings>
+    <requirements>
+      <contains id="RQ_1" name="system.agent.name" value="192.168.57" />
+    </requirements>
+    <build-triggers>
+      <build-trigger id="vcsTrigger" type="vcsTrigger">
+        <parameters>
+          <param name="branchFilter" value="+:*" />
+          <param name="quietPeriodMode" value="DO_NOT_USE" />
+        </parameters>
+      </build-trigger>
+    </build-triggers>
+    <cleanup />
+  </settings>
+</build-type>
+
