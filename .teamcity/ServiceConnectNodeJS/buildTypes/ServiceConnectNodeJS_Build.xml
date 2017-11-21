@@ -21,7 +21,7 @@
       </runner>
       <runner id="RUNNER_7" name="Test" type="simpleRunner">
         <parameters>
-          <param name="script.content" value="npm run test" />
+          <param name="script.content" value="./node_modules/.bin/babel-node ./node_modules/.bin/nyc mocha --recursive" />
           <param name="teamcity.step.mode" value="default" />
           <param name="use.custom.script" value="true" />
         </parameters>
@@ -31,7 +31,7 @@
           <param name="sonarProjectKey" value="%teamcity.project.id%" />
           <param name="sonarProjectName" value="%system.teamcity.projectName%" />
           <param name="sonarProjectSources" value="src" />
-          <param name="sonarProjectTests" value="test" />
+          <param name="sonarProjectTests" value="reports" />
           <param name="sonarProjectVersion" value="%build.number%" />
           <param name="sonarServer" value="5307783c-ed66-478f-b18f-d840742b54e9" />
           <param name="teamcity.step.mode" value="default" />
