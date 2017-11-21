@@ -5,7 +5,10 @@
   "main": "index.js",
   "scripts": {
     "build": "babel -d ./lib ./src -s",
-    "test": "./node_modules/.bin/mocha -R mocha-sonar-reporter --compilers js:babel-core/register ",
+    "test": "cross-env NODE_ENV=test nyc --reporter=lcov --reporter=text ./node_modules/.bin/mocha --compilers js:babel-core/register ",
+    "test2": "./node_modules/.bin/babel-node node_modules/.bin/istanbul cover --dir test/coverage node_modules/mocha/bin/_mocha -- --compilers js:babel-core/register test/*",
+    "test3": "babel-node ./node_modules/istanbul/lib/cli cover node_modules/mocha/bin/_mocha -- --recursive",
+    "test4": "./node_modules/.bin/babel-node ./node_modules/.bin/nyc mocha --recursive",
     "eslint": "eslint -c .eslintrc.json src examples",
     "examples.commands.consumer": "node --inspect=5859 ./examples/Commands/consumer.js",
     "examples.commands.sender": "node ./examples/Commands/sender.js",
@@ -27,10 +30,10 @@
   },
   "config": {
     "mocha-sonar-reporter": {
-            "classname": "Test",
-            "testdir": "test",
-            "outputfile": "reports/xunit.xml"
-        }
+      "classname": "Test",
+      "testdir": "test",
+      "outputfile": "reports/xunit.xml"
+    }
   },
   "author": "Tim Watson",
   "email": "tswatson123@gmail.com",
@@ -42,22 +45,27 @@
     "babel-eslint": "^7.2.3",
     "babel-loader": "^6.2.4",
     "babel-plugin-add-module-exports": "^0.2.1",
+    "babel-plugin-istanbul": "^4.1.5",
     "babel-plugin-transform-object-assign": "^6.8.0",
     "babel-polyfill": "^6.13.0",
     "babel-preset-es2015": "^6.13.2",
     "babel-preset-stage-1": "^6.13.0",
     "chai": "^3.5.0",
+    "cross-env": "^5.1.1",
     "eslint": "^3.7.1",
     "eslint-plugin-react": "^6.3.0",
+    "istanbul": "^0.4.5",
     "jsdoc": "^3.4.1",
     "mocha": "^3.0.2",
     "mocha-sonar-reporter": "^0.1.6",
     "mocha-sonarqube-reporter": "^1.0.1",
+    "nyc": "^11.3.0",
     "promise": "^7.1.1",
     "sinon": "2.2.0"
   },
   "dependencies": {
-    "amqplib": "^0.4.2"
+    "amqplib": "^0.4.2",
+    "babel-istanbul": "^0.12.2"
   },
   "repository": {
     "type": "git",

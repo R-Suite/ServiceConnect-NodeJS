@@ -1,4 +1,4 @@
-import 'babel-polyfill'
+//import 'babel-polyfill'
 import Client from '../src/clients/rabbitMQ';
 import chai from 'chai';
 import sinon from 'sinon';

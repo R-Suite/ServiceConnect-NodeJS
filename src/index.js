@@ -8,7 +8,7 @@ export class Bus extends EventEmitter {
     /**
      * Sets config and creates client
      * @constructor
-     * @param  {Object} config
+     * @param {Object} config
      */
     constructor(config) {
         super();

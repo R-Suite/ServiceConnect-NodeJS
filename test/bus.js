@@ -1,4 +1,4 @@
-import 'babel-polyfill'
+//import 'babel-polyfill'
 import { Bus } from '../src/index';
 import chai from 'chai';
 import sinon from 'sinon';
@@ -586,7 +586,7 @@ describe("Bus", function() {
             expect(bus.requestReplyCallbacks[headers["RequestMessageId"]].callback).to.equal(callback);
         });
 
-        it("should remove request configuration after timeout", function(){
+        it("should remove request configuration after timeout", function(done){
             let bus = new Bus(),
                 type = "MessageType",
                 message = {
