@@ -30,6 +30,7 @@
         <parameters>
           <param name="sonarProjectKey" value="%teamcity.project.id%" />
           <param name="sonarProjectName" value="%system.teamcity.projectName%" />
+          <param name="sonarProjectSources" value="." />
           <param name="sonarProjectVersion" value="%build.number%" />
           <param name="sonarServer" value="5307783c-ed66-478f-b18f-d840742b54e9" />
           <param name="teamcity.step.mode" value="default" />
