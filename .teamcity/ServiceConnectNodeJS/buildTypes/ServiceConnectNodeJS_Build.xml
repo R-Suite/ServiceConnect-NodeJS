@@ -21,7 +21,7 @@
       </runner>
       <runner id="RUNNER_7" name="Test" type="simpleRunner">
         <parameters>
-          <param name="script.content" value="npm run test" />
+          <param name="script.content" value="./node_modules/.bin/babel-node ./node_modules/.bin/nyc mocha --recursive" />
           <param name="teamcity.step.mode" value="default" />
           <param name="use.custom.script" value="true" />
         </parameters>
