@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "build": "babel -d ./lib ./src -s",
-    "test": "nyc --reporter=lcov --reporter=text ./node_modules/.bin/mocha --compilers js:babel-core/register ",
+    "test": "nyc --reporter=lcov --reporter=text ./node_modules/.bin/mocha -R mocha-sonar-reporter --compilers js:babel-core/register ",
     "test2": "./node_modules/.bin/babel-node node_modules/.bin/istanbul cover --dir test/coverage node_modules/mocha/bin/_mocha -- --compilers js:babel-core/register test/*",
     "test3": "babel-node ./node_modules/istanbul/lib/cli cover node_modules/mocha/bin/_mocha -- --recursive",
     "test4": "./node_modules/.bin/babel-node ./node_modules/.bin/nyc mocha --recursive",
@@ -32,7 +32,7 @@
     "mocha-sonar-reporter": {
       "classname": "Test",
       "testdir": "test",
-      "outputfile": "reports/xunit.xml"
+      "outputfile": "coverage/tests.xml"
     }
   },
   "author": "Tim Watson",
