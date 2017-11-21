@@ -28,6 +28,10 @@ A simple, easy to use asynchronous messaging framework for Node.JS.  It provides
     - Streaming
 * Filters
 
+## Building
+
+    npm test
+
 ## Simple example
 
 In this example we simply send a message from one endpoint and consume the same message on another endpoint.
