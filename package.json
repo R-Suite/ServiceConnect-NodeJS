@@ -1,6 +1,6 @@
 {
   "name": "service-connect",
-  "version": "0.0.22",
+  "version": "0.0.23",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -61,7 +61,7 @@
     "sinon": "2.2.0"
   },
   "dependencies": {
-    "amqplib": "^0.4.2",
+    "amqplib": "^0.5.2",
     "babel-istanbul": "^0.12.2"
   },
   "repository": {
