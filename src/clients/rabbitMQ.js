@@ -2,7 +2,6 @@ import {mergeDeep, guid} from '../utils';
 import amqp from 'amqplib/callback_api';
 import os from 'os';
 import EventEmitter from 'events';
-require("babel-polyfill");
 
 /** Class representing the rabbitMQ client. */
 export default class Client extends EventEmitter {

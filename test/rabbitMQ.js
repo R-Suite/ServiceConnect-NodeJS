@@ -1,4 +1,4 @@
-//import 'babel-polyfill'
+
 import Client from '../src/clients/rabbitMQ';
 import chai from 'chai';
 import sinon from 'sinon';
@@ -8,6 +8,8 @@ import os from 'os';
 
 let expect = chai.expect;
 let assert = chai.assert;
+
+
 
 describe("RabbitMQ Client", function() {
 

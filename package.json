@@ -1,11 +1,11 @@
 {
   "name": "service-connect",
-  "version": "0.0.23",
+  "version": "0.0.24",
   "description": "",
   "main": "index.js",
   "scripts": {
     "build": "babel -d ./lib ./src -s",
-    "test": "nyc --reporter=lcov --report lcovonly ./node_modules/.bin/mocha -R mocha-sonar-reporter --compilers js:babel-core/register ",
+    "test": "nyc --reporter=lcov --report lcovonly ./node_modules/.bin/mocha -R mocha-sonar-reporter --compilers js:babel-core/register --require babel-polyfill",
     "eslint": "eslint -c .eslintrc.json src examples",
     "examples.commands.consumer": "node --inspect=5859 ./examples/Commands/consumer.js",
     "examples.commands.sender": "node ./examples/Commands/sender.js",
