@@ -1,3 +1,4 @@
+require('babel-polyfill');
 var Bus = require('../../index.js');
 var stdin = process.openStdin();
 

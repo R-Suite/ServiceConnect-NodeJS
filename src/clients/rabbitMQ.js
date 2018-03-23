@@ -51,7 +51,7 @@ export default class Client extends EventEmitter {
                 this.channel = channel;
                 this._createQueues();
             })
-        });
+        });        
     }
 
     /**
@@ -62,11 +62,14 @@ export default class Client extends EventEmitter {
         console.info("Connection ready");
         console.info("Creating queue " + this.config.amqpSettings.queue.name);
 
+        this.channel.prefetch(this.config.amqpSettings.prefetch);
+
         // create queue
         this.channel.assertQueue(this.config.amqpSettings.queue.name,  {
             durable: this.config.amqpSettings.queue.durable,
             exclusive: this.config.amqpSettings.queue.exclusive,
-            autoDelete: this.config.amqpSettings.queue.autoDelete
+            autoDelete: this.config.amqpSettings.queue.autoDelete,
+            maxPriority: this.config.amqpSettings.queue.maxPriority
         });
         console.info(this.config.amqpSettings.queue.name + " queue created.");
 
@@ -133,8 +136,8 @@ export default class Client extends EventEmitter {
         }
 
         this.channel.consume(this.config.amqpSettings.queue.name, this._consumeMessage, {
-            noAck: this.config.amqpSettings.queue.noAck
-        });
+             noAck: this.config.amqpSettings.queue.noAck
+        });            
 
         this.emit("connected");
     }
@@ -170,7 +173,11 @@ export default class Client extends EventEmitter {
         let endpoints = Array.isArray(endpoint) ? endpoint : [endpoint];
         endpoints.map(ep => {
             let messageHeaders = this._getHeaders(type, headers, ep, "Send");
-            this.channel.sendToQueue(ep, new Buffer(JSON.stringify(message), "utf-8"), { headers: messageHeaders, messageId: messageHeaders.MessageId });
+            let options = { headers: messageHeaders, messageId: messageHeaders.MessageId };
+            if (messageHeaders.hasOwnProperty("Priority")) {
+                options.priority = messageHeaders.Priority
+            }
+            this.channel.sendToQueue(ep, new Buffer(JSON.stringify(message), "utf-8"), options);
         });
     }
 
@@ -185,7 +192,11 @@ export default class Client extends EventEmitter {
         this.channel.assertExchange(type.replace(/\./g, ""), 'fanout', {
             durable: true
         });
-        this.channel.publish(type.replace(/\./g, ""), '', new Buffer(JSON.stringify(message), "utf-8"), { headers: messageHeaders, messageId: messageHeaders.MessageId });
+        let options = { headers: messageHeaders, messageId: messageHeaders.MessageId };
+        if (messageHeaders.hasOwnProperty("Priority")) {
+            options.priority = messageHeaders.Priority
+        }
+        this.channel.publish(type.replace(/\./g, ""), '', new Buffer(JSON.stringify(message), "utf-8"), options);
     }
 
     /**
@@ -328,4 +339,12 @@ export default class Client extends EventEmitter {
         }
         this.channel.close();
     }
+}
+function sleep(milliseconds) {
+  var start = new Date().getTime();
+  for (var i = 0; i < 1e7; i++) {
+    if ((new Date().getTime() - start) > milliseconds){
+      break;
+    }
+  }
 }

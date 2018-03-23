@@ -8,7 +8,8 @@ export default function setting() {
                 durable: true,
                 exclusive: false,
                 autoDelete: false,
-                noAck: false
+                noAck: false,
+                maxPriority: null
             },
             ssl: {
                 enabled: false,
@@ -25,7 +26,8 @@ export default function setting() {
             maxRetries: 3,
             errorQueue: "errors",
             auditQueue: "audit",
-            auditEnabled: false
+            auditEnabled: false,
+            prefetch:100
         },
         filters: {
           after: [],
