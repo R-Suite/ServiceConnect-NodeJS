@@ -155,7 +155,7 @@ export default class Client extends EventEmitter {
      * @param {String} type
      */
     removeType(type){
-      this.channel.addSetup((channel) => {
+      this.channel.removeSetup((channel) => {
         return channel.unbindQueue(this.config.amqpSettings.queue.name, type);
       });
     }
@@ -327,7 +327,7 @@ export default class Client extends EventEmitter {
                 headers.Exception = result.exception;
                 this.channel.sendToQueue(
                     this.config.amqpSettings.errorQueue,
-                    message,
+                    JSON.parse(rawMessage.content.toString()),
                     {
                         headers: headers,
                         messageId: rawMessage.properties.messageId
@@ -346,7 +346,6 @@ export default class Client extends EventEmitter {
             });
         }
         this.channel.close();
-        this.connection.close();
     }
 }
 function sleep(milliseconds) {

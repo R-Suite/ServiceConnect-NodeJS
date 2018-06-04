@@ -2,7 +2,7 @@
 import Client from '../src/clients/rabbitMQ';
 import chai from 'chai';
 import sinon from 'sinon';
-import amqp from 'amqplib/callback_api';
+var amqp = require('amqp-connection-manager');
 import settings from '../src/settings';
 import os from 'os';
 
@@ -29,7 +29,10 @@ describe("RabbitMQ Client", function() {
     describe("connect", function(){
 
         it("should connect to the amqp client", function(){
+            var connection = { createChannel: sinon.stub() };
             var stub = sinon.stub(amqp, 'connect');
+            stub.returns(connection)
+
             var client = new Client(settings(), () =>{});
             client.connect();
             assert.isTrue(stub.called);
@@ -37,84 +40,20 @@ describe("RabbitMQ Client", function() {
             amqp.connect.restore();
         });
 
-        it("should call error callback if error occurs during connect", function(){
-
-            var errorCb = sinon.stub();
-
-            sinon.stub(amqp, 'connect', (host, options, cb) => {
-                cb("Error");
-            });
-
-            var client = new Client(settings(), () =>{});
-            client.on("error", errorCb);
-            client.connect();
-            assert.isTrue(errorCb.calledWith("Error"));
-
-            amqp.connect.restore();
-        });
-
         it("should create channel after connecting", function(){
-            var fakeConnection = { createChannel: () => {} };
-            var createChannelStub = sinon.stub(fakeConnection, "createChannel");
-
-            sinon.stub(amqp, 'connect', (host, options, cb) => {
-                cb(undefined, fakeConnection);
-            });
+            var connection = { createChannel: sinon.stub() };
+            var stub = sinon.stub(amqp, 'connect');
+            stub.returns(connection)
 
             var client = new Client(settings(), () =>{});
             client.connect();
 
-            assert.isTrue(createChannelStub.called);
-            expect(client.connection).to.equal(fakeConnection);
+            assert.isTrue(connection.createChannel.called);
+            expect(client.connection).to.equal(connection);
 
             amqp.connect.restore();
         });
 
-        it("should call error callback if error occurs during create channel", function(){
-
-            var errorCb = sinon.stub();
-
-            var fakeConnection = { createChannel: (cb) => {
-                cb("Error");
-            }};
-
-            sinon.stub(amqp, 'connect', (host, options, cb) => {
-                cb(undefined, fakeConnection);
-            });
-
-            var client = new Client(settings(), () =>{});
-            client.on("error", errorCb);
-            client.connect();
-
-            assert.isTrue(errorCb.calledWith("Error"));
-
-            amqp.connect.restore();
-        });
-
-        it("should create queues after creating channel", function(){
-            var fakeChannel ={
-              prefetch: sinon.stub()
-            };
-
-            var fakeConnection = { createChannel: (cb) => {
-                cb(undefined,fakeChannel);
-            }};
-
-            sinon.stub(amqp, 'connect', (host, options, cb) => {
-                cb(undefined, fakeConnection);
-            });
-
-            var _createQueueStub = sinon.stub(Client.prototype, "_createQueues");
-
-            var client = new Client(settings(), () =>{});
-            client.connect();
-
-            assert.isTrue(_createQueueStub.called);
-            expect(client.channel).to.equal(fakeChannel);
-
-            amqp.connect.restore();
-            Client.prototype._createQueues.restore();
-        });
     });
 
     describe("_createQueues", function(){
@@ -126,8 +65,7 @@ describe("RabbitMQ Client", function() {
             var stub = sinon.stub(fakeChannel, "assertQueue");
 
             var client = new Client(settingsObject, () =>{});
-            client.channel = fakeChannel;
-            client._createQueues();
+            client._createQueues(fakeChannel);
 
             assert.isTrue(stub.calledWith(
                 settingsObject.amqpSettings.queue.name,
@@ -154,7 +92,7 @@ describe("RabbitMQ Client", function() {
 
             var client = new Client(settingsObject, () =>{});
             client.channel = fakeChannel;
-            client._createQueues();
+            client._createQueues(fakeChannel);
 
             assert.isTrue(assertExchangeStub.calledWith(
                 "Log1Message",
@@ -199,7 +137,7 @@ describe("RabbitMQ Client", function() {
 
             var client = new Client(settingsObject, () =>{});
             client.channel = fakeChannel;
-            client._createQueues();
+            client._createQueues(fakeChannel);
 
             assert.isTrue(assertExchangeStub.calledWith(
                 settingsObject.amqpSettings.queue.name + ".Retries.DeadLetter",
@@ -242,7 +180,7 @@ describe("RabbitMQ Client", function() {
 
             var client = new Client(settingsObject, () =>{});
             client.channel = fakeChannel;
-            client._createQueues();
+            client._createQueues(fakeChannel);
 
             assert.isTrue(assertExchangeStub.calledWith(
                 settingsObject.amqpSettings.errorQueue,
@@ -275,7 +213,7 @@ describe("RabbitMQ Client", function() {
 
             var client = new Client(settingsObject, () =>{});
             client.channel = fakeChannel;
-            client._createQueues();
+            client._createQueues(fakeChannel);
 
             assert.isTrue(assertExchangeStub.calledWith(
                 settingsObject.amqpSettings.auditQueue,
@@ -307,7 +245,7 @@ describe("RabbitMQ Client", function() {
 
             var client = new Client(settingsObject, () =>{});
             client.channel = fakeChannel;
-            client._createQueues();
+            client._createQueues(fakeChannel);
 
             assert.isFalse(assertExchangeStub.calledWith(
                 settingsObject.amqpSettings.auditQueue,
@@ -340,7 +278,7 @@ describe("RabbitMQ Client", function() {
             var cb = () =>{};
             var client = new Client(settingsObject, cb);
             client.channel = fakeChannel;
-            client._createQueues();
+            client._createQueues(fakeChannel);
 
             assert.isTrue(consumeStub.calledWith(
                 settingsObject.amqpSettings.queue.name,
@@ -362,7 +300,7 @@ describe("RabbitMQ Client", function() {
             var client = new Client(settingsObject, () => {});
             client.on("connected", cb);
             client.channel = fakeChannel;
-            client._createQueues();
+            client._createQueues(fakeChannel);
 
             assert.isTrue(cb.called);
         });
@@ -378,7 +316,7 @@ describe("RabbitMQ Client", function() {
             var assertExchangeStub = sinon.stub(fakeChannel, "assertExchange");
 
             var client = new Client(settingsObject, () =>{});
-            client.channel = fakeChannel;
+            client.channel = { addSetup: cb => cb(fakeChannel) };
 
             client.consumeType("TestType123");
 
@@ -401,7 +339,7 @@ describe("RabbitMQ Client", function() {
             var bindQueueStub = sinon.stub(fakeChannel, "bindQueue");
 
             var client = new Client(settingsObject, () =>{});
-            client.channel = fakeChannel;
+            client.channel = { addSetup: cb => cb(fakeChannel) };
 
             client.consumeType("TestType123");
 
@@ -426,7 +364,7 @@ describe("RabbitMQ Client", function() {
             var unbindQueueStub = sinon.stub(fakeChannel, "unbindQueue");
 
             var client = new Client(settingsObject, () =>{});
-            client.channel = fakeChannel;
+            client.channel = { removeSetup: cb => cb(fakeChannel) };
 
             client.removeType("TestType123");
 
@@ -461,7 +399,7 @@ describe("RabbitMQ Client", function() {
             assert.isTrue(sendToQueueStub.calledWith(
                 "TestEndpoint",
                 sinon.match(v => {
-                    return JSON.parse(v.toString()).data == message.data;
+                    return v.data == message.data;
                 }),
                 sinon.match.any
             ));
@@ -525,7 +463,7 @@ describe("RabbitMQ Client", function() {
             assert.isTrue(sendToQueueStub.calledWith(
                 "TestEndpoint1",
                 sinon.match(v => {
-                    return JSON.parse(v.toString()).data == message.data;
+                    return v.data == message.data;
                 }),
                 sinon.match.any
             ));
@@ -533,7 +471,7 @@ describe("RabbitMQ Client", function() {
             assert.isTrue(sendToQueueStub.calledWith(
                 "TestEndpoint2",
                 sinon.match(v => {
-                    return JSON.parse(v.toString()).data == message.data;
+                    return v.data == message.data;
                 }),
                 sinon.match.any
             ));
@@ -551,14 +489,20 @@ describe("RabbitMQ Client", function() {
         beforeEach(function(){
             publishStub = sinon.stub(fakeChannel, "publish");
             assertExchangeStub = sinon.stub(fakeChannel, "assertExchange");
+            assertExchangeStub.returns(new Promise(function(r,_) {
+              r();
+            }));
+            fakeChannel.addSetup = cb => {
+              return cb(fakeChannel);
+            };
         });
 
-        afterEach(function(){
+        afterEach(async function(){
             fakeChannel.publish.restore();
             fakeChannel.assertExchange.restore();
         });
 
-        it("should publish the message", function(){
+        it("should publish the message", function(resolve, reject){
             var settingsObject = settings();
             settingsObject.amqpSettings.queue.name = "TestQueue";
             settingsObject.amqpSettings.auditEnabled = false;
@@ -570,20 +514,26 @@ describe("RabbitMQ Client", function() {
                 data: 123
             };
 
-            client.publish("LogMessage", message);
+            client.publish("LogMessage", message).then(() => {
+              assert.isTrue(publishStub.calledWith(
+                  "LogMessage",
+                  '',
+                  sinon.match(v => {
+                      return v.data == message.data;
+                  }),
+                  sinon.match.any
+              ));
+              resolve();
+            }).catch(() => {
+              assert.isTrue(false);
+              reject();
+            });
 
-            assert.isTrue(publishStub.calledWith(
-                "LogMessage",
-                '',
-                sinon.match(v => {
-                    return JSON.parse(v.toString()).data == message.data;
-                }),
-                sinon.match.any
-            ));
+
 
         });
 
-        it("should publish the message with the correct headers", function(){
+        it("should publish the message with the correct headers", function(resolve, reject){
             var settingsObject = settings();
             settingsObject.amqpSettings.queue.name = "TestQueue";
             settingsObject.amqpSettings.auditEnabled = false;
@@ -597,27 +547,33 @@ describe("RabbitMQ Client", function() {
 
             client.publish("LogMessage", message, {
                 customHeader: 123
+            }).then(() => {
+              assert.isTrue(publishStub.calledWith(
+                  "LogMessage",
+                  '',
+                  sinon.match.any,
+                  sinon.match({
+                      headers: {
+                          customHeader: 123,
+                          DestinationAddress: "TestQueue",
+                          MessageType: "Publish",
+                          SourceAddress: "TestQueue",
+                          TypeName: "LogMessage",
+                          ConsumerType: "RabbitMQ",
+                          Language: "Javascript"
+                      }
+                  })
+              ));
+              resolve();
+            }).catch(() => {
+              assert.isTrue(false);
+              reject();
             });
 
-            assert.isTrue(publishStub.calledWith(
-                "LogMessage",
-                '',
-                sinon.match.any,
-                sinon.match({
-                    headers: {
-                        customHeader: 123,
-                        DestinationAddress: "TestQueue",
-                        MessageType: "Publish",
-                        SourceAddress: "TestQueue",
-                        TypeName: "LogMessage",
-                        ConsumerType: "RabbitMQ",
-                        Language: "Javascript"
-                    }
-                })
-            ));
+
         });
 
-        it("should assert that the exchange exists before publishing", function(){
+        it("should assert that the exchange exists before publishing", function(resolve, reject){
             var settingsObject = settings();
             settingsObject.amqpSettings.queue.name = "TestQueue";
             settingsObject.amqpSettings.auditEnabled = false;
@@ -630,15 +586,20 @@ describe("RabbitMQ Client", function() {
                 data: 123
             };
 
-            client.publish("LogMessage", message);
+            client.publish("LogMessage", message).then(() => {
+              assert.isTrue(assertExchangeStub.calledWith(
+                  "LogMessage",
+                  'fanout',
+                  sinon.match({
+                      durable: true
+                  })
+              ));
+              resolve();
+            }).catch(() => {
+              assert.isTrue(false);
+              reject();
+            });
 
-            assert.isTrue(assertExchangeStub.calledWith(
-                "LogMessage",
-                'fanout',
-                sinon.match({
-                    durable: true
-                })
-            ));
         });
 
     });
@@ -718,7 +679,7 @@ describe("RabbitMQ Client", function() {
               .then(r => {
                 assert.isTrue(sendToQueueStub.calledWith(
                     settingsObject.amqpSettings.auditQueue,
-                    message.content,
+                    sinon.match(JSON.parse(message.content.toString())),
                     sinon.match({
                         headers: message.properties.headers,
                         messageId: message.properties.messageId
@@ -774,7 +735,7 @@ describe("RabbitMQ Client", function() {
               .then(r => {
                 assert.isTrue(sendToQueueStub.calledWith(
                     "TestQueue.Retries",
-                    message.content,
+                    sinon.match(JSON.parse(message.content.toString())),
                     sinon.match({
                         headers: message.properties.headers,
                         messageId: message.properties.messageId
@@ -810,7 +771,7 @@ describe("RabbitMQ Client", function() {
               .then(r => {
                 assert.isTrue(sendToQueueStub.calledWith(
                     "TestQueue.Retries",
-                    message.content,
+                    sinon.match(JSON.parse(message.content.toString())),
                     sinon.match({
                         headers: message.properties.headers,
                         messageId: message.properties.messageId
@@ -848,7 +809,7 @@ describe("RabbitMQ Client", function() {
 
                 assert.isTrue(sendToQueueStub.calledWith(
                     settingsObject.amqpSettings.errorQueue,
-                    message.content,
+                    sinon.match(JSON.parse(message.content.toString())),
                     sinon.match({
                         headers: message.properties.headers,
                         messageId: message.properties.messageId
@@ -881,7 +842,7 @@ describe("RabbitMQ Client", function() {
 
                 assert.isTrue(sendToQueueStub.calledWith(
                     settingsObject.amqpSettings.errorQueue,
-                    message.content,
+                    sinon.match(JSON.parse(message.content.toString())),
                     sinon.match({
                         headers: message.properties.headers,
                         messageId: message.properties.messageId
@@ -1000,7 +961,7 @@ describe("RabbitMQ Client", function() {
             var deleteQueueStub = sinon.stub(fakeChannel, "deleteQueue");
 
             var client = new Client(settingsObject, () =>{});
-            client.channel = fakeChannel;
+            client.channel = { removeSetup: cb => cb(fakeChannel), close: () => {} };
 
             client.close();
 
