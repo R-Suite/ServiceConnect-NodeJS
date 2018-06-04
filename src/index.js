@@ -5,6 +5,8 @@ import EventEmitter from 'events';
 /** Class representing a the message bus. */
 export class Bus extends EventEmitter {
 
+    initialized = false;
+
     /**
      * Sets config and creates client
      * @constructor
@@ -35,7 +37,11 @@ export class Bus extends EventEmitter {
         this.client.connect();
         this.client.on("connected", () => {
             this.emit("connected");
-            if(cb) cb();
+
+            if (!this.initialized) {
+                if(cb) cb();
+                this.initialized = true;
+            }
         });
         return this;
     }
@@ -90,7 +96,7 @@ export class Bus extends EventEmitter {
      * @param  {Object|undefined} headers
      */
     send(endpoint, type, message, headers = {}){
-        this.client.send(endpoint, type, message, headers);
+        return this.client.send(endpoint, type, message, headers);
     }
 
     /**
@@ -99,8 +105,8 @@ export class Bus extends EventEmitter {
      * @param  {Object} message
      * @param  {Object|undefined} headers
      */
-    publish(type, message, headers = {}){
-        this.client.publish(type, message, headers);
+    publish(type, message, headers = {}, sentCallback){
+        return this.client.publish(type, message, headers);
     }
 
     /**
@@ -123,7 +129,7 @@ export class Bus extends EventEmitter {
             callback
         };
         headers["RequestMessageId"] = messageId;
-        this.client.send(endpoint, type, message, headers);
+        return this.client.send(endpoint, type, message, headers);
     }
 
     /**
@@ -135,7 +141,7 @@ export class Bus extends EventEmitter {
      * @param {int|null} timeout
      * @param {Object|null} headers
      */
-    publishRequest(type, message, callback, expected = null, timeout = 10000, headers = {}){
+    publishRequest(type, message, callback, expected = null, timeout = 10000, headers = {}, sentCallback, errorCallback){
         var messageId = guid();
 
         this.requestReplyCallbacks[messageId] = {
@@ -145,8 +151,6 @@ export class Bus extends EventEmitter {
         };
         headers["RequestMessageId"] = messageId;
 
-        this.client.publish(type, message, headers);
-
         if (timeout !== null) {
             this.requestReplyCallbacks[messageId].timeout = setTimeout(() => {
                 if (this.requestReplyCallbacks[messageId]){
@@ -155,6 +159,8 @@ export class Bus extends EventEmitter {
                 }
             }, timeout);
         }
+
+        return this.client.publish(type, message, headers);
     }
 
     /**

@@ -92,7 +92,9 @@ describe("RabbitMQ Client", function() {
         });
 
         it("should create queues after creating channel", function(){
-            var fakeChannel = sinon.stub();
+            var fakeChannel ={
+              prefetch: sinon.stub()
+            };
 
             var fakeConnection = { createChannel: (cb) => {
                 cb(undefined,fakeChannel);

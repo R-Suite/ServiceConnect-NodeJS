@@ -1,5 +1,5 @@
 import {mergeDeep, guid} from '../utils';
-import amqp from 'amqplib/callback_api';
+var amqp = require('amqp-connection-manager');
 import os from 'os';
 import EventEmitter from 'events';
 
@@ -37,20 +37,15 @@ export default class Client extends EventEmitter {
             options = mergeDeep(options, this.config.amqpSettings.ssl);
         }
 
-        amqp.connect(this.config.amqpSettings.host, options, (err, conn) => {
-            if (err){
-                this.emit("error", err);
-                return;
+        let hosts = Array.isArray(this.config.amqpSettings.host) ? this.config.amqpSettings.host : [this.config.amqpSettings.host];
+
+        this.connection = amqp.connect(hosts, { connectionOptions: options });
+        this.channel = this.connection.createChannel({
+            json: true,
+            setup: (channel) => {
+                channel.prefetch(this.config.amqpSettings.prefetch);
+                this._createQueues(channel);
             }
-            this.connection = conn;
-            this.connection.createChannel((err, channel) => {
-                if (err){
-                    this.emit("error", err);
-                    return;
-                }
-                this.channel = channel;
-                this._createQueues();
-            })
         });
     }
 
@@ -58,41 +53,42 @@ export default class Client extends EventEmitter {
      * Creates host queue, retry queue and error queue.  It then sets up handler mappings and begins consuming messages.
      * The connected event is fired after consuming has begun.
      */
-    _createQueues(){
+    _createQueues(channel){
         console.info("Connection ready");
         console.info("Creating queue " + this.config.amqpSettings.queue.name);
 
         // create queue
-        this.channel.assertQueue(this.config.amqpSettings.queue.name,  {
+        channel.assertQueue(this.config.amqpSettings.queue.name,  {
             durable: this.config.amqpSettings.queue.durable,
             exclusive: this.config.amqpSettings.queue.exclusive,
             autoDelete: this.config.amqpSettings.queue.autoDelete
         });
+
         console.info(this.config.amqpSettings.queue.name + " queue created.");
 
         // bind queue to message types
         for(var key in this.config.handlers){
             let type = key.replace(/\./g, "");
 
-            this.channel.assertExchange(type, 'fanout', {
+            channel.assertExchange(type, 'fanout', {
                 durable: true
             });
 
-            this.channel.bindQueue(this.config.amqpSettings.queue.name, type, '');
+            channel.bindQueue(this.config.amqpSettings.queue.name, type, '');
 
             console.info("Bound " + this.config.amqpSettings.queue.name + " to exchange " + key);
         }
 
         // Create dead letter exchange
         let deadLetterExchange = this.config.amqpSettings.queue.name + ".Retries.DeadLetter";
-        this.channel.assertExchange(deadLetterExchange, 'fanout', {
+        channel.assertExchange(deadLetterExchange, 'fanout', {
             durable: true
         });
 
         // Create retry queue
         let retryQueue = this.config.amqpSettings.queue.name + ".Retries";
         console.info("Creating queue " + retryQueue);
-        this.channel.assertQueue(retryQueue,  {
+        channel.assertQueue(retryQueue,  {
             durable: this.config.amqpSettings.queue.durable,
             arguments: {
                 "x-dead-letter-exchange": deadLetterExchange,
@@ -101,16 +97,16 @@ export default class Client extends EventEmitter {
         });
 
         console.info(retryQueue + " queue created.");
-        this.channel.bindQueue(this.config.amqpSettings.queue.name, deadLetterExchange, '');
+        channel.bindQueue(this.config.amqpSettings.queue.name, deadLetterExchange, '');
 
         // configure error exchange
-        this.channel.assertExchange(this.config.amqpSettings.errorQueue, 'direct', {
+        channel.assertExchange(this.config.amqpSettings.errorQueue, 'direct', {
             durable: false
         });
 
         // create error queue
         console.info("Creating queue " + this.config.amqpSettings.errorQueue);
-        this.channel.assertQueue(this.config.amqpSettings.errorQueue,  {
+        channel.assertQueue(this.config.amqpSettings.errorQueue,  {
             durable: true,
             autoDelete: false
         });
@@ -120,19 +116,19 @@ export default class Client extends EventEmitter {
         if (this.config.amqpSettings.auditEnabled)
         {
             // configure audit exchange
-            this.channel.assertExchange(this.config.amqpSettings.auditQueue, 'direct', {
+            channel.assertExchange(this.config.amqpSettings.auditQueue, 'direct', {
                 durable: false
             });
 
             // create error audit
             console.info("Creating queue " + this.config.amqpSettings.auditQueue);
-            this.channel.assertQueue(this.config.amqpSettings.auditQueue,  {
+            channel.assertQueue(this.config.amqpSettings.auditQueue,  {
                 durable: true,
                 autoDelete: false
             });
         }
 
-        this.channel.consume(this.config.amqpSettings.queue.name, this._consumeMessage, {
+        channel.consume(this.config.amqpSettings.queue.name, this._consumeMessage, {
             noAck: this.config.amqpSettings.queue.noAck
         });
 
@@ -145,10 +141,12 @@ export default class Client extends EventEmitter {
      * @param {string} type
      */
     consumeType(type){
-        this.channel.assertExchange(type, 'fanout', {
-            durable: true
+        this.channel.addSetup((channel) => {
+          Promise.all([
+              channel.assertExchange(type, 'fanout', { durable: true }),
+              channel.bindQueue(this.config.amqpSettings.queue.name, type, '')
+          ])
         });
-        this.channel.bindQueue(this.config.amqpSettings.queue.name, type, '');
     }
 
     /**
@@ -156,7 +154,9 @@ export default class Client extends EventEmitter {
      * @param {String} type
      */
     removeType(type){
-        this.channel.unbindQueue(this.config.amqpSettings.queue.name, type);
+      this.channel.addSetup((channel) => {
+        return channel.unbindQueue(this.config.amqpSettings.queue.name, type);
+      });
     }
 
     /**
@@ -167,11 +167,14 @@ export default class Client extends EventEmitter {
      * @param  {Object|undefined} headers
      */
     send(endpoint, type, message, headers = {}) {
+        console.log("Sending message")
         let endpoints = Array.isArray(endpoint) ? endpoint : [endpoint];
-        endpoints.map(ep => {
+
+        return Promise.all(endpoints.map(ep => {
             let messageHeaders = this._getHeaders(type, headers, ep, "Send");
-            this.channel.sendToQueue(ep, new Buffer(JSON.stringify(message), "utf-8"), { headers: messageHeaders, messageId: messageHeaders.MessageId });
-        });
+            return this.channel.sendToQueue(ep, message, { headers: messageHeaders, messageId: messageHeaders.MessageId });
+        }));
+
     }
 
     /**
@@ -182,10 +185,12 @@ export default class Client extends EventEmitter {
      */
     publish(type, message, headers = {}){
         let messageHeaders = this._getHeaders(type, headers, this.config.amqpSettings.queue.name, "Publish");
-        this.channel.assertExchange(type.replace(/\./g, ""), 'fanout', {
-            durable: true
+
+        return this.channel.addSetup((channel) => {
+            return channel.assertExchange(type.replace(/\./g, ""), 'fanout', { durable: true });
+        }).then(() => {
+            return this.channel.publish(type.replace(/\./g, ""), '', message, { headers: messageHeaders, messageId: messageHeaders.MessageId });
         });
-        this.channel.publish(type.replace(/\./g, ""), '', new Buffer(JSON.stringify(message), "utf-8"), { headers: messageHeaders, messageId: messageHeaders.MessageId });
     }
 
     /**
@@ -276,7 +281,7 @@ export default class Client extends EventEmitter {
             if(result === null && this.config.amqpSettings.auditEnabled) {
                 this.channel.sendToQueue(
                     this.config.amqpSettings.auditQueue,
-                    rawMessage.content,
+                    JSON.parse(rawMessage.content.toString()),
                     {
                         headers: headers,
                         messageId: rawMessage.properties.messageId
@@ -299,9 +304,10 @@ export default class Client extends EventEmitter {
             if (retryCount < this.config.amqpSettings.maxRetries){
                 retryCount++;
                 headers.RetryCount = retryCount;
+
                 this.channel.sendToQueue(
                     this.config.amqpSettings.queue.name + ".Retries",
-                    rawMessage.content,
+                    JSON.parse(rawMessage.content.toString()),
                     {
                         headers: headers,
                         messageId: rawMessage.properties.messageId
@@ -310,7 +316,7 @@ export default class Client extends EventEmitter {
                 headers.Exception = result.exception;
                 this.channel.sendToQueue(
                     this.config.amqpSettings.errorQueue,
-                    rawMessage.content,
+                    message,
                     {
                         headers: headers,
                         messageId: rawMessage.properties.messageId
@@ -324,8 +330,11 @@ export default class Client extends EventEmitter {
      */
     close(){
         if(this.config.amqpSettings.queue.autoDelete){
-            this.channel.deleteQueue(this.config.amqpSettings.queue.name + ".Retries");
+            this.channel.removeSetup((channel) => {
+                return channel.deleteQueue(this.config.amqpSettings.queue.name + ".Retries");
+            });
         }
         this.channel.close();
+        this.connection.close();
     }
 }

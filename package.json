@@ -1,13 +1,13 @@
 {
   "name": "service-connect",
-  "version": "0.0.25",
+  "version": "0.0.27",
   "description": "",
   "main": "index.js",
   "scripts": {
     "build": "babel -d ./lib ./src -s",
     "test": "nyc --reporter=lcov --report lcovonly ./node_modules/.bin/mocha -R mocha-sonar-reporter --compilers js:babel-core/register --require babel-polyfill",
-    "eslint": "eslint -c .eslintrc.json src examples",
-    "examples.commands.consumer": "node --inspect=5859 ./examples/Commands/consumer.js",
+    "eslint": "eslint -c .eslintrc.json src exa mples",
+    "examples.commands.consumer": "node ./examples/Commands/consumer.js",
     "examples.commands.sender": "node ./examples/Commands/sender.js",
     "examples.filters.consumer": "node --inspect=5859 ./examples/Filters/consumer.js",
     "examples.filters.sender": "node ./examples/Filters/sender.js",
@@ -61,6 +61,7 @@
     "sinon": "2.2.0"
   },
   "dependencies": {
+    "amqp-connection-manager": "^2.0.0",
     "amqplib": "^0.5.2",
     "babel-istanbul": "^0.12.2"
   },

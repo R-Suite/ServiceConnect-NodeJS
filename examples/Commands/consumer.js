@@ -1,4 +1,7 @@
+require("babel-core/register");
+require("babel-polyfill");
 var Bus = require('../../index.js');
+
 var stdin = process.openStdin();
 
 console.log("Starting Consumer");
@@ -21,14 +24,7 @@ bus.init(function(){
           resolve();
         });
     });
-
-    bus.addHandler("ConsumerCommand", function(message){
-        return new Promise((resolve) => {
-          console.log("Received message with promise 2");
-          console.log(message);
-          resolve();
-        });
-    });
+    
 
     console.log("Enter 'exit' to stop.");
     stdin.addListener("data", function(d) {

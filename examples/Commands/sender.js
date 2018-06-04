@@ -1,3 +1,6 @@
+require("babel-core/register");
+require("babel-polyfill");
+
 var Bus = require('../../index.js');
 var stdin = process.openStdin();
 
@@ -21,9 +24,21 @@ bus.init(function(){
             bus.close();
             process.exit()
         }
-        bus.send('ServiceConnect.Samples.Consumer', "ConsumerCommand", { data: count });
-        console.log("Sent command");
+        bus.send('ServiceConnect.Samples.Consumer', "ConsumerCommand", { data: count })
+          .then(function(result) {
+            console.log(result);
+            console.log("Sent command")
+          }).catch(function(e) {
+            console.log("Error sending command");
+            console.log(e);
+          });
+
         count++;
     });
 
+});
+
+bus.on("error", function(err){
+  console.log("Error")
+  console.log(err);
 });
