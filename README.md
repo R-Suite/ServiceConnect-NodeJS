@@ -13,6 +13,7 @@ A simple, easy to use asynchronous messaging framework for Node.JS.  It provides
 * Auditing
 * Error handling
 * SSL Support
+* Priority Queues
 
 ## Todo
 

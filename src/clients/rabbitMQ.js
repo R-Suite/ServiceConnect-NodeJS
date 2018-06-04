@@ -61,7 +61,8 @@ export default class Client extends EventEmitter {
         channel.assertQueue(this.config.amqpSettings.queue.name,  {
             durable: this.config.amqpSettings.queue.durable,
             exclusive: this.config.amqpSettings.queue.exclusive,
-            autoDelete: this.config.amqpSettings.queue.autoDelete
+            autoDelete: this.config.amqpSettings.queue.autoDelete,
+            maxPriority: this.config.amqpSettings.queue.maxPriority
         });
 
         console.info(this.config.amqpSettings.queue.name + " queue created.");
@@ -172,7 +173,12 @@ export default class Client extends EventEmitter {
 
         return Promise.all(endpoints.map(ep => {
             let messageHeaders = this._getHeaders(type, headers, ep, "Send");
-            return this.channel.sendToQueue(ep, message, { headers: messageHeaders, messageId: messageHeaders.MessageId });
+
+            let options = { headers: messageHeaders, messageId: messageHeaders.MessageId };
+            if (messageHeaders.hasOwnProperty("Priority")) {
+                options.priority = messageHeaders.Priority
+            }
+            return this.channel.sendToQueue(ep, message, options);
         }));
 
     }
@@ -186,10 +192,15 @@ export default class Client extends EventEmitter {
     publish(type, message, headers = {}){
         let messageHeaders = this._getHeaders(type, headers, this.config.amqpSettings.queue.name, "Publish");
 
+        let options = { headers: messageHeaders, messageId: messageHeaders.MessageId };
+        if (messageHeaders.hasOwnProperty("Priority")) {
+            options.priority = messageHeaders.Priority
+        }
+
         return this.channel.addSetup((channel) => {
             return channel.assertExchange(type.replace(/\./g, ""), 'fanout', { durable: true });
         }).then(() => {
-            return this.channel.publish(type.replace(/\./g, ""), '', message, { headers: messageHeaders, messageId: messageHeaders.MessageId });
+            return this.channel.publish(type.replace(/\./g, ""), '', message, options);
         });
     }
 
@@ -337,4 +348,12 @@ export default class Client extends EventEmitter {
         this.channel.close();
         this.connection.close();
     }
+}
+function sleep(milliseconds) {
+  var start = new Date().getTime();
+  for (var i = 0; i < 1e7; i++) {
+    if ((new Date().getTime() - start) > milliseconds){
+      break;
+    }
+  }
 }

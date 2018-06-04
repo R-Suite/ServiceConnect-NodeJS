@@ -1,5 +1,4 @@
-require("babel-core/register");
-require("babel-polyfill");
+require('babel-polyfill');
 var Bus = require('../../index.js');
 
 var stdin = process.openStdin();
@@ -24,7 +23,7 @@ bus.init(function(){
           resolve();
         });
     });
-    
+
 
     console.log("Enter 'exit' to stop.");
     stdin.addListener("data", function(d) {

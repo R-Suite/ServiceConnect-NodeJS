@@ -7,7 +7,7 @@ console.log("Starting Sender");
 var bus = new Bus({
     amqpSettings: {
         queue: {
-            name: 'ServiceConnect.Samples.Sender'
+            name: 'ServiceConnect.Samples.PriorityQueue.Sender'
         },
         host: "amqp://guest:guest@localhost"
     }
@@ -16,27 +16,18 @@ var bus = new Bus({
 bus.init(function(){
 
     console.log("Press any key to send message.  Enter 'exit' to stop.");
-    var count = 0;
     stdin.addListener("data", function(d) {
         if (d.toString().trim() == "exit"){
             bus.close();
             process.exit()
         }
-        bus.send('ServiceConnect.Samples.Consumer', "ConsumerCommand", { data: count })
-          .then(function(result) {
-            console.log(result);
-            console.log("Sent command")
-          }).catch(function(e) {
-            console.log("Error sending command");
-            console.log(e);
-          });
+        for(var i=0; i < 200; i++) {
+            bus.send('ServiceConnect.Samples.PriorityQueue.Consumer', "ConsumerCommand", { data: i }, { "Priority": 0});
+            console.log("Sent command " + i);
+        }
 
-        count++;
+        bus.send('ServiceConnect.Samples.PriorityQueue.Consumer', "ConsumerCommand", { data: "High priority message." }, { "Priority": 9});
+        console.log("Sent high priority command");
     });
 
-});
-
-bus.on("error", function(err){
-  console.log("Error")
-  console.log(err);
 });

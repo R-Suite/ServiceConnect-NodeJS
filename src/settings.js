@@ -8,7 +8,8 @@ export default function setting() {
                 durable: true,
                 exclusive: false,
                 autoDelete: false,
-                noAck: false
+                noAck: false,
+                maxPriority: null
             },
             ssl: {
                 enabled: false,
@@ -26,11 +27,7 @@ export default function setting() {
             errorQueue: "errors",
             auditQueue: "audit",
             auditEnabled: false,
-            prefetch: 100,
-            reconnect: true,
-            reconnectBackoffStrategy: 'linear',
-            reconnectExponentialLimit: 120000,
-            reconnectBackoffTime: 1000
+            prefetch:100
         },
         filters: {
           after: [],
