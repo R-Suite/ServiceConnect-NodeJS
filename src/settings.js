@@ -31,7 +31,8 @@ export default function setting() {
         },
         filters: {
           after: [],
-          before: []
+          before: [],
+          outgoing: []
         },
         handlers: {
             // "message type": [ array of callbacks ]

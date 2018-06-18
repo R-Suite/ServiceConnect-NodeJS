@@ -12,6 +12,12 @@ var bus = new Bus({
             name: 'ServiceConnect.Samples.Sender'
         },
         host: "amqp://guest:guest@localhost"
+    },
+    filters: {
+      outgoing: [(message, headers, type, bus) => {
+          console.log("Outgoing filter processed");
+          return true;
+      }]
     }
 });
 

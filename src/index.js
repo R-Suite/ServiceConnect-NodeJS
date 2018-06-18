@@ -95,7 +95,11 @@ export class Bus extends EventEmitter {
      * @param  {Object} message
      * @param  {Object|undefined} headers
      */
-    send(endpoint, type, message, headers = {}){
+    async send(endpoint, type, message, headers = {}) {
+        let result = await this._processFilters(this.config.filters.outgoing, message, headers, type);
+        if (!result) {
+          return;
+        }
         return this.client.send(endpoint, type, message, headers);
     }
 
@@ -105,7 +109,11 @@ export class Bus extends EventEmitter {
      * @param  {Object} message
      * @param  {Object|undefined} headers
      */
-    publish(type, message, headers = {}, sentCallback){
+    async publish(type, message, headers = {}, sentCallback){
+        let result = await this._processFilters(this.config.filters.outgoing, message, headers, type);
+        if (!result) {
+          return;
+        }
         return this.client.publish(type, message, headers);
     }
 
@@ -118,10 +126,16 @@ export class Bus extends EventEmitter {
      * @param {function} callback
      * @param {Object|undefined} headers
      */
-    sendRequest(endpoint, type, message, callback, headers ={}){
+    async sendRequest(endpoint, type, message, callback, headers ={}){
         var messageId = guid();
 
         let endpoints = Array.isArray(endpoint) ? endpoint : [endpoint];
+
+        let result = await this._processFilters(this.config.filters.outgoing, message, headers, type);
+
+        if (!result) {
+          return;
+        }
 
         this.requestReplyCallbacks[messageId] = {
             endpointCount: endpoints.length,
@@ -141,8 +155,14 @@ export class Bus extends EventEmitter {
      * @param {int|null} timeout
      * @param {Object|null} headers
      */
-    publishRequest(type, message, callback, expected = null, timeout = 10000, headers = {}, sentCallback, errorCallback){
+    async publishRequest(type, message, callback, expected = null, timeout = 10000, headers = {}, sentCallback, errorCallback){
         var messageId = guid();
+
+        let result = await this._processFilters(this.config.filters.outgoing, message, headers, type);
+
+        if (!result) {
+          return;
+        }
 
         this.requestReplyCallbacks[messageId] = {
             endpointCount: expected === null ? -1 : expected,
@@ -194,7 +214,7 @@ export class Bus extends EventEmitter {
                 type
             ))
             .catch(err => this._messageErrorHandler(err))
-            .then(p => { if(!p) throw "Asfter filter returned false" })
+            .then(p => { if(!p) throw "After filter returned false" })
             .catch(e => this._logFilterError(e));
     }
 
