@@ -15,7 +15,7 @@ var bus = new Bus({
     }
 });
 
-bus.init(function(){
+bus.init().then(function(){
 
     bus.addHandler("ExampleRequest", function(message, type, headers, replyCallback){
         console.log("Consumer 1; Received message");

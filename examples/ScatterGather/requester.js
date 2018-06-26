@@ -23,7 +23,7 @@ var printHelpText = function(){
     console.log("or enter 'exit' to stop.");
 };
 
-bus.init(function(){
+bus.init().then(function(){
     printHelpText();
 
     var count = 0;

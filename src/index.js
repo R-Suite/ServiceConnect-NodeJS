@@ -31,19 +31,20 @@ export class Bus extends EventEmitter {
     /**
      * Creates AMQP client and fires connected event when client has connected
      */
-    init(cb) {
-        this.client = new this.config.client(this.config, this._consumeMessage);
-        this.client.on("error", ex => this.emit("error", ex));
-        this.client.connect();
-        this.client.on("connected", () => {
-            this.emit("connected");
+    init() {
+        return new Promise((resolve, reject) => {
+            this.client = new this.config.client(this.config, this._consumeMessage);
+            this.client.on("error", ex => this.emit("error", ex));
+            this.client.connect();
+            this.client.on("connected", () => {
+                this.emit("connected");
 
-            if (!this.initialized) {
-                if(cb) cb();
-                this.initialized = true;
-            }
+                if (!this.initialized) {
+                    resolve();
+                    this.initialized = true;
+                }
+            });
         });
-        return this;
     }
 
     /**

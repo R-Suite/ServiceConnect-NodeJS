@@ -13,7 +13,7 @@ var bus = new Bus({
     }
 });
 
-bus.init(function(){
+bus.init().then(function(){
 
     console.log("Press any key to send message.  Enter 'exit' to stop.");
     stdin.addListener("data", function(d) {

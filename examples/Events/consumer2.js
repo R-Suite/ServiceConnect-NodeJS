@@ -15,7 +15,7 @@ var bus = new Bus({
     }
 });
 
-bus.init(function(){
+bus.init().then(function(){
 
     bus.addHandler("ExampleEvent", function(message){
         console.log("Consumer 2: Received event");
