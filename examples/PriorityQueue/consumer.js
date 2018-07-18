@@ -15,9 +15,9 @@ var bus = new Bus({
     }
 });
 
-bus.init(function(){
+bus.init().then(function(){
 
-    bus.addHandler("ConsumerCommand", function(message){  
+    bus.addHandler("ConsumerCommand", function(message){
 
       sleep(100);
 

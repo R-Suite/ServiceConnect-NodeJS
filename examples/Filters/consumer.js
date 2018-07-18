@@ -50,7 +50,7 @@ var bus = new Bus({
     }
 });
 
-bus.init(function(){
+bus.init().then(function(){
 
     bus.addHandler("ConsumerCommand", function(message){
         return new Promise((resolve, reject) => {

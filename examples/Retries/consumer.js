@@ -15,7 +15,7 @@ var bus = new Bus({
     }
 });
 
-bus.init(function(){
+bus.init().then(function(){
 
     var retryCount = 0;
 
