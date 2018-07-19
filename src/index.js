@@ -245,7 +245,6 @@ export class Bus extends EventEmitter {
       if (e!== null && typeof e === 'object' && e.breakError === true) {
           return Promise.reject(e);
       }
-      console.log(e);
       return Promise.reject({
         breakError: true,
         retry: false,

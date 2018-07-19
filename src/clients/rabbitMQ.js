@@ -206,6 +206,7 @@ export default class Client extends EventEmitter {
         if (!headers.SourceAddress) headers.SourceAddress = this.config.amqpSettings.queue.name;
         if (!headers.TimeSent) headers.TimeSent = new Date().toISOString();
         if (!headers.TypeName) headers.TypeName = type;
+        if (!headers.TypeName) headers.FullTypeName = type;
         if (!headers.ConsumerType) headers.ConsumerType = 'RabbitMQ';
         if (!headers.Language) headers.Language = 'Javascript';
         return headers;
