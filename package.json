@@ -1,6 +1,6 @@
 {
   "name": "service-connect",
-  "version": "0.0.34",
+  "version": "0.0.35",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -58,12 +58,12 @@
     "mocha-sonarqube-reporter": "^1.0.1",
     "nyc": "^11.3.0",
     "promise": "^7.1.1",
+    "babel-istanbul": "^0.12.2",
     "sinon": "2.2.0"
   },
   "dependencies": {
-    "amqp-connection-manager": "^2.0.0",
-    "amqplib": "^0.5.2",
-    "babel-istanbul": "^0.12.2"
+    "amqp-connection-manager": "^2.1.1",
+    "amqplib": "^0.5.2"
   },
   "repository": {
     "type": "git",

@@ -9,8 +9,6 @@ import os from 'os';
 let expect = chai.expect;
 let assert = chai.assert;
 
-
-
 describe("RabbitMQ Client", function() {
 
     var fakeChannel = {
@@ -141,7 +139,7 @@ describe("RabbitMQ Client", function() {
 
             assert.isTrue(assertExchangeStub.calledWith(
                 settingsObject.amqpSettings.queue.name + ".Retries.DeadLetter",
-                "fanout",
+                "direct",
                 sinon.match({
                     durable: true
                 })
@@ -161,7 +159,7 @@ describe("RabbitMQ Client", function() {
             assert.isTrue(bindQueueStub.calledWith(
                 settingsObject.amqpSettings.queue.name,
                 settingsObject.amqpSettings.queue.name + ".Retries.DeadLetter",
-                ''
+                settingsObject.amqpSettings.queue.name + ".Retries",
             ));
 
             fakeChannel.assertQueue.restore();

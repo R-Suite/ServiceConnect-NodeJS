@@ -108,25 +108,6 @@ describe("Bus", function() {
             assert.isTrue(connected.called);
         });
 
-        it("should call callback argument on connected", function() {
-            var connected = sinon.stub();
-
-            let bus = new Bus({
-                amqpSettings: {
-                    queue: {
-                        name: 'ServiceConnectWebTest'
-                    }
-                },
-                handlers: {
-                    "LogCommand": [console.log]
-                }
-            });
-            bus.init(connected);
-            bus.client.emit("connected");
-
-            assert.isTrue(connected.called);
-        });
-
         it("should bind error event", function() {
             var error = sinon.stub();
 
@@ -423,7 +404,7 @@ describe("Bus", function() {
             settingsObject.client.prototype.connect.restore();
         });
 
-        it("should send message to client", function(){
+        it("should send message to client", async () => {
             let bus = new Bus(),
                 endpoint = "TestEndpoint",
                 type = "MessageType",
@@ -433,7 +414,7 @@ describe("Bus", function() {
                 headers = { "Token": 1234567 };
             bus.init();
 
-            bus.send(endpoint, type, message, headers);
+            await bus.send(endpoint, type, message, headers);
 
             assert.isTrue(stub.calledWith(endpoint, type, message, headers));
 
@@ -455,7 +436,7 @@ describe("Bus", function() {
             settingsObject.client.prototype.publish.restore();
         });
 
-        it("should publish message to client", function(){
+        it("should publish message to client", async () => {
             let bus = new Bus(),
                 type = "MessageType",
                 message = {
@@ -464,7 +445,7 @@ describe("Bus", function() {
                 headers = { "Token": 1234567 };
 
             bus.init();
-            bus.publish(type, message, headers);
+            await bus.publish(type, message, headers);
 
             assert.isTrue(stub.calledWith(type, message, headers));
         });
@@ -484,7 +465,7 @@ describe("Bus", function() {
             settingsObject.client.prototype.send.restore();
         });
 
-        it("should send message to client", function(){
+        it("should send message to client", async () => {
             let bus = new Bus(),
                 endpoint = "TestEndpoint",
                 type = "MessageType",
@@ -495,7 +476,7 @@ describe("Bus", function() {
                 callback = ()=> {};
             bus.init();
 
-            bus.sendRequest(endpoint, type, message, callback, headers);
+            await bus.sendRequest(endpoint, type, message, callback, headers);
 
             assert.isTrue(stub.calledWith(endpoint, type, message, sinon.match({
                 "Token": 1234567,
@@ -503,7 +484,7 @@ describe("Bus", function() {
             })));
         });
 
-        it("should add request to callback dictionary", function(){
+        it("should add request to callback dictionary", async () => {
             let bus = new Bus(),
                 endpoint = "TestEndpoint",
                 type = "MessageType",
@@ -513,7 +494,7 @@ describe("Bus", function() {
                 headers = { "Token": 1234567 },
                 callback = () => {};
             bus.init();
-            bus.sendRequest(endpoint, type, message, callback, headers);
+            await bus.sendRequest(endpoint, type, message, callback, headers);
 
             console.log(bus.requestReplyCallbacks)
 
@@ -522,7 +503,7 @@ describe("Bus", function() {
             expect(bus.requestReplyCallbacks[headers["RequestMessageId"]].callback).to.equal(callback);
         });
 
-        it("expected replies should be equal to number of endpoints passed into sendRequest", function(){
+        it("expected replies should be equal to number of endpoints passed into sendRequest", async () => {
             let bus = new Bus(),
                 endpoints = ["TestEndpoint1", "TestEndpoint2"],
                 type = "MessageType",
@@ -532,7 +513,7 @@ describe("Bus", function() {
                 headers = { "Token": 1234567 },
                 callback = () => {};
             bus.init();
-            bus.sendRequest(endpoints, type, message, callback, headers);
+            await bus.sendRequest(endpoints, type, message, callback, headers);
 
             expect(bus.requestReplyCallbacks[headers["RequestMessageId"]].endpointCount).to.equal(2);
         });
@@ -554,7 +535,7 @@ describe("Bus", function() {
             settingsObject.client.prototype.send.restore();
         });
 
-        it("should publish message to client", function(){
+        it("should publish message to client", async () => {
             let bus = new Bus(),
                 type = "MessageType",
                 message = {
@@ -564,13 +545,13 @@ describe("Bus", function() {
                 callback = sinon.stub();
 
             bus.init();
-            bus.publishRequest(type, message, callback, 1, null, headers);
+            await bus.publishRequest(type, message, callback, 1, null, headers);
 
             assert.isTrue(!callback.called);
             assert.isTrue(stub.calledWith(type, message, headers));
         });
 
-        it("should add request configuration", function(){
+        it("should add request configuration", async () => {
             let bus = new Bus(),
                 type = "MessageType",
                 message = {
@@ -580,7 +561,7 @@ describe("Bus", function() {
                 callback = sinon.stub();
 
             bus.init();
-            bus.publishRequest(type, message, callback, 1, null, headers);
+            await bus.publishRequest(type, message, callback, 1, null, headers);
 
             expect(bus.requestReplyCallbacks[headers["RequestMessageId"]].processedCount).to.equal(0);
             expect(bus.requestReplyCallbacks[headers["RequestMessageId"]].callback).to.equal(callback);
@@ -611,7 +592,7 @@ describe("Bus", function() {
             }, 2);
         });
 
-        it("should set expected replies", function(){
+        it("should set expected replies", async () => {
             let bus = new Bus(),
                 type = "MessageType",
                 message = {
@@ -620,7 +601,7 @@ describe("Bus", function() {
                 headers = { };
 
             bus.init();
-            bus.publishRequest(type, message, () => {}, 2, null, headers);
+            await bus.publishRequest(type, message, () => {}, 2, null, headers);
 
             expect(bus.requestReplyCallbacks[headers["RequestMessageId"]].endpointCount).to.equal(2);
         });
