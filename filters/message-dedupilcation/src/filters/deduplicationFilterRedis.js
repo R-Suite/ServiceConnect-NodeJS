@@ -5,11 +5,23 @@ import { RedisPresistor } from "../presistors/redisPresistor"
 
 export const incomingDeduplicationFilterRedis = (settings: DeduplicationFilterSettings) =>
     async function filter(message: Object, headers: Object, type: string, bus: Object): Promise<bool> {
-        return await processIncomingMessage(new RedisPresistor(settings), headers);
+        const redis = new RedisPresistor(settings);
+        try {
+            return await processIncomingMessage(redis, headers);
+        } finally {
+            if (redis)
+                await redis.close();
+        }
     }
 
 
 export const outgoingDeduplicationFilterRedis = (settings: DeduplicationFilterSettings) =>
     async function filter(message: Object, headers: Object, type: string, bus: Object): Promise<bool> {
-        return await processOutgoingMessage(new RedisPresistor(settings), headers);
+        const redis = new RedisPresistor(settings);
+        try {
+            return await processOutgoingMessage(redis, headers);
+        } finally {
+            if (redis)
+                await redis.close();
+        }
     }
