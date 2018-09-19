@@ -1,6 +1,6 @@
 {
   "name": "service-connect-filters-message-dedupication",
-  "version": "0.0.1",
+  "version": "0.0.5",
   "description": "Message deduplication filter for Service Connect",
   "keywords": [
     "service-connect"
@@ -45,8 +45,8 @@
     "proxyquire": "^2.0.1",
     "rewire": "^4.0.1",
     "rimraf": "^2.6.2",
-    "sinon": "^4.4.2",
-    "service-connect": "0.0.34"
+    "service-connect": "0.0.34",
+    "sinon": "^4.4.2"
   },
   "dependencies": {
     "bluebird": "^3.5.2",

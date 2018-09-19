@@ -3,25 +3,34 @@ import type { DeduplicationFilterSettings } from "../types/deduplicationFilterSe
 import { processIncomingMessage, processOutgoingMessage } from "./filterBase"
 import { RedisPresistor } from "../presistors/redisPresistor"
 
-export const incomingDeduplicationFilterRedis = (settings: DeduplicationFilterSettings) =>
-    async function filter(message: Object, headers: Object, type: string, bus: Object): Promise<bool> {
-        const redis = new RedisPresistor(settings);
+export const incomingDeduplicationFilterRedis = (settings: DeduplicationFilterSettings) => {
+    const redis = new RedisPresistor(settings);
+    return async function filter(message: Object, headers: Object, type: string, bus: Object): Promise<bool> {
         try {
             return await processIncomingMessage(redis, headers);
-        } finally {
-            if (redis)
-                await redis.close();
+        } catch (err) {
+            if (settings.logger)
+                settings.logger.error({
+                    message: `Error processing incomingDeduplicationFilterRedis ${err}`,
+                    innerException: err
+                });
+            return true;
         }
     }
+}
 
-
-export const outgoingDeduplicationFilterRedis = (settings: DeduplicationFilterSettings) =>
-    async function filter(message: Object, headers: Object, type: string, bus: Object): Promise<bool> {
-        const redis = new RedisPresistor(settings);
+export const outgoingDeduplicationFilterRedis = (settings: DeduplicationFilterSettings) => {
+    const redis = new RedisPresistor(settings);
+    return async function filter(message: Object, headers: Object, type: string, bus: Object): Promise<bool> {
         try {
             return await processOutgoingMessage(redis, headers);
-        } finally {
-            if (redis)
-                await redis.close();
+        } catch (err) {
+            if (settings.logger)
+                settings.logger.error({
+                    message: `Error processing outgoingDeduplicationFilterRedis ${err}`,
+                    innerException: err
+                });
+            return true;
         }
     }
+}

@@ -4,7 +4,6 @@ import type { DeduplicationFilterSettings } from "../types/deduplicationFilterSe
 import redis from "redis"
 import bluebird from "bluebird"
 
-
 export class RedisPresistor implements Presistor {
     redisClient: any = null;
     disableMessageExpiry: bool = false;
@@ -44,16 +43,6 @@ export class RedisPresistor implements Presistor {
             }
         } else {
             throw `Error inserting id: ${id}. Redis client is not initiated`;
-        }
-    }
-
-    close = async (): Promise<void> => {
-        try {
-            if (this.redisClient) {
-                await this.redisClient.quitAsync();
-            }
-        } catch (err) {
-            throw `Error closing Redis connection ${err}`;
         }
     }
 }

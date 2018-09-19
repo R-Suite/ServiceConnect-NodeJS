@@ -4,5 +4,4 @@ import type { DeduplicationFilterSettings } from "../types/deduplicationFilterSe
 export interface Presistor {
     messageExists(id: string): Promise<bool>;
     insert(id: string): Promise<void>;
-    close() : Promise<void>
 }
