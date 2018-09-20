@@ -1,17 +1,17 @@
 {
   "name": "service-connect-filters-message-dedupication",
-  "version": "0.0.1",
+  "version": "0.0.5",
   "description": "Message deduplication filter for Service Connect",
   "keywords": [
     "service-connect"
   ],
-  "author": "Tim Watson",
-  "email": "tswatson123@gmail.com",
-  "url": "https://github.com/twatson83",
+  "author": "Ryszard Dudek",
+  "email": "ryszard.dudek@gmail.com",
+  "url": "https://github.com/r-dudek",
   "license": "MIT",
   "main": "index.js",
   "scripts": {
-    "publish-package": "cd dist && npm publish --registry=https://www.myget.org/F/ruffer/npm/",
+    "publish-package": "cd dist && npm publish",
     "build": "rimraf dist/* && babel src/ -d dist/ && flow-copy-source src dist && copyfiles package.json dist && copyfiles README.md dist",
     "test": "npm run unit-tests",
     "integration-tests": "cross-env NODE_ENV=test mocha test/integration/*.js --timeout 15000 --exit --recursive --require babel-core/register",
@@ -45,8 +45,8 @@
     "proxyquire": "^2.0.1",
     "rewire": "^4.0.1",
     "rimraf": "^2.6.2",
-    "sinon": "^4.4.2",
-    "service-connect": "0.0.34"
+    "service-connect": "0.0.34",
+    "sinon": "^4.4.2"
   },
   "dependencies": {
     "bluebird": "^3.5.2",

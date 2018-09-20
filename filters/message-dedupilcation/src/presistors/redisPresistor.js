@@ -4,11 +4,10 @@ import type { DeduplicationFilterSettings } from "../types/deduplicationFilterSe
 import redis from "redis"
 import bluebird from "bluebird"
 
-
 export class RedisPresistor implements Presistor {
-    redisClient : any = null;
-    disableMessageExpiry : bool = false;
-    msgExpiryHours : number = 1;
+    redisClient: any = null;
+    disableMessageExpiry: bool = false;
+    msgExpiryHours: number = 1;
 
     constructor(settings: DeduplicationFilterSettings) {
         bluebird.promisifyAll(redis.RedisClient.prototype);
@@ -22,7 +21,7 @@ export class RedisPresistor implements Presistor {
     messageExists = async (id: string): Promise<bool> => {
         if (this.redisClient) {
             try {
-                let messageValue : any = await this.redisClient.getAsync(id);
+                let messageValue: any = await this.redisClient.getAsync(id);
                 return (messageValue !== null && messageValue !== undefined);
             } catch (err) {
                 throw `Error getting message id: ${id} from Redis: ${err}`;
