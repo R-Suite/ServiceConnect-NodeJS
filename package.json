@@ -1,6 +1,6 @@
 {
   "name": "service-connect",
-  "version": "0.0.35",
+  "version": "0.0.36",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -40,6 +40,7 @@
     "babel-cli": "^6.11.4",
     "babel-core": "^6.13.2",
     "babel-eslint": "^7.2.3",
+    "babel-istanbul": "^0.12.2",
     "babel-loader": "^6.2.4",
     "babel-plugin-add-module-exports": "^0.2.1",
     "babel-plugin-istanbul": "^4.1.5",
@@ -56,9 +57,9 @@
     "mocha": "^3.0.2",
     "mocha-sonar-reporter": "^0.1.6",
     "mocha-sonarqube-reporter": "^1.0.1",
+    "moment": "^2.23.0",
     "nyc": "^11.3.0",
     "promise": "^7.1.1",
-    "babel-istanbul": "^0.12.2",
     "sinon": "2.2.0"
   },
   "dependencies": {

@@ -30,6 +30,7 @@ export class Bus extends EventEmitter {
 
   /**
    * Creates AMQP client and fires connected event when client has connected
+   * @return {Promise}
    */
   init() {
     return new Promise((resolve, reject) => {
@@ -64,7 +65,7 @@ export class Bus extends EventEmitter {
    * Removes the message type callback binding and stops listening for the message if there are no more callback
    * bindings.
    * @param {String} message
-   * @param  {Function} callback
+   * @param {Function} callback
    */
   removeHandler(message, callback){
     if (this.config.handlers[message]){
@@ -91,9 +92,10 @@ export class Bus extends EventEmitter {
   /**
    * Sends a command to the specified endpoint(s).
    * @param {String|Array} endpoint
-   * @param  {String} type
-   * @param  {Object} message
-   * @param  {Object|undefined} headers
+   * @param {String} type
+   * @param {Object} message
+   * @param {Object|undefined} headers
+   * @return {Promise}
    */
   async send(endpoint, type, message, headers = {}) {
     let result = await this._processFilters(this.config.filters.outgoing, message, headers, type);
@@ -104,12 +106,13 @@ export class Bus extends EventEmitter {
   }
 
   /**
-   * Published an event of the specified type.
-   * @param  {String} type
-   * @param  {Object} message
-   * @param  {Object|undefined} headers
+   * Publishes an event of the specified type.
+   * @param {String} type
+   * @param {Object} message
+   * @param {Object|undefined} headers
+   * @return {Promise}
    */
-  async publish(type, message, headers = {}, sentCallback){
+  async publish(type, message, headers = {}){
     let result = await this._processFilters(this.config.filters.outgoing, message, headers, type);
     if (!result) {
       return;
@@ -126,9 +129,8 @@ export class Bus extends EventEmitter {
    * @param {function} callback
    * @param {Object|undefined} headers
    */
-  async sendRequest(endpoint, type, message, callback, headers ={}){
-    var messageId = guid();
-
+  async sendRequest(endpoint, type, message, callback, headers = {}){
+    let messageId = guid();
     let endpoints = Array.isArray(endpoint) ? endpoint : [endpoint];
 
     let result = await this._processFilters(this.config.filters.outgoing, message, headers, type);
@@ -154,10 +156,10 @@ export class Bus extends EventEmitter {
    * @param {int|null} expected
    * @param {int|null} timeout
    * @param {Object|null} headers
+   * @return {Promise}
    */
-  async publishRequest(type, message, callback, expected = null, timeout = 10000, headers = {}, sentCallback, errorCallback){
-    var messageId = guid();
-
+  async publishRequest(type, message, callback, expected = null, timeout = 10000, headers = {}){
+    let messageId = guid();
     let result = await this._processFilters(this.config.filters.outgoing, message, headers, type);
 
     if (!result) {
@@ -188,7 +190,7 @@ export class Bus extends EventEmitter {
    * @param  {Object} message
    * @param  {Object} headers
    * @param  {string} type
-   * @return {Object} result
+   * @return {Promise<Object>} result
    */
   async _consumeMessage(message, headers, type){
     try {
@@ -227,6 +229,8 @@ export class Bus extends EventEmitter {
    * @param  {Object} message
    * @param  {Object} headers
    * @param  {string} type
+   * @return {List<Promise>}
+   * @private
    */
   _processHandlers(message, headers, type) {
     let handlers = this.config.handlers[type] || [],
@@ -249,6 +253,8 @@ export class Bus extends EventEmitter {
    * @param  {Object} message
    * @param  {Object} headers
    * @param  {Object} type
+   * @return {Promise}
+   * @private
    */
   _processRequestReplies(message, headers, type) {
     let promise = null;

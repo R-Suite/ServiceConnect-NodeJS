@@ -1,5 +1,5 @@
 import {mergeDeep, guid} from '../utils';
-var amqp = require('amqp-connection-manager');
+import amqp from 'amqp-connection-manager';
 import os from 'os';
 import EventEmitter from 'events';
 
@@ -32,7 +32,7 @@ export default class Client extends EventEmitter {
    * Creates connection, creates channel and then sets up RabbitMQ queues and exchanges.
    */
   connect(){
-    var options = {};
+    let options = {};
     if (this.config.amqpSettings.ssl) {
       options = mergeDeep(options, this.config.amqpSettings.ssl);
     }
@@ -150,9 +150,9 @@ export default class Client extends EventEmitter {
   /**
    * Sends a command to the specified endpoint(s).
    * @param {String|Array} endpoint
-   * @param  {String} type
-   * @param  {Object} message
-   * @param  {Object|undefined} headers
+   * @param {String} type
+   * @param {Object} message
+   * @param  Object|undefined} headers
    */
   send(endpoint, type, message, headers = {}) {
     let endpoints = Array.isArray(endpoint) ? endpoint : [endpoint];
@@ -166,14 +166,13 @@ export default class Client extends EventEmitter {
       }
       return this.channel.sendToQueue(ep, message, options);
     }));
-
   }
 
   /**
    * Published an event of the specified type.
-   * @param  {String} type
-   * @param  {Object} message
-   * @param  {Object|undefined} headers
+   * @param {String} type
+   * @param {Object} message
+   * @param {Object|undefined} headers
    */
   publish(type, message, headers = {}){
     let messageHeaders = this._getHeaders(type, headers, this.config.amqpSettings.queue.name, "Publish");
@@ -192,11 +191,11 @@ export default class Client extends EventEmitter {
 
   /**
    * Creates a object containing the standard message headers that need to be sent with all messages.
-   * @param  {String} type
-   * @param  {Object} headers
-   * @param  {String} queue
-   * @param  {String} messageType
-   * @return  {Object} headers
+   * @param {String} type
+   * @param {Object} headers
+   * @param {String} queue
+   * @param {String} messageType
+   * @return {Object} headers
    */
   _getHeaders(type, headers, queue, messageType){
     headers = mergeDeep({}, headers || {});
@@ -334,6 +333,7 @@ export default class Client extends EventEmitter {
     this.channel.close();
   }
 }
+
 function sleep(milliseconds) {
   var start = new Date().getTime();
   for (var i = 0; i < 1e7; i++) {
