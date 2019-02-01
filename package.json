@@ -1,6 +1,6 @@
 {
   "name": "service-connect",
-  "version": "0.0.36",
+  "version": "0.0.37",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -63,8 +63,8 @@
     "sinon": "2.2.0"
   },
   "dependencies": {
-    "amqp-connection-manager": "^2.1.1",
-    "amqplib": "^0.5.2"
+    "amqp-connection-manager": "^2.3.0",
+    "amqplib": "^0.5.3"
   },
   "repository": {
     "type": "git",
