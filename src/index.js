@@ -211,7 +211,7 @@ export class Bus extends EventEmitter {
     } catch (e) {
       this.emit("error", e);
       throw e;
-    }
+    } 
   }
 
   async _processFilters(filters, message, headers, type) {

@@ -1,6 +1,6 @@
 {
   "name": "service-connect",
-  "version": "0.0.37",
+  "version": "0.0.38",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -9,6 +9,8 @@
     "eslint": "eslint -c .eslintrc.json src exa mples",
     "examples.commands.consumer": "node ./examples/Commands/consumer.js",
     "examples.commands.sender": "node ./examples/Commands/sender.js",
+    "examples.priority.consumer": "node ./examples/PriorityQueue/consumer.js",
+    "examples.priority.sender": "node ./examples/PriorityQueue/sender.js",
     "examples.filters.consumer": "node --inspect=5859 ./examples/Filters/consumer.js",
     "examples.filters.sender": "node ./examples/Filters/sender.js",
     "examples.competing-consumers.consumer1": "node ./examples/CompetingConsumers/consumer1.js",

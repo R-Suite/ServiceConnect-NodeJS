@@ -8,7 +8,7 @@ var bus = new Bus({
     amqpSettings: {
         queue: {
             name: 'ServiceConnect.Samples.PriorityQueue.Consumer',
-            maxPriority: 10
+            maxPriority: 3
         },
         host: "amqp://guest:guest@localhost",
         prefetch: 2

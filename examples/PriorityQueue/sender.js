@@ -21,12 +21,11 @@ bus.init().then(function(){
             bus.close();
             process.exit()
         }
-        for(var i=0; i < 200; i++) {
-            bus.send('ServiceConnect.Samples.PriorityQueue.Consumer', "ConsumerCommand", { data: i }, { "Priority": 0});
-            console.log("Sent command " + i);
-        }
-
-        bus.send('ServiceConnect.Samples.PriorityQueue.Consumer', "ConsumerCommand", { data: "High priority message." }, { "Priority": 9});
+        bus.send('ServiceConnect.Samples.PriorityQueue.Consumer', "ConsumerCommand", { data: "0" }, { "Priority": 0});
+        bus.send('ServiceConnect.Samples.PriorityQueue.Consumer', "ConsumerCommand", { data: "1" }, { "Priority": 1});
+        bus.send('ServiceConnect.Samples.PriorityQueue.Consumer', "ConsumerCommand", { data: "2" }, { "Priority": 2});
+        bus.send('ServiceConnect.Samples.PriorityQueue.Consumer', "ConsumerCommand", { data: "3" }, { "Priority": 3});
+        bus.send('ServiceConnect.Samples.PriorityQueue.Consumer', "ConsumerCommand", { data: "4" }, { "Priority": 4});
         console.log("Sent high priority command");
     });
 

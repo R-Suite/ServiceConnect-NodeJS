@@ -6,6 +6,8 @@ import EventEmitter from 'events';
 /** Class representing the rabbitMQ client. */
 export default class Client extends EventEmitter {
 
+  processing = 0;
+
   /**
    * Sets config and connects to RabbitMQ
    * @constructor
@@ -219,6 +221,7 @@ export default class Client extends EventEmitter {
    * @param  {Object} rawMessage
    */
   _consumeMessage(rawMessage){
+    this.processing++;
     if (!rawMessage.properties.headers.TypeName){
       this.emit("error", { error: "Message does not contain TypeName", message: rawMessage});
       throw {
@@ -233,6 +236,7 @@ export default class Client extends EventEmitter {
         if(!this.config.amqpSettings.queue.noAck){
           this.channel.ack(rawMessage);
         }
+        this.processing--;
       });
   }
 
@@ -321,17 +325,36 @@ export default class Client extends EventEmitter {
     }
   }
 
+  stopConsuming() {
+    this.channel.cancel();
+  }
+
   /**
    * Closes RabbitMQ channel.
    */
-  close(){
+  async close(){
     if(this.config.amqpSettings.queue.autoDelete){
       this.channel.removeSetup((channel) => {
         return channel.deleteQueue(this.config.amqpSettings.queue.name + ".Retries");
       });
     }
-    this.channel.close();
+    // Stop consuming messages.
+    await this.channel._channel.cancel(Object.keys(this.channel._channel.consumers)[0])
+
+    // Wait until all messages have been processed.
+    while (this.processing !== 0) {
+      await wait(100)
+    }
+
+    // Close connection
+    await this.connection.close();
   }
+}
+
+function wait(time) {
+  return new Promise((resolve, _) => {
+    setTimeout(() => resolve(), time);
+  });
 }
 
 function sleep(milliseconds) {
