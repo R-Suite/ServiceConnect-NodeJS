@@ -1,10 +1,8 @@
-/// <reference types="node" />
 import { AmqpConnectionManager, ChannelWrapper } from 'amqp-connection-manager';
-import EventEmitter from 'events';
 import { ConfirmChannel, ConsumeMessage } from 'amqplib';
-import { BusConfig, ConsumeMessageCallback, IClient } from '../types';
+import { BusConfig, ConsumeMessageCallback, IClient, Message } from '../types';
 /** Class representing the rabbitMQ client. */
-export default class extends EventEmitter implements IClient {
+export default class implements IClient {
     config: BusConfig;
     consumeMessageCallback: ConsumeMessageCallback;
     connection: AmqpConnectionManager | undefined;
@@ -21,23 +19,23 @@ export default class extends EventEmitter implements IClient {
      *
      * Creates connection, creates channel and then sets up RabbitMQ queues and exchanges.
      */
-    connect(): void;
+    connect(): Promise<void>;
     /**
      * Creates host queue, retry queue and error queue.  It then sets up handler mappings and begins consuming messages.
      * The connected event is fired after consuming has begun.
      */
-    _createQueues(channel: ConfirmChannel): void;
+    _createQueues(channel: ConfirmChannel): Promise<void>;
     /**
      * Starts consuming the message type.  Creates a durable exchange named @message of type fanout.
      * Binds the clients queue to the exchange.
      * @param {string} type
      */
-    consumeType(type: string): void;
+    consumeType(type: string): Promise<void>;
     /**
      * Stops listening for the message.  Unbinds the exchange named @type from the client queue.
      * @param {String} type
      */
-    removeType(type: string): void;
+    removeType(type: string): Promise<void>;
     /**
      * Sends a command to the specified endpoint(s).
      * @param {String|Array} endpoint
@@ -45,7 +43,7 @@ export default class extends EventEmitter implements IClient {
      * @param {Object} message
      * @param  Object|undefined} headers
      */
-    send(endpoint: string | string[], type: string, message: object, headers?: {
+    send(endpoint: string | string[], type: string, message: Message, headers?: {
         [k: string]: unknown;
     }): Promise<void>;
     /**
@@ -54,7 +52,7 @@ export default class extends EventEmitter implements IClient {
      * @param {Object} message
      * @param {Object|undefined} headers
      */
-    publish(type: string, message: object, headers?: {
+    publish(type: string, message: Message, headers?: {
         [k: string]: unknown;
     }): Promise<void>;
     /**
@@ -77,7 +75,7 @@ export default class extends EventEmitter implements IClient {
      * enabled a copy of the message is sent to the audit queue. Acks the message at the end if noAck is false.
      * @param  {Object} rawMessage
      */
-    _consumeMessage(rawMessage: ConsumeMessage | null): void;
+    _consumeMessage(rawMessage: ConsumeMessage | null): Promise<void>;
     /**
      * Processes the RabbitMQ message.  Calls the consumeMessage callback passed into the client
      * constructor.  If there is an exception the message is sent to the retry queue.  If an exception occurs and the
@@ -90,10 +88,5 @@ export default class extends EventEmitter implements IClient {
      * Closes RabbitMQ channel.
      */
     close(): Promise<void>;
-    private _on;
-    private _off;
-    private _emit;
-    on: (event: string | symbol, listener: (...args: any[]) => void) => this;
-    off: (event: string | symbol, listener: (...args: any[]) => void) => this;
-    emit: (event: string | symbol, ...args: any[]) => boolean;
+    isConnected(): Promise<boolean>;
 }

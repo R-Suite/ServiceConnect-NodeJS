@@ -37,6 +37,7 @@ export declare type ServiceConnectConfig = {
         [MessageType: string]: MessageHandler[];
     };
     client?: IClient;
+    logger?: ILogger;
 };
 export declare type BusConfig = {
     amqpSettings: {
@@ -75,24 +76,56 @@ export declare type BusConfig = {
         [MessageType: string]: MessageHandler[];
     };
     client: IClient;
+    logger?: ILogger;
 };
-export declare type MessageHandler = (message: any, headers?: {
+export declare type Message = {
+    CorrelationId: string;
     [k: string]: unknown;
-}, type?: string, replyCallback?: (type: string, message: any) => void) => void | Promise<void>;
-export declare type MessageFilter = (message: any, headers?: {
+};
+export declare type MessageHandler = (message: Message, headers?: {
+    [k: string]: unknown;
+}, type?: string, replyCallback?: ReplyCallback) => void | Promise<void>;
+export declare type MessageFilter = (message: Message, headers?: {
     [k: string]: unknown;
 }, type?: string, bus?: Bus) => boolean | Promise<boolean>;
-export interface IClient extends Events {
-    connect: () => void;
-    consumeType: (type: string) => void;
-    removeType: (type: string) => void;
-    send: (endpoint: string | string[], type: string, message: object, headers: {
+export declare type ConsumeMessageCallback = (message: Message, headers: {
+    [k: string]: unknown;
+}, type: string) => Promise<void>;
+export declare type ReplyCallback = (type: string, message: Message) => Promise<void>;
+export interface IClient {
+    connect: () => Promise<void>;
+    consumeType: (type: string) => Promise<void>;
+    removeType: (type: string) => Promise<void>;
+    send: (endpoint: string | string[], type: string, message: Message, headers: {
         [k: string]: unknown;
     }) => Promise<void>;
-    publish: (type: string, message: object, headers: {
+    publish: (type: string, message: Message, headers: {
         [k: string]: unknown;
     }) => Promise<void>;
     close: () => Promise<void>;
+    isConnected: () => Promise<boolean>;
+}
+export interface IBus {
+    init(): Promise<void>;
+    addHandler(type: string, callback: MessageHandler): Promise<void>;
+    removeHandler(type: string, callback: MessageHandler): Promise<void>;
+    isHandled(type: string): boolean;
+    send(endpoint: string | string[], type: string, message: Message, headers?: {
+        [k: string]: unknown;
+    }): Promise<void>;
+    publish(type: string, message: Message, headers?: {
+        [k: string]: unknown;
+    }): Promise<void>;
+    sendRequest(endpoint: string | string[], type: string, message: Message, callback: MessageHandler, headers?: {
+        [k: string]: unknown;
+    }): Promise<void>;
+    publishRequest(type: string, message: Message, callback: MessageHandler, expected?: number | null, timeout?: number | null, headers?: {
+        [k: string]: unknown;
+    }): Promise<void>;
+    close(): Promise<void>;
+    client: IClient | null;
+    initialized: boolean;
+    isConnected: () => Promise<boolean>;
 }
 export declare type RequestReplyCallback = {
     endpointCount: number;
@@ -100,31 +133,7 @@ export declare type RequestReplyCallback = {
     callback: MessageHandler;
     timeout?: NodeJS.Timeout;
 };
-export declare type ConsumeMessageCallback = (message: any, headers: {
-    [k: string]: unknown;
-}, type: string) => Promise<void>;
-export interface Events {
-    on(event: string | symbol, listener: (...args: any[]) => void): this;
-    off(event: string | symbol, listener: (...args: any[]) => void): this;
-    emit(event: string | symbol, ...args: any[]): boolean;
-}
-export interface IBus extends Events {
-    init(): Promise<void>;
-    addHandler(message: string, callback: MessageHandler): void;
-    removeHandler(message: string, callback: MessageHandler): void;
-    isHandled(message: string): boolean;
-    send(endpoint: string | string[], type: string, message: any, headers?: {
-        [k: string]: unknown;
-    }): Promise<void>;
-    publish(type: string, message: any, headers?: {
-        [k: string]: unknown;
-    }): Promise<void>;
-    sendRequest(endpoint: string | string[], type: string, message: any, callback: MessageHandler, headers?: {
-        [k: string]: unknown;
-    }): Promise<void>;
-    publishRequest(type: string, message: any, callback: MessageHandler, expected?: number | null, timeout?: number | null, headers?: {
-        [k: string]: unknown;
-    }): Promise<void>;
-    close(): Promise<void>;
-    client: IClient | null;
+export interface ILogger {
+    info: (message: string) => void;
+    error: (message: string, error: Error) => void;
 }

@@ -1,8 +1,6 @@
-/// <reference types="node" />
-import EventEmitter from 'events';
-import { BusConfig, IBus, IClient, MessageFilter, MessageHandler, RequestReplyCallback, ServiceConnectConfig } from './types';
+import { BusConfig, IBus, IClient, Message, MessageFilter, MessageHandler, ReplyCallback, RequestReplyCallback, ServiceConnectConfig } from './types';
 /** Class representing a the message bus. */
-export declare class Bus extends EventEmitter implements IBus {
+export declare class Bus implements IBus {
     id: string;
     requestReplyCallbacks: {
         [MessageId: string]: RequestReplyCallback;
@@ -17,29 +15,29 @@ export declare class Bus extends EventEmitter implements IBus {
      */
     constructor(config: ServiceConnectConfig);
     /**
-     * Creates AMQP client and fires connected event when client has connected
+     * Creates and connects to client
      * @return {Promise}
      */
     init(): Promise<void>;
     /**
      * Starts consuming the message type and binds the callback to the message type.
-     * @param {String} message
-     * @param  {Function} callback
+     * @param {String} messageType
+     * @param  {Promise} callback
      */
-    addHandler(message: string, callback: MessageHandler): void;
+    addHandler(messageType: string, callback: MessageHandler): Promise<void>;
     /**
      * Removes the message type callback binding and stops listening for the message if there are no more callback
      * bindings.
-     * @param {String} message
-     * @param {Function} callback
+     * @param {String} messageType
+     * @param {Promise}
      */
-    removeHandler(message: string, callback: MessageHandler): void;
+    removeHandler(messageType: string, callback: MessageHandler): Promise<void>;
     /**
      * Checks if the message type is being handled by the Bus.
-     * @param {String} message
+     * @param {String} messageType
      * @return {Boolean}
      */
-    isHandled(message: string): boolean;
+    isHandled(messageType: string): boolean;
     /**
      * Sends a command to the specified endpoint(s).
      * @param {String|Array} endpoint
@@ -48,7 +46,7 @@ export declare class Bus extends EventEmitter implements IBus {
      * @param {Object|undefined} headers
      * @return {Promise}
      */
-    send(endpoint: string | string[], type: string, message: any, headers?: {
+    send(endpoint: string | string[], type: string, message: Message, headers?: {
         [k: string]: unknown;
     }): Promise<void>;
     /**
@@ -58,7 +56,7 @@ export declare class Bus extends EventEmitter implements IBus {
      * @param {Object|undefined} headers
      * @return {Promise}
      */
-    publish(type: string, message: any, headers?: {
+    publish(type: string, message: Message, headers?: {
         [k: string]: unknown;
     }): Promise<void>;
     /**
@@ -70,7 +68,7 @@ export declare class Bus extends EventEmitter implements IBus {
      * @param {function} callback
      * @param {Object|undefined} headers
      */
-    sendRequest(endpoint: string | string[], type: string, message: any, callback: MessageHandler, headers?: {
+    sendRequest(endpoint: string | string[], type: string, message: Message, callback: MessageHandler, headers?: {
         [k: string]: unknown;
     }): Promise<void>;
     /**
@@ -83,7 +81,7 @@ export declare class Bus extends EventEmitter implements IBus {
      * @param {Object|null} headers
      * @return {Promise}
      */
-    publishRequest(type: string, message: any, callback: MessageHandler, expected?: number | null, timeout?: number | null, headers?: {
+    publishRequest(type: string, message: Message, callback: MessageHandler, expected?: number | null, timeout?: number | null, headers?: {
         [k: string]: unknown;
     }): Promise<void>;
     /**
@@ -91,12 +89,12 @@ export declare class Bus extends EventEmitter implements IBus {
      * @param  {Object} message
      * @param  {Object} headers
      * @param  {string} type
-     * @return {Promise<Object>} result
+     * @return {Promise} result
      */
-    _consumeMessage(message: any, headers: {
+    _consumeMessage(message: Message, headers: {
         [k: string]: unknown;
     }, type: string): Promise<void>;
-    _processFilters(filters: MessageFilter[], message: any, headers: {
+    _processFilters(filters: MessageFilter[], message: Message, headers: {
         [k: string]: unknown;
     }, type: string): Promise<boolean>;
     /**
@@ -107,7 +105,7 @@ export declare class Bus extends EventEmitter implements IBus {
      * @return {List<Promise>}
      * @private
      */
-    _processHandlers(message: any, headers: {
+    _processHandlers(message: Message, headers: {
         [k: string]: unknown;
     }, type: string): (void | Promise<void>)[];
     /**
@@ -118,7 +116,7 @@ export declare class Bus extends EventEmitter implements IBus {
      * @return {Promise}
      * @private
      */
-    _processRequestReplies(message: any, headers: {
+    _processRequestReplies(message: Message, headers: {
         [k: string]: unknown;
     }, type: string): void | Promise<void> | null;
     /**
@@ -130,15 +128,14 @@ export declare class Bus extends EventEmitter implements IBus {
      */
     _getReplyCallback(headers: {
         [k: string]: unknown;
-    }): (type: string, message: any) => void;
+    }): ReplyCallback;
+    /**
+     * Returns true if the client is connected
+     * @return {Promise<boolean>}
+     */
+    isConnected(): Promise<boolean>;
     /**
      * Disposes of Bus resources.
      */
     close(): Promise<void>;
-    private _on;
-    private _off;
-    private _emit;
-    on: (event: string | symbol, listener: (...args: any[]) => void) => this;
-    off: (event: string | symbol, listener: (...args: any[]) => void) => this;
-    emit: (event: string | symbol, ...args: any[]) => boolean;
 }
