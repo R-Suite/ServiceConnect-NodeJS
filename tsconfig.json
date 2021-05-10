@@ -1,0 +1,21 @@
+{
+    "include": [
+      "src/**/*"
+    ],
+    "exclude": [
+      "**/*.spec.ts"
+    ],
+    "compilerOptions": {
+      "baseUrl": ".",
+      "paths": { "*": ["types/*"] },
+      "target": "ES6", 
+      "module": "commonjs",
+      "sourceMap": true,
+      "outDir": "lib", 
+      "rootDir": "src", 
+      "strict": true,      
+      "declaration": true,
+      "esModuleInterop": true
+    }
+}
+  
