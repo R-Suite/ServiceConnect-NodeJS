@@ -3,7 +3,7 @@ import { BusConfig, IBus, IClient, Message, MessageFilter, MessageHandler, Reply
 export declare class Bus implements IBus {
     id: string;
     requestReplyCallbacks: {
-        [MessageId: string]: RequestReplyCallback;
+        [MessageId: string]: RequestReplyCallback<Message>;
     };
     config: BusConfig;
     client: IClient | null;
@@ -24,14 +24,14 @@ export declare class Bus implements IBus {
      * @param {String} messageType
      * @param  {Promise} callback
      */
-    addHandler(messageType: string, callback: MessageHandler): Promise<void>;
+    addHandler<T extends Message>(messageType: string, callback: MessageHandler<T>): Promise<void>;
     /**
      * Removes the message type callback binding and stops listening for the message if there are no more callback
      * bindings.
      * @param {String} messageType
      * @param {Promise}
      */
-    removeHandler(messageType: string, callback: MessageHandler): Promise<void>;
+    removeHandler<T extends Message>(messageType: string, callback: MessageHandler<T>): Promise<void>;
     /**
      * Checks if the message type is being handled by the Bus.
      * @param {String} messageType
@@ -46,7 +46,7 @@ export declare class Bus implements IBus {
      * @param {Object|undefined} headers
      * @return {Promise}
      */
-    send(endpoint: string | string[], type: string, message: Message, headers?: {
+    send<T extends Message>(endpoint: string | string[], type: string, message: T, headers?: {
         [k: string]: unknown;
     }): Promise<void>;
     /**
@@ -56,7 +56,7 @@ export declare class Bus implements IBus {
      * @param {Object|undefined} headers
      * @return {Promise}
      */
-    publish(type: string, message: Message, headers?: {
+    publish<T extends Message>(type: string, message: T, headers?: {
         [k: string]: unknown;
     }): Promise<void>;
     /**
@@ -68,7 +68,7 @@ export declare class Bus implements IBus {
      * @param {function} callback
      * @param {Object|undefined} headers
      */
-    sendRequest(endpoint: string | string[], type: string, message: Message, callback: MessageHandler, headers?: {
+    sendRequest<T1 extends Message, T2 extends Message>(endpoint: string | string[], type: string, message: T1, callback: MessageHandler<T2>, headers?: {
         [k: string]: unknown;
     }): Promise<void>;
     /**
@@ -81,7 +81,7 @@ export declare class Bus implements IBus {
      * @param {Object|null} headers
      * @return {Promise}
      */
-    publishRequest(type: string, message: Message, callback: MessageHandler, expected?: number | null, timeout?: number | null, headers?: {
+    publishRequest<T1 extends Message, T2 extends Message>(type: string, message: T1, callback: MessageHandler<T2>, expected?: number | null, timeout?: number | null, headers?: {
         [k: string]: unknown;
     }): Promise<void>;
     /**
@@ -94,7 +94,7 @@ export declare class Bus implements IBus {
     _consumeMessage(message: Message, headers: {
         [k: string]: unknown;
     }, type: string): Promise<void>;
-    _processFilters(filters: MessageFilter[], message: Message, headers: {
+    _processFilters(filters: MessageFilter<Message>[], message: Message, headers: {
         [k: string]: unknown;
     }, type: string): Promise<boolean>;
     /**
@@ -128,7 +128,7 @@ export declare class Bus implements IBus {
      */
     _getReplyCallback(headers: {
         [k: string]: unknown;
-    }): ReplyCallback;
+    }): ReplyCallback<Message>;
     /**
      * Returns true if the client is connected
      * @return {Promise<boolean>}

@@ -29,12 +29,12 @@ export declare type ServiceConnectConfig = {
         prefetch?: number;
     };
     filters?: {
-        after?: MessageFilter[];
-        before?: MessageFilter[];
-        outgoing?: MessageFilter[];
+        after?: MessageFilter<Message>[];
+        before?: MessageFilter<Message>[];
+        outgoing?: MessageFilter<Message>[];
     };
     handlers?: {
-        [MessageType: string]: MessageHandler[];
+        [MessageType: string]: MessageHandler<Message>[];
     };
     client?: IClient;
     logger?: ILogger;
@@ -68,38 +68,38 @@ export declare type BusConfig = {
         prefetch: number;
     };
     filters: {
-        after: MessageFilter[];
-        before: MessageFilter[];
-        outgoing: MessageFilter[];
+        after: MessageFilter<Message>[];
+        before: MessageFilter<Message>[];
+        outgoing: MessageFilter<Message>[];
     };
     handlers: {
-        [MessageType: string]: MessageHandler[];
+        [MessageType: string]: MessageHandler<Message>[];
     };
     client: IClient;
     logger?: ILogger;
 };
-export declare type Message = {
+export interface Message {
     CorrelationId: string;
     [k: string]: unknown;
-};
-export declare type MessageHandler = (message: Message, headers?: {
+}
+export declare type MessageHandler<T extends Message> = (message: T, headers?: {
     [k: string]: unknown;
-}, type?: string, replyCallback?: ReplyCallback) => void | Promise<void>;
-export declare type MessageFilter = (message: Message, headers?: {
+}, type?: string, replyCallback?: ReplyCallback<Message>) => void | Promise<void>;
+export declare type MessageFilter<T extends Message> = (message: T, headers?: {
     [k: string]: unknown;
 }, type?: string, bus?: Bus) => boolean | Promise<boolean>;
 export declare type ConsumeMessageCallback = (message: Message, headers: {
     [k: string]: unknown;
 }, type: string) => Promise<void>;
-export declare type ReplyCallback = (type: string, message: Message) => Promise<void>;
+export declare type ReplyCallback<T extends Message> = (type: string, message: T) => Promise<void>;
 export interface IClient {
     connect: () => Promise<void>;
     consumeType: (type: string) => Promise<void>;
     removeType: (type: string) => Promise<void>;
-    send: (endpoint: string | string[], type: string, message: Message, headers: {
+    send: <T extends Message>(endpoint: string | string[], type: string, message: T, headers: {
         [k: string]: unknown;
     }) => Promise<void>;
-    publish: (type: string, message: Message, headers: {
+    publish: <T extends Message>(type: string, message: T, headers: {
         [k: string]: unknown;
     }) => Promise<void>;
     close: () => Promise<void>;
@@ -107,19 +107,19 @@ export interface IClient {
 }
 export interface IBus {
     init(): Promise<void>;
-    addHandler(type: string, callback: MessageHandler): Promise<void>;
-    removeHandler(type: string, callback: MessageHandler): Promise<void>;
+    addHandler<T extends Message>(type: string, callback: MessageHandler<T>): Promise<void>;
+    removeHandler<T extends Message>(type: string, callback: MessageHandler<T>): Promise<void>;
     isHandled(type: string): boolean;
-    send(endpoint: string | string[], type: string, message: Message, headers?: {
+    send<T extends Message>(endpoint: string | string[], type: string, message: T, headers?: {
         [k: string]: unknown;
     }): Promise<void>;
-    publish(type: string, message: Message, headers?: {
+    publish<T extends Message>(type: string, message: T, headers?: {
         [k: string]: unknown;
     }): Promise<void>;
-    sendRequest(endpoint: string | string[], type: string, message: Message, callback: MessageHandler, headers?: {
+    sendRequest<T1 extends Message, T2 extends Message>(endpoint: string | string[], type: string, message: T1, callback: MessageHandler<T2>, headers?: {
         [k: string]: unknown;
     }): Promise<void>;
-    publishRequest(type: string, message: Message, callback: MessageHandler, expected?: number | null, timeout?: number | null, headers?: {
+    publishRequest<T1 extends Message, T2 extends Message>(type: string, message: T1, callback: MessageHandler<T2>, expected?: number | null, timeout?: number | null, headers?: {
         [k: string]: unknown;
     }): Promise<void>;
     close(): Promise<void>;
@@ -127,10 +127,10 @@ export interface IBus {
     initialized: boolean;
     isConnected: () => Promise<boolean>;
 }
-export declare type RequestReplyCallback = {
+export declare type RequestReplyCallback<T extends Message> = {
     endpointCount: number;
     processedCount: number;
-    callback: MessageHandler;
+    callback: MessageHandler<T>;
     timeout?: NodeJS.Timeout;
 };
 export interface ILogger {

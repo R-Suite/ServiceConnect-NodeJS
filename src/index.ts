@@ -8,7 +8,7 @@ export class Bus implements IBus {
 
   id: string;
   requestReplyCallbacks: {
-    [MessageId:string]: RequestReplyCallback
+    [MessageId:string]: RequestReplyCallback<Message>
   };
   config: BusConfig;
   client: IClient | null = null;
@@ -49,13 +49,13 @@ export class Bus implements IBus {
    * @param {String} messageType
    * @param  {Promise} callback
    */
-  public async addHandler(messageType : string, callback : MessageHandler) : Promise<void> {
+  public async addHandler<T extends Message>(messageType : string, callback : MessageHandler<T>) : Promise<void> {
     var type = messageType.replace(/\./g, "");
     if(type !== "*"){
       await this.client?.consumeType(type);
     }
     this.config.handlers[messageType] = this.config.handlers[messageType] || [];
-    this.config.handlers[messageType].push(callback);
+    this.config.handlers[messageType].push(callback as MessageHandler<Message>);
   }
 
   /**
@@ -64,7 +64,7 @@ export class Bus implements IBus {
    * @param {String} messageType
    * @param {Promise} 
    */
-  public async removeHandler(messageType : string, callback : MessageHandler) : Promise<void> {
+  public async removeHandler<T extends Message>(messageType : string, callback : MessageHandler<T>) : Promise<void> {
     if (this.config.handlers[messageType]){
       this.config.handlers[messageType] = this.config
         .handlers[messageType]
@@ -94,7 +94,7 @@ export class Bus implements IBus {
    * @param {Object|undefined} headers
    * @return {Promise}
    */
-  async send(endpoint : string | string[], type : string, message : Message, headers : {[k:string]: unknown} = {}) {
+  async send<T extends Message>(endpoint : string | string[], type : string, message : T, headers : {[k:string]: unknown} = {}) {
     let result = await this._processFilters(this.config.filters.outgoing, message, headers, type);
     if (!result) {
       return;
@@ -109,7 +109,7 @@ export class Bus implements IBus {
    * @param {Object|undefined} headers
    * @return {Promise}
    */
-  async publish(type: string, message: Message, headers : {[k:string]: unknown} = {}){
+  async publish<T extends Message>(type: string, message: T, headers : {[k:string]: unknown} = {}){
     let result = await this._processFilters(this.config.filters.outgoing, message, headers, type);
     if (!result) {
       return;
@@ -126,7 +126,7 @@ export class Bus implements IBus {
    * @param {function} callback
    * @param {Object|undefined} headers
    */
-  async sendRequest(endpoint: string | string[], type : string, message : Message, callback : MessageHandler, headers : {[k:string]: unknown} = {}){
+  async sendRequest<T1 extends Message, T2 extends Message>(endpoint: string | string[], type : string, message : T1, callback : MessageHandler<T2>, headers : {[k:string]: unknown} = {}){
     let messageId = guid();
     let endpoints = Array.isArray(endpoint) ? endpoint : [endpoint];
 
@@ -139,7 +139,7 @@ export class Bus implements IBus {
     this.requestReplyCallbacks[messageId] = {
       endpointCount: endpoints.length,
       processedCount: 0,
-      callback
+      callback: callback as MessageHandler<Message>
     };
     headers["RequestMessageId"] = messageId;
     return this.client?.send(endpoint, type, message, headers);
@@ -155,7 +155,7 @@ export class Bus implements IBus {
    * @param {Object|null} headers
    * @return {Promise}
    */
-  async publishRequest(type : string, message : Message, callback : MessageHandler, expected : number | null = null, timeout : number | null = 10000, headers : {[k:string]: unknown} = {}){
+  async publishRequest<T1 extends Message, T2 extends Message>(type : string, message : T1, callback : MessageHandler<T2>, expected : number | null = null, timeout : number | null = 10000, headers : {[k:string]: unknown} = {}){
     let messageId = guid();
     let result = await this._processFilters(this.config.filters.outgoing, message, headers, type);
 
@@ -166,7 +166,7 @@ export class Bus implements IBus {
     this.requestReplyCallbacks[messageId] = {
       endpointCount: expected === null ? -1 : expected,
       processedCount: 0,
-      callback
+      callback: callback as MessageHandler<Message>
     };
     headers["RequestMessageId"] = messageId;
 
@@ -211,7 +211,7 @@ export class Bus implements IBus {
     } 
   }
 
-  async _processFilters(filters : MessageFilter[], message : Message, headers : {[k:string]: unknown}, type : string) {
+  async _processFilters(filters : MessageFilter<Message>[], message : Message, headers : {[k:string]: unknown}, type : string) {
     for (var i = 0; i < filters.length; i++) {
       let result = await filters[i](message, headers, type, this);
       if (result === false) {
@@ -279,7 +279,7 @@ export class Bus implements IBus {
    * @return {function(*=, *=)}
    * @private
    */
-  _getReplyCallback(headers : {[k:string]: unknown}) : ReplyCallback {
+  _getReplyCallback(headers : {[k:string]: unknown}) : ReplyCallback<Message> {
     return async (type : string, message : Message) => {
       headers["ResponseMessageId"] = headers["RequestMessageId"];
       await this.send(headers["SourceAddress"] as string, type, message, headers);

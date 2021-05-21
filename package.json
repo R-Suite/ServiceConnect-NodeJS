@@ -1,6 +1,6 @@
 {
   "name": "service-connect",
-  "version": "1.0.1",
+  "version": "1.0.4",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -8,14 +8,7 @@
     "test": "mocha --require ts-node/register test/**/*.spec.ts",
     "rabbitmq": "cross-env RABBITMQ_PLUGINS=rabbitmq_management docker run -p 5672:5672 -p 15672:15672 --name rabbitmq bitnami/rabbitmq:latest",
     "integration-test": "mocha --require ts-node/register integration-test/**/*.spec.ts  --timeout 60000",
-    "auto-integration-test": "mocha --require ts-node/register --require ./integration-test/setupDocker.ts integration-test/**/*.spec.ts  --timeout 60000",
-    "examples.request-reply.request": "node ./examples/RequestReply/requester.js",
-    "examples.request-reply.reply": "node ./examples/RequestReply/replier.js",
-    "examples.scatter-gather.request": "node ./examples/ScatterGather/requester.js",
-    "examples.scatter-gather.reply1": "node ./examples/ScatterGather/replier1.js",
-    "examples.scatter-gather.reply2": "node ./examples/ScatterGather/replier2.js",
-    "examples.retries.consumer": "node ./examples/Retries/consumer.js",
-    "examples.retries.sender": "node ./examples/Retries/sender.js"
+    "auto-integration-test": "mocha --require ts-node/register --require ./integration-test/setupDocker.ts integration-test/**/*.spec.ts  --timeout 60000"
   },
   "author": "Tim Watson",
   "email": "tswatson123@gmail.com",
