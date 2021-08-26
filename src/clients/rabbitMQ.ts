@@ -274,7 +274,8 @@ export default class implements IClient {
     try {
 
       if (!rawMessage.properties.headers.TypeName){
-        throw new Error("Message does not contain TypeName")
+        this.config.logger?.error("Message does not contain TypeName");
+        return;
       }
 
       await this._processMessage(rawMessage);

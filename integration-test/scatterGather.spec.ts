@@ -1,7 +1,7 @@
 
 import { expect } from 'chai';
 import { Bus } from '../src/index';
-import { MessageHandler } from '../src/types';
+import { Message, MessageHandler } from '../src/types';
 import config from "./config"
 
 describe("Scatter Gather", () => {
@@ -50,12 +50,12 @@ describe("Scatter Gather", () => {
         return new Promise<void>(async (resolve, reject) => {
             let count = 0;
 
-            const messageHandler1 : MessageHandler = async (message : {[k:string]: any}, headers?: {[k: string]: unknown;}, type?: string, replyCallback?: (type: string, message: any) => void) => {
+            const messageHandler1 : MessageHandler<Message> = async (message : {[k:string]: any}, headers?: {[k: string]: unknown;}, type?: string, replyCallback?: (type: string, message: any) => void) => {
                 if (replyCallback) {
                     replyCallback("Reply", { number: message.number });
                 }
             };
-            const messageHandler2 : MessageHandler = async (message : {[k:string]: any}, headers?: {[k: string]: unknown;}, type?: string, replyCallback?: (type: string, message: any) => void) => {
+            const messageHandler2 : MessageHandler<Message> = async (message : {[k:string]: any}, headers?: {[k: string]: unknown;}, type?: string, replyCallback?: (type: string, message: any) => void) => {
                 if (replyCallback) {
                     replyCallback("Reply", { number: message.number });
                 }
@@ -64,7 +64,7 @@ describe("Scatter Gather", () => {
             await consumer1.addHandler("TestMessageType", messageHandler1);
             await consumer2.addHandler("TestMessageType", messageHandler2);
 
-            const replyCallback : MessageHandler = async (message : {[k:string]: any}, headers?: {[k: string]: unknown;}, type?: string, replyCallback?: (type: string, message: any) => void) => {
+            const replyCallback : MessageHandler<Message> = async (message : {[k:string]: any}, headers?: {[k: string]: unknown;}, type?: string, replyCallback?: (type: string, message: any) => void) => {
                 count++;
                 if (count === 20) {
                     resolve();
@@ -116,7 +116,7 @@ describe("Scatter Gather", () => {
         return new Promise<void>(async (resolve, reject) => {
             let responseCount = 0, consumeCount = 0;
 
-            const messageHandler1 : MessageHandler = async (message : {[k:string]: any}, headers?: {[k: string]: unknown;}, type?: string, replyCallback?: (type: string, message: any) => void) => {
+            const messageHandler1 : MessageHandler<Message> = async (message : {[k:string]: any}, headers?: {[k: string]: unknown;}, type?: string, replyCallback?: (type: string, message: any) => void) => {
                 consumeCount++;
                 if (message.number === 0) {                
                     if (replyCallback) {
@@ -130,7 +130,7 @@ describe("Scatter Gather", () => {
                     }, 300);
                 }
             };
-            const messageHandler2 : MessageHandler = async (message : {[k:string]: any}, headers?: {[k: string]: unknown;}, type?: string, replyCallback?: (type: string, message: any) => void) => {
+            const messageHandler2 : MessageHandler<Message> = async (message : {[k:string]: any}, headers?: {[k: string]: unknown;}, type?: string, replyCallback?: (type: string, message: any) => void) => {
                 consumeCount++;
                 if (message.number === 0) {
                     if (replyCallback) {
@@ -148,7 +148,7 @@ describe("Scatter Gather", () => {
             await consumer1.addHandler("TestMessageType", messageHandler1);
             await consumer2.addHandler("TestMessageType", messageHandler2);
 
-            const replyCallback : MessageHandler = async (message : {[k:string]: any}, headers?: {[k: string]: unknown;}, type?: string, replyCallback?: (type: string, message: any) => void) => {
+            const replyCallback : MessageHandler<Message> = async (message : {[k:string]: any}, headers?: {[k: string]: unknown;}, type?: string, replyCallback?: (type: string, message: any) => void) => {
                 responseCount++;                
             };
 

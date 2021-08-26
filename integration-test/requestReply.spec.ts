@@ -1,6 +1,6 @@
 
 import { Bus } from '../src/index';
-import { MessageHandler } from '../src/types';
+import { Message, MessageHandler } from '../src/types';
 import config from "./config"
 
 describe("Request Reply", () => {
@@ -38,7 +38,7 @@ describe("Request Reply", () => {
         return new Promise<void>(async (resolve, reject) => {
             let count = 0;
 
-            const messageHandler : MessageHandler = async (message : {[k:string]: any}, headers?: {[k: string]: unknown;}, type?: string, replyCallback?: (type: string, message: any) => void) => {
+            const messageHandler : MessageHandler<Message> = async (message : {[k:string]: any}, headers?: {[k: string]: unknown;}, type?: string, replyCallback?: (type: string, message: any) => void) => {
                 if (replyCallback) {
                     replyCallback("Reply", { number: message.number });
                 }
@@ -46,7 +46,7 @@ describe("Request Reply", () => {
     
             await consumer.addHandler("TestMessageType", messageHandler);
 
-            const replyCallback : MessageHandler = async (message : {[k:string]: any}, headers?: {[k: string]: unknown;}, type?: string, replyCallback?: (type: string, message: any) => void) => {
+            const replyCallback : MessageHandler<Message> = async (message : {[k:string]: any}, headers?: {[k: string]: unknown;}, type?: string, replyCallback?: (type: string, message: any) => void) => {
                 count++;
                 if (count === 10) {
                     resolve();

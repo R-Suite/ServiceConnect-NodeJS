@@ -124,5 +124,5 @@ export type RequestReplyCallback<T extends Message> = {
 
 export interface ILogger {
     info: (message : string) => void,
-    error: (message : string, error : Error) => void
+    error: (message : string, error? : Error) => void
 }

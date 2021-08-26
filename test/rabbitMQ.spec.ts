@@ -857,7 +857,7 @@ describe("RabbitMQ Client", function() {
             var settingsObject : any = settings();
             settingsObject.amqpSettings.queue.name = "TestQueue";
             settingsObject.logger = {
-                error: (msg : string, e : Error) => error = e.message
+                error: (msg : string, e : Error) => error = msg
             }
             message.properties.headers.TypeName = undefined;
 
