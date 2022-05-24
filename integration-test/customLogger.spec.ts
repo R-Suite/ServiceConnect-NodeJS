@@ -17,7 +17,7 @@ describe("Custom logger", () => {
         const infos : any = [];
 
         const logger = {
-            error: (msg :string, e?: Error) => errors.push(msg),
+            error: (msg :string, e?: unknown) => errors.push(msg),
             info: (msg :string) => infos.push(msg),
         };
 

@@ -315,7 +315,7 @@ export default class implements IClient {
           message,
           headers,
           headers.TypeName as string);
-      } catch (e) {
+      } catch (e : any) {
         if (e === null || e === undefined ||
           (e !== null && e != undefined && typeof e !== 'object')  ||
           (e !== null && e != undefined && typeof e === 'object' && e.retry !== false)) {

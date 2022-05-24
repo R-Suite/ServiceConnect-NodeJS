@@ -1136,7 +1136,7 @@ describe("Bus", function() {
                     "LogCommand2": [ cb3 ]
                 },
                 logger: {
-                    error: (m:string, e?: Error) => error,
+                    error: (m:string, e?: unknown) => error,
                     info: (m:string) => {}
                 }
             });
