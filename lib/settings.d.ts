@@ -1,4 +1,5 @@
 import client from './clients/rabbitMQ';
+import { ILogger } from './types';
 export default function setting(): {
     amqpSettings: {
         queue: {
@@ -34,4 +35,5 @@ export default function setting(): {
     };
     handlers: {};
     client: typeof client;
+    logger: ILogger;
 };

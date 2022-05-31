@@ -1,4 +1,5 @@
 import client from './clients/rabbitMQ';
+import { ILogger } from './types';
 
 export default function setting() {
     return {
@@ -38,5 +39,12 @@ export default function setting() {
             // "message type": [ array of callbacks ]
         },
         client: client, // AMQP client
+        logger: {
+            info: (message:string) => console.log(message),
+            error: (message:string, err : unknown) => {
+                console.log(message);
+                console.log(err);
+            },
+        } as ILogger
     };
 }

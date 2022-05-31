@@ -34,8 +34,9 @@ describe("RabbitMQ Client", function() {
     describe("connect", function(){
 
         it("should connect to the amqp client", function(){
-            var connection : any = { createChannel: sinon.stub() };
+            var connection : any = { createChannel: sinon.stub(), on: sinon.stub() };
             var stub = sinon.stub(amqp, 'connect');
+            sinon.stub(amqp as any, "on")
             stub.returns(connection)
 
             var client = new Client(settings() as any, async () =>{});
@@ -46,7 +47,7 @@ describe("RabbitMQ Client", function() {
         });
 
         it("should create channel after connecting", function(){
-            var connection : any = { createChannel: sinon.stub() };
+            var connection : any = { createChannel: sinon.stub(), on: sinon.stub() };
             var stub = sinon.stub(amqp, 'connect');
             stub.returns(connection)
 

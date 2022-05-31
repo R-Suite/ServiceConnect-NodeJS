@@ -49,18 +49,20 @@ export default class implements IClient {
       let hosts = Array.isArray(this.config.amqpSettings.host) ? this.config.amqpSettings.host : [this.config.amqpSettings.host];
 
       this.connection = amqp.connect(hosts, { connectionOptions: options });
-   
+      this.connection.on('connect', () => this.config.logger?.info(`Connected ${this.config.amqpSettings.queue.name}`));
+      this.connection.on('disconnect', (err : any) => this.config.logger?.error(`Disconnected ${this.config.amqpSettings.queue.name}`, err));
+      this.connection.on('connectFailed', (err : any) => this.config.logger?.error(`Connection failed ${this.config.amqpSettings.queue.name}`, err));
+      this.connection.on('blocked', (err : any) => this.config.logger?.error(`Blocked by broker ${this.config.amqpSettings.queue.name}`, err));
+
       await new Promise<void>((resolve, reject) => {
         try {          
           this.config.logger?.info("Building RabbitMQ channel");
-
+          this.connection?.createChannel({ })
           this.channel = this.connection?.createChannel({
             json: true,
             setup: async (channel : ConfirmChannel) => {
-              await channel.prefetch(this.config.amqpSettings.prefetch);
-              
+              await channel.prefetch(this.config.amqpSettings.prefetch);              
               this.config.logger?.info("RabbitMQ channel created.");
-
               await this._createQueues(channel);
               resolve();
             }
