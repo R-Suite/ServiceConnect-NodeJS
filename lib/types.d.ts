@@ -48,6 +48,7 @@ export declare type BusConfig = {
             autoDelete: boolean;
             noAck: boolean;
             maxPriority: number | null;
+            arguments?: any;
         };
         ssl?: {
             enabled: boolean;

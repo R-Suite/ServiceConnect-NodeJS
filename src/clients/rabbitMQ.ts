@@ -89,6 +89,7 @@ export default class implements IClient {
         durable: this.config.amqpSettings.queue.durable,
         exclusive: this.config.amqpSettings.queue.exclusive,
         autoDelete: this.config.amqpSettings.queue.autoDelete,
+        arguments: this.config.amqpSettings.queue.arguments
       };
 
       if (this.config.amqpSettings.queue.maxPriority !== null && this.config.amqpSettings.queue.maxPriority !== undefined) {
