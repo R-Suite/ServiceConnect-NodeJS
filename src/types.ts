@@ -8,7 +8,8 @@ export type ServiceConnectConfig = {
             exclusive?: boolean,
             autoDelete?: boolean,
             noAck?: boolean,
-            maxPriority?: number
+            maxPriority?: number,
+            arguments?: any
         },
         ssl?: {
             enabled?: boolean,

@@ -9,6 +9,7 @@ export declare type ServiceConnectConfig = {
             autoDelete?: boolean;
             noAck?: boolean;
             maxPriority?: number;
+            arguments?: any;
         };
         ssl?: {
             enabled?: boolean;
