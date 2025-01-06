@@ -128,7 +128,8 @@ export default class implements IClient {
           durable: this.config.amqpSettings.queue.durable,
           arguments: {
             "x-dead-letter-exchange": deadLetterExchange,
-            "x-message-ttl": this.config.amqpSettings.retryDelay
+            "x-message-ttl": this.config.amqpSettings.retryDelay,
+            ...(this.config.amqpSettings.queue.retryQueueArguments ?? {})
           }
         });
 
@@ -145,7 +146,10 @@ export default class implements IClient {
       // create error queue
       await channel.assertQueue(this.config.amqpSettings.errorQueue,  {
         durable: true,
-        autoDelete: false
+        autoDelete: false,
+        arguments: {
+          ...(this.config.amqpSettings.queue.utilityQueueArguments ?? {})
+        }
       });
 
       if (this.config.amqpSettings.auditEnabled)
@@ -160,7 +164,10 @@ export default class implements IClient {
         // create error audit
         await channel.assertQueue(this.config.amqpSettings.auditQueue,  {
           durable: true,
-          autoDelete: false
+          autoDelete: false,
+          arguments: {
+            ...(this.config.amqpSettings.queue.utilityQueueArguments ?? {})
+          }
         });
       }
 

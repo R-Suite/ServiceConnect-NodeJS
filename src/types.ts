@@ -50,7 +50,9 @@ export type BusConfig = {
             autoDelete: boolean,
             noAck: boolean,
             maxPriority: number | null,
-            arguments?: any
+            arguments?: any,
+            retryQueueArguments?: any
+            utilityQueueArguments?: any
         },
         ssl?: {
             enabled: boolean,

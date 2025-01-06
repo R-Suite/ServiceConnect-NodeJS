@@ -50,6 +50,8 @@ export declare type BusConfig = {
             noAck: boolean;
             maxPriority: number | null;
             arguments?: any;
+            retryQueueArguments?: any;
+            utilityQueueArguments?: any;
         };
         ssl?: {
             enabled: boolean;

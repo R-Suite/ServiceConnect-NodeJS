@@ -91,7 +91,8 @@ describe("RabbitMQ Client", function() {
             expect(assertQueueStub.getCall(0).args[1]).to.deep.equal({
                 durable: settingsObject.amqpSettings.queue.durable,
                 exclusive: settingsObject.amqpSettings.queue.exclusive,
-                autoDelete: settingsObject.amqpSettings.queue.autoDelete
+                autoDelete: settingsObject.amqpSettings.queue.autoDelete,
+                arguments: undefined
             });
             
         });
