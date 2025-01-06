@@ -9,7 +9,9 @@ export type ServiceConnectConfig = {
             autoDelete?: boolean,
             noAck?: boolean,
             maxPriority?: number,
-            arguments?: any
+            arguments?: any,
+            retryQueueArguments?: any
+            utilityQueueArguments?: any
         },
         ssl?: {
             enabled?: boolean,
