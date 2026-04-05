@@ -465,6 +465,7 @@ describe("RabbitMQ Client", function() {
             const callArgs = sendToQueueStub.getCall(0).args;
             const headers = callArgs[2].headers;
             expect(headers.customHeader).to.equal(123);
+            // DestinationAddress defaults to the endpoint (ep) in send method if not provided
             expect(headers.DestinationAddress).to.equal("TestEndpoint");
             expect(headers.MessageType).to.equal("Send");
             expect(headers.SourceAddress).to.equal("TestQueue");
