@@ -81,7 +81,7 @@ export class RequestReplyManager {
    * Clean up all pending requests and their timeouts
    */
   cleanupAll(): void {
-    for (const [messageId, config] of this.callbacks) {
+    for (const [_messageId, config] of this.callbacks) {
       if (config.timeout) {
         clearTimeout(config.timeout);
       }

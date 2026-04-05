@@ -18,7 +18,9 @@ export class ValidationError extends ServiceConnectError {
     // Validation errors are never retryable
     super(message, code, false, undefined);
     this.name = 'ValidationError';
-    this.field = field;
+    if (field !== undefined) {
+      (this as { field: string }).field = field;
+    }
   }
 }
 

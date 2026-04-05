@@ -25,8 +25,12 @@ export class MessageError extends ServiceConnectError {
   ) {
     super(message, code, isRetryable, cause);
     this.name = 'MessageError';
-    this.messageType = messageType;
-    this.messageId = messageId;
+    if (messageType !== undefined) {
+      (this as { messageType: string }).messageType = messageType;
+    }
+    if (messageId !== undefined) {
+      (this as { messageId: string }).messageId = messageId;
+    }
   }
 }
 

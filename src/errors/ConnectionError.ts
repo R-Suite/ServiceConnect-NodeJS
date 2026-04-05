@@ -19,7 +19,9 @@ export class ConnectionError extends ServiceConnectError {
   ) {
     super(message, code, isRetryable, cause);
     this.name = 'ConnectionError';
-    this.host = host;
+    if (host !== undefined) {
+      (this as { host: string }).host = host;
+    }
   }
 }
 

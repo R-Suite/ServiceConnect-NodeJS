@@ -21,7 +21,7 @@ export class ServiceConnectError extends Error {
   /**
    * Original error that caused this error (if any)
    */
-  readonly cause?: Error;
+  override readonly cause?: Error;
 
   /**
    * Creates a new ServiceConnectError
@@ -41,7 +41,9 @@ export class ServiceConnectError extends Error {
     this.code = code;
     this.isRetryable = isRetryable;
     this.timestamp = new Date();
-    this.cause = cause;
+    if (cause !== undefined) {
+      (this as { cause: Error }).cause = cause;
+    }
 
     // Maintain proper stack trace in V8 environments
     if (Error.captureStackTrace) {
