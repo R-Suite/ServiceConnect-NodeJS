@@ -106,6 +106,9 @@ export class RetryManager {
     // Using String() ensures we get the error message even for sinon stub errors
     headers.Exception = String(exception);
 
+    // Log the error before sending to error queue
+    this.config.logger?.error('Message processing failed, sending to error queue', exception);
+
     await channel.sendToQueue(
       this.config.amqpSettings.errorQueue,
       JSON.parse(rawMessage.content.toString()),

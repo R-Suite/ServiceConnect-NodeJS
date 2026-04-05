@@ -252,29 +252,7 @@ export default class RabbitMQClient implements IClient {
   async close(): Promise<void> {
     await this.messageProcessor.waitForProcessing();
 
-    // Backward compatibility: cancel consumers and delete retry queue if autoDelete enabled
-    const channel = this.connectionManager.getChannel();
-    if (channel) {
-      // Cancel all consumers
-      const internalChannel = (channel as unknown as { _channel: { cancel: () => void; deleteQueue: (queue: string) => void; consumers: Record<string, unknown>; close: () => void } })._channel;
-      if (internalChannel?.cancel) {
-        internalChannel.cancel();
-      }
-
-      // Delete retry queue if autoDelete is enabled
-      if (this.config.amqpSettings.queue.autoDelete) {
-        const retryQueue = `${this.config.amqpSettings.queue.name}.Retries`;
-        if (internalChannel?.deleteQueue) {
-          internalChannel.deleteQueue(retryQueue);
-        }
-      }
-
-      // Close the internal channel
-      if (internalChannel?.close) {
-        internalChannel.close();
-      }
-    }
-
+    // Close the connection gracefully - let connection manager handle cleanup
     await this.connectionManager.close();
   }
 

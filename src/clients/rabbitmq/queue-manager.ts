@@ -48,6 +48,18 @@ export class QueueManager {
     }
 
     this.logger?.info(`Creating queue: ${queueName}`);
+
+    // If autoDelete is enabled, try to delete existing queue first
+    // to avoid argument conflicts (like maxPriority changes)
+    if (this.config.amqpSettings.queue.autoDelete) {
+      try {
+        await channel.deleteQueue(queueName);
+        this.logger?.info(`Deleted existing queue: ${queueName}`);
+      } catch {
+        // Queue didn't exist, ignore error
+      }
+    }
+
     await channel.assertQueue(queueName, queueOpts);
   }
 
@@ -73,13 +85,21 @@ export class QueueManager {
    */
   private async createRetryQueue(channel: ConfirmChannel): Promise<void> {
     this.logger?.info('Creating retry queue');
-    
+
     const queueName = this.config.amqpSettings.queue.name;
     const deadLetterExchange = `${queueName}.Retries.DeadLetter`;
     const retryQueue = `${queueName}.Retries`;
 
     await channel.assertExchange(deadLetterExchange, 'direct', { durable: true });
-    
+
+    // Try to delete existing retry queue first to avoid TTL conflicts
+    try {
+      await channel.deleteQueue(retryQueue);
+      this.logger?.info(`Deleted existing retry queue: ${retryQueue}`);
+    } catch {
+      // Queue didn't exist, ignore error
+    }
+
     await channel.assertQueue(retryQueue, {
       durable: this.config.amqpSettings.queue.durable,
       arguments: {

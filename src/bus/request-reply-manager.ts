@@ -20,19 +20,23 @@ export class RequestReplyManager {
     callback: MessageHandler<Message>,
     timeoutMs: number | null
   ): void {
-    const config: RequestReplyCallback<Message> = {
+    const requestConfig: RequestReplyCallback<Message> = {
       endpointCount,
       processedCount: 0,
       callback
     };
 
     if (timeoutMs !== null && timeoutMs > 0) {
-      config.timeout = setTimeout(() => {
+      requestConfig.timeout = setTimeout(() => {
+        // Call callback with timeout indicator before cleanup
+        const timeoutMessage = { timedOut: true, messageId } as unknown as Message;
+        const timeoutHeaders = { ResponseMessageId: messageId, timedOut: true } as Record<string, unknown>;
+        void callback(timeoutMessage, timeoutHeaders, 'Timeout');
         this.cleanupRequest(messageId);
       }, timeoutMs);
     }
 
-    this.callbacks.set(messageId, config);
+    this.callbacks.set(messageId, requestConfig);
   }
 
   /**

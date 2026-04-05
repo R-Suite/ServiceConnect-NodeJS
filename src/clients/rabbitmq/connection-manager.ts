@@ -124,8 +124,16 @@ export class ConnectionManager {
    * Close connection gracefully
    */
   async close(): Promise<void> {
-    await this.channel?.close();
-    await this.connection?.close();
+    try {
+      await this.channel?.close();
+    } catch {
+      // Channel may already be closing/closed, ignore
+    }
+    try {
+      await this.connection?.close();
+    } catch {
+      // Connection may already be closing/closed, ignore
+    }
     this.channel = null;
     this.connection = null;
   }
