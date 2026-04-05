@@ -93,7 +93,7 @@ export default class RabbitMQClient implements IClient {
         await channel.sendToQueue(
           this.config.amqpSettings.auditQueue,
           content,
-          { headers, messageId: message.properties.messageId }
+          { headers, messageId: message.properties.messageId?.toString() }
         );
       }
     }
