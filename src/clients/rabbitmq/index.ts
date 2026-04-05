@@ -252,7 +252,32 @@ export default class RabbitMQClient implements IClient {
   async close(): Promise<void> {
     await this.messageProcessor.waitForProcessing();
 
-    // Close the connection gracefully - let connection manager handle cleanup
+    // Cancel channel consumers and cleanup queues before closing connection
+    const channelWrapper = this.connectionManager.getChannel();
+    if (channelWrapper) {
+      const underlyingChannel = (channelWrapper as unknown as { _channel: { cancel: (consumerTag: string) => Promise<unknown>; deleteQueue: (queue: string) => Promise<unknown>; consumers?: Record<string, unknown> } })._channel;
+
+      if (underlyingChannel) {
+        // Cancel any active consumers
+        if (underlyingChannel.consumers) {
+          for (const consumerTag of Object.keys(underlyingChannel.consumers)) {
+            await underlyingChannel.cancel(consumerTag);
+          }
+        }
+
+        // Delete retry queue if autoDelete is enabled
+        if (this.config.amqpSettings.queue.autoDelete && this.config.amqpSettings.maxRetries > 0) {
+          const retryQueue = `${this.config.amqpSettings.queue.name}.Retries`;
+          try {
+            await underlyingChannel.deleteQueue(retryQueue);
+          } catch {
+            // Ignore errors if queue doesn't exist
+          }
+        }
+      }
+    }
+
+    // Close the connection gracefully
     await this.connectionManager.close();
   }
 

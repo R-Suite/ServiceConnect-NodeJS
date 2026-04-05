@@ -895,6 +895,9 @@ describe("RabbitMQ Client", function() {
         it("should close the channel", async function(){
             var cancelStub = sandbox.stub(fakeChannel._channel, "cancel");
 
+            // Add a consumer to the channel so cancel gets called
+            fakeChannel._channel.consumers = { "test-consumer": {} };
+
             var client = new Client(settings() as any, async () =>{});
             client.channel = fakeChannel as any;
             
@@ -907,6 +910,9 @@ describe("RabbitMQ Client", function() {
             await client.close();
 
             assert.isTrue(cancelStub.called, "channel cancelled");
+
+            // Reset consumers after test
+            fakeChannel._channel.consumers = {};
         });
 
         it("should delete the retry queue if autoDelete is enabled", async function(){
