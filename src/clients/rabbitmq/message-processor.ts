@@ -10,6 +10,7 @@ export class MessageProcessor {
   private consumeCallback: ConsumeMessageCallback;
   private logger: BusConfig['logger'];
   private processing = 0;
+  private channel: ConfirmChannel | null = null;
 
   constructor(config: BusConfig, consumeCallback: ConsumeMessageCallback) {
     this.config = config;
@@ -21,6 +22,7 @@ export class MessageProcessor {
    * Start consuming messages from the queue
    */
   async startConsuming(channel: ConfirmChannel): Promise<void> {
+    this.channel = channel;
     await channel.consume(
       this.config.amqpSettings.queue.name,
       this.handleMessage.bind(this),
@@ -82,9 +84,9 @@ export class MessageProcessor {
   /**
    * Acknowledge message if noAck is false
    */
-  private ackMessage(_rawMessage: ConsumeMessage): void {
-    if (!this.config.amqpSettings.queue.noAck) {
-      // Channel ack is handled by the wrapper
+  private ackMessage(rawMessage: ConsumeMessage): void {
+    if (!this.config.amqpSettings.queue.noAck && this.channel) {
+      this.channel.ack(rawMessage);
     }
   }
 
