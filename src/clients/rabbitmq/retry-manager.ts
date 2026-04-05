@@ -102,7 +102,9 @@ export class RetryManager {
     exception: unknown
   ): Promise<void> {
     const headers = rawMessage.properties.headers ?? {};
-    headers.Exception = exception;
+    // Convert exception to string for header compatibility
+    // Using String() ensures we get the error message even for sinon stub errors
+    headers.Exception = String(exception);
 
     await channel.sendToQueue(
       this.config.amqpSettings.errorQueue,

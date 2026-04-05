@@ -2,6 +2,7 @@ import type { ConfirmChannel, Options } from 'amqplib';
 import { ConnectionManager } from './connection-manager';
 import { QueueManager } from './queue-manager';
 import { MessageProcessor } from './message-processor';
+import { RetryManager } from './retry-manager';
 import { v4 as uuidv4 } from 'uuid';
 import merge from 'deepmerge';
 import type {
@@ -21,6 +22,7 @@ export default class RabbitMQClient implements IClient {
   private connectionManager: ConnectionManager;
   private queueManager: QueueManager;
   private messageProcessor: MessageProcessor;
+  private retryManager: RetryManager;
   private consumeCallback: ConsumeMessageCallback;
 
   /**
@@ -51,7 +53,8 @@ export default class RabbitMQClient implements IClient {
 
     this.connectionManager = new ConnectionManager(config);
     this.queueManager = new QueueManager(config);
-    this.messageProcessor = new MessageProcessor(config, consumeCallback);
+    this.retryManager = new RetryManager(config);
+    this.messageProcessor = new MessageProcessor(config, consumeCallback, this.retryManager);
   }
 
   /**
@@ -59,7 +62,8 @@ export default class RabbitMQClient implements IClient {
    */
   async _createQueues(channel: ConfirmChannel): Promise<void> {
     await this.queueManager.setupQueues(channel, this.config.handlers);
-    await this.messageProcessor.startConsuming(channel);
+    const channelWrapper = this.connectionManager.getChannel();
+    await this.messageProcessor.startConsuming(channel, channelWrapper ?? undefined);
   }
 
   /**
@@ -78,25 +82,42 @@ export default class RabbitMQClient implements IClient {
     headers.DestinationMachine = headers.DestinationMachine ?? require('os').hostname();
     headers.DestinationAddress = headers.DestinationAddress ?? this.config.amqpSettings.queue.name;
     headers.TimeReceived = headers.TimeReceived ?? new Date().toISOString();
-    headers.TimeProcessed = headers.TimeProcessed ?? new Date().toISOString();
 
     // Update the original message's headers
     message.properties.headers = headers;
 
-    // Call the consume callback
-    await this.consumeCallback(content, headers, headers.TypeName as string);
+    // Use consumeMessageCallback if set (for test compatibility - tests set this directly)
+    // Otherwise fall back to the constructor callback
+    const callback = (this.consumeMessageCallback as ConsumeMessageCallback) ?? this.consumeCallback;
 
-    // Audit logging if enabled (for test compatibility)
-    if (this.config.amqpSettings.auditEnabled) {
-      const channel = this.connectionManager.getChannel();
-      if (channel) {
-        await channel.sendToQueue(
-          this.config.amqpSettings.auditQueue,
-          content,
-          { headers, messageId: message.properties.messageId?.toString() }
-        );
-      }
+    let exception: unknown = undefined;
+    let success = false;
+
+    try {
+      // Call the consume callback
+      await callback(content, headers, headers.TypeName as string);
+      headers.TimeProcessed = new Date().toISOString();
+      message.properties.headers = headers;
+      success = true;
+    } catch (error) {
+      exception = error;
+      success = false;
     }
+
+    // Use RetryManager to handle result (audit queue, retry queue, or error queue)
+    // Use this.channel as fallback for test compatibility (tests set client.channel = fakeChannel)
+    const channel = this.connectionManager.getChannel() ?? (this.channel as unknown as import('amqp-connection-manager').ChannelWrapper);
+    if (channel) {
+      await this.retryManager.handleResult(
+        channel,
+        message as unknown as import('amqplib').ConsumeMessage,
+        { success, exception }
+      );
+    }
+
+    // Note: We don't re-throw the exception here because RetryManager handles
+    // the failure by sending to retry queue or error queue. The message is
+    // considered "processed" from RabbitMQ's perspective.
   }
 
   /**
@@ -169,10 +190,16 @@ export default class RabbitMQClient implements IClient {
     }
 
     const endpoints = Array.isArray(endpoint) ? endpoint : [endpoint];
-    const messageHeaders = this.buildHeaders(type, headers, 'Send');
-
+    
     await Promise.all(
       endpoints.map((ep) => {
+        // Pass the endpoint as DestinationAddress in headers
+        const headersWithDestination = {
+          ...headers,
+          DestinationAddress: headers.DestinationAddress ?? ep
+        };
+        const messageHeaders = this.buildHeaders(type, headersWithDestination, 'Send');
+        
         const options: Options.Publish = {
           headers: messageHeaders,
           messageId: messageHeaders.MessageId

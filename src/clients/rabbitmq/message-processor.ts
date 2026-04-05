@@ -1,6 +1,8 @@
 import type { ConsumeMessage, ConfirmChannel } from 'amqplib';
+import type { ChannelWrapper } from 'amqp-connection-manager';
 import { MessageError, MessageErrorCodes } from '../../errors';
 import type { BusConfig, ConsumeMessageCallback, Message } from '../../types';
+import { RetryManager } from './retry-manager';
 
 /**
  * Processes incoming RabbitMQ messages with error handling.
@@ -8,21 +10,25 @@ import type { BusConfig, ConsumeMessageCallback, Message } from '../../types';
 export class MessageProcessor {
   private config: BusConfig;
   private consumeCallback: ConsumeMessageCallback;
+  private retryManager: RetryManager;
   private logger: BusConfig['logger'];
   private processing = 0;
   private channel: ConfirmChannel | null = null;
+  private channelWrapper: ChannelWrapper | null = null;
 
-  constructor(config: BusConfig, consumeCallback: ConsumeMessageCallback) {
+  constructor(config: BusConfig, consumeCallback: ConsumeMessageCallback, retryManager: RetryManager) {
     this.config = config;
     this.consumeCallback = consumeCallback;
+    this.retryManager = retryManager;
     this.logger = config.logger;
   }
 
   /**
    * Start consuming messages from the queue
    */
-  async startConsuming(channel: ConfirmChannel): Promise<void> {
+  async startConsuming(channel: ConfirmChannel, channelWrapper?: ChannelWrapper): Promise<void> {
     this.channel = channel;
+    this.channelWrapper = channelWrapper ?? null;
     await channel.consume(
       this.config.amqpSettings.queue.name,
       this.handleMessage.bind(this),
@@ -61,22 +67,39 @@ export class MessageProcessor {
    */
   private async processMessage(rawMessage: ConsumeMessage): Promise<void> {
     const headers = rawMessage.properties.headers ?? {};
-    
+    const typeName = headers.TypeName as string;
+
+    let exception: unknown = undefined;
+    let success = false;
+
     try {
       const message = JSON.parse(rawMessage.content.toString()) as Message;
-      
-      await this.consumeCallback(
-        message,
-        headers,
-        headers.TypeName as string
-      );
+
+      await this.consumeCallback(message, headers, typeName);
+      headers.TimeProcessed = new Date().toISOString();
+      success = true;
     } catch (error) {
+      exception = error;
+      success = false;
+    }
+
+    // Use RetryManager to handle result (audit queue, retry queue, or error queue)
+    if (this.channelWrapper) {
+      await this.retryManager.handleResult(
+        this.channelWrapper,
+        rawMessage,
+        { success, exception }
+      );
+    }
+
+    // If processing failed, throw error for the caller to handle
+    if (!success) {
       throw new MessageError(
         'Failed to process message',
         MessageErrorCodes.HANDLER_FAILED,
         false,
-        error as Error,
-        headers.TypeName as string
+        exception as Error,
+        typeName
       );
     }
   }
