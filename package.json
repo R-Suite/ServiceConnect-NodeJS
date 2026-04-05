@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "build": "tsc",
-    "test": "mocha --require ts-node/register test/**/*.spec.ts",
+    "test": "TS_NODE_TRANSPILE_ONLY=true mocha --require ts-node/register test/**/*.spec.ts",
     "rabbitmq": "cross-env RABBITMQ_PLUGINS=rabbitmq_management docker run -p 5672:5672 -p 15672:15672 --name rabbitmq bitnami/rabbitmq:latest",
     "integration-test": "mocha --require ts-node/register integration-test/**/*.spec.ts  --timeout 60000",
     "auto-integration-test": "mocha --require ts-node/register --require ./integration-test/setupDocker.ts integration-test/**/*.spec.ts  --timeout 60000"

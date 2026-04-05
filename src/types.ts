@@ -105,11 +105,11 @@ export interface QueueConfig {
  */
 export interface SSLConfig {
   enabled?: boolean;
-  key?: string;
-  passphrase?: string;
-  cert?: string;
+  key?: string | null;
+  passphrase?: string | null;
+  cert?: string | null;
   ca?: string[];
-  pfx?: string;
+  pfx?: string | null;
   fail_if_no_peer_cert?: boolean;
   verify?: string;
 }

@@ -16,7 +16,11 @@ export default function settings(): ServiceConnectConfig {
       },
       ssl: {
         enabled: false,
+        key: null,
+        passphrase: null,
+        cert: null,
         ca: [],
+        pfx: null,
         fail_if_no_peer_cert: false,
         verify: 'verify_peer'
       },
