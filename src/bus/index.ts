@@ -22,32 +22,12 @@ import type {
 export class Bus {
   public id: string;
   public initialized = false;
-  public client = null;
   public config: BusConfig;
 
   private core: BusCore;
   private handlerManager: MessageHandlerManager;
   private filterManager: FilterManager;
   private requestReplyManager: RequestReplyManager;
-
-  /**
-   * Backward compatibility: expose request/reply callbacks for tests
-   */
-  get requestReplyCallbacks(): Record<string, unknown> {
-    const map = (this.requestReplyManager as unknown as { callbacks: Map<string, unknown> }).callbacks;
-    const obj: Record<string, unknown> = {};
-    for (const [key, value] of map) {
-      obj[key] = value;
-    }
-    return obj;
-  }
-
-  /**
-   * Backward compatibility: expose internal consume message method for tests
-   */
-  _consumeMessage(message: Message, headers: Record<string, unknown>, type: string): Promise<void> {
-    return this.consumeMessage(message, headers, type);
-  }
 
   constructor(config: ServiceConnectConfig) {
     this.id = uuidv4();
@@ -98,7 +78,6 @@ export class Bus {
    */
   async init(): Promise<void> {
     await this.core.init(this.consumeMessage.bind(this));
-    this.client = this.core.client as unknown as null;
     this.initialized = this.core.initialized;
   }
 
@@ -109,7 +88,7 @@ export class Bus {
     messageType: string,
     handler: MessageHandler<T>
   ): Promise<void> {
-    const normalizedType = messageType.replace(/\./g, '');
+    const normalizedType = messageType.replaceAll('.', '');
 
     // Start consuming the type if not wildcard
     if (normalizedType !== '*' && this.core.client) {
@@ -117,14 +96,6 @@ export class Bus {
     }
 
     this.handlerManager.addHandler(messageType, handler);
-
-    // Sync to config for backward compatibility with tests
-    const configHandlers = this.config.handlers[messageType];
-    if (configHandlers === undefined) {
-      this.config.handlers[messageType] = [handler as MessageHandler<Message>];
-    } else {
-      configHandlers.push(handler as MessageHandler<Message>);
-    }
   }
 
   /**
@@ -135,15 +106,6 @@ export class Bus {
     handler: MessageHandler<T>
   ): Promise<void> {
     this.handlerManager.removeHandler(messageType, handler);
-
-    // Sync to config for backward compatibility with tests
-    const handlers = this.config.handlers[messageType];
-    if (handlers) {
-      const index = handlers.indexOf(handler as MessageHandler<Message>);
-      if (index !== -1) {
-        handlers.splice(index, 1);
-      }
-    }
 
     // Stop consuming if no more handlers
     if (messageType !== '*' && this.handlerManager.hasNoHandlers(messageType)) {
@@ -304,7 +266,6 @@ export class Bus {
     this.requestReplyManager.cleanupAll();
     await this.core.close();
     this.initialized = false;
-    this.client = null;
   }
 
   /**

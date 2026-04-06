@@ -6,7 +6,6 @@ import type { ServiceConnectConfig, BusConfig, Message, MessageHandler, MessageH
 export declare class Bus {
     id: string;
     initialized: boolean;
-    client: null;
     config: BusConfig;
     private core;
     private handlerManager;

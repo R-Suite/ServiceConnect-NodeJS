@@ -1,18 +1,23 @@
 import type { ConfirmChannel } from 'amqplib';
+import type { ChannelWrapper } from 'amqp-connection-manager';
 import type { BusConfig, ConsumeMessageCallback } from '../../types';
+import { RetryManager } from './retry-manager';
 /**
  * Processes incoming RabbitMQ messages with error handling.
  */
 export declare class MessageProcessor {
     private config;
     private consumeCallback;
+    private retryManager;
     private logger;
     private processing;
-    constructor(config: BusConfig, consumeCallback: ConsumeMessageCallback);
+    private channel;
+    private channelWrapper;
+    constructor(config: BusConfig, consumeCallback: ConsumeMessageCallback, retryManager: RetryManager);
     /**
      * Start consuming messages from the queue
      */
-    startConsuming(channel: ConfirmChannel): Promise<void>;
+    startConsuming(channel: ConfirmChannel, channelWrapper?: ChannelWrapper): Promise<void>;
     /**
      * Handle incoming message
      */

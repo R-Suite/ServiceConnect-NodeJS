@@ -8,6 +8,7 @@ export default class RabbitMQClient implements IClient {
     private connectionManager;
     private queueManager;
     private messageProcessor;
+    private retryManager;
     constructor(config: BusConfig, consumeCallback: ConsumeMessageCallback);
     /**
      * Connect to RabbitMQ and setup queues

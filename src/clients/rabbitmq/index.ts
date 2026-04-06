@@ -23,33 +23,9 @@ export default class RabbitMQClient implements IClient {
   private queueManager: QueueManager;
   private messageProcessor: MessageProcessor;
   private retryManager: RetryManager;
-  private consumeCallback: ConsumeMessageCallback;
-
-  /**
-   * Backward compatibility: expose underlying connection for tests
-   */
-  connection: unknown = null;
-
-  /**
-   * Backward compatibility: expose underlying channel for tests
-   */
-  channel: unknown = null;
-
-  /**
-   * Backward compatibility: expose consume message callback for tests
-   */
-  _consumeMessage: unknown = null;
-
-  /**
-   * Backward compatibility: expose consumeMessageCallback for tests
-   */
-  consumeMessageCallback: unknown = null;
 
   constructor(config: BusConfig, consumeCallback: ConsumeMessageCallback) {
     this.config = config;
-    this.consumeCallback = consumeCallback;
-    this._consumeMessage = this.handleMessage.bind(this);
-    this.consumeMessageCallback = consumeCallback;
 
     this.connectionManager = new ConnectionManager(config);
     this.queueManager = new QueueManager(config);
@@ -58,91 +34,15 @@ export default class RabbitMQClient implements IClient {
   }
 
   /**
-   * Backward compatibility: manually create queues for tests
-   */
-  async _createQueues(channel: ConfirmChannel): Promise<void> {
-    await this.queueManager.setupQueues(channel, this.config.handlers);
-    const channelWrapper = this.connectionManager.getChannel();
-    await this.messageProcessor.startConsuming(channel, channelWrapper ?? undefined);
-  }
-
-  /**
-   * Backward compatibility: manually process a message for tests
-   */
-  async _processMessage(rawMessage: unknown): Promise<void> {
-    const message = rawMessage as { content: Buffer; properties: { headers: Record<string, unknown>; messageId?: number } };
-    const content = JSON.parse(message.content.toString());
-    const headers = { ...message.properties.headers };
-
-    if (!headers.TypeName) {
-      throw new Error('Message does not contain TypeName header');
-    }
-
-    // Set standard headers expected by tests
-    headers.DestinationMachine = headers.DestinationMachine ?? require('os').hostname();
-    headers.DestinationAddress = headers.DestinationAddress ?? this.config.amqpSettings.queue.name;
-    headers.TimeReceived = headers.TimeReceived ?? new Date().toISOString();
-
-    // Update the original message's headers
-    message.properties.headers = headers;
-
-    // Use consumeMessageCallback if set (for test compatibility - tests set this directly)
-    // Otherwise fall back to the constructor callback
-    const callback = (this.consumeMessageCallback as ConsumeMessageCallback) ?? this.consumeCallback;
-
-    let exception: unknown = undefined;
-    let success = false;
-
-    try {
-      // Call the consume callback
-      await callback(content, headers, headers.TypeName as string);
-      headers.TimeProcessed = new Date().toISOString();
-      message.properties.headers = headers;
-      success = true;
-    } catch (error) {
-      exception = error;
-      success = false;
-    }
-
-    // Use RetryManager to handle result (audit queue, retry queue, or error queue)
-    // Use this.channel as fallback for test compatibility (tests set client.channel = fakeChannel)
-    const channel = this.connectionManager.getChannel() ?? (this.channel as unknown as import('amqp-connection-manager').ChannelWrapper);
-    if (channel) {
-      await this.retryManager.handleResult(
-        channel,
-        message as unknown as import('amqplib').ConsumeMessage,
-        { success, exception }
-      );
-    }
-
-    // Note: We don't re-throw the exception here because RetryManager handles
-    // the failure by sending to retry queue or error queue. The message is
-    // considered "processed" from RabbitMQ's perspective.
-  }
-
-  /**
-   * Handle incoming message from consume callback
-   */
-  private async handleMessage(rawMessage: unknown): Promise<void> {
-    await this._processMessage(rawMessage);
-  }
-
-  /**
    * Connect to RabbitMQ and setup queues
    */
   async connect(): Promise<void> {
     await this.connectionManager.connect();
 
-    // Expose connection for backward compatibility
-    this.connection = (this.connectionManager as unknown as { connection: unknown }).connection;
-
     await this.connectionManager.createChannel(async (channel) => {
       await this.queueManager.setupQueues(channel, this.config.handlers);
       await this.messageProcessor.startConsuming(channel);
     });
-
-    // Expose channel for backward compatibility
-    this.channel = this.connectionManager.getChannel();
   }
 
   /**
