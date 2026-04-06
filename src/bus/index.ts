@@ -328,7 +328,7 @@ export class Bus {
       );
     } catch (error) {
       if (this.config.logger) {
-        this.config.logger.error('Error processing message', error);
+        this.config.logger?.error('Error processing message', error);
       }
       throw error;
     }

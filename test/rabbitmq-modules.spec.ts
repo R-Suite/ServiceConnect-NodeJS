@@ -362,13 +362,16 @@ describe("RabbitMQ Modules", function() {
                 ));
             });
 
-            it("should delete existing queue if autoDelete is enabled", async function() {
+            it("should create queue without deleting when autoDelete is enabled", async function() {
                 mockConfig.amqpSettings.queue.autoDelete = true;
                 queueManager = new QueueManager(mockConfig);
 
                 await queueManager.setupQueues(mockChannel as any, {});
 
-                assert.isTrue(mockChannel.deleteQueue.calledWith(mockConfig.amqpSettings.queue.name));
+                // With the new implementation, we try to assert first and only delete
+                // if there's an argument mismatch, so we expect assertQueue to be called
+                // and deleteQueue should not be called in the normal case
+                assert.isTrue(mockChannel.assertQueue.calledWith(mockConfig.amqpSettings.queue.name));
             });
 
             it("should include maxPriority if configured", async function() {

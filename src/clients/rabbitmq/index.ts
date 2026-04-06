@@ -41,7 +41,8 @@ export default class RabbitMQClient implements IClient {
 
     await this.connectionManager.createChannel(async (channel) => {
       await this.queueManager.setupQueues(channel, this.config.handlers);
-      await this.messageProcessor.startConsuming(channel);
+      const channelWrapper = this.connectionManager.getChannel();
+      await this.messageProcessor.startConsuming(channel, channelWrapper ?? undefined);
     });
   }
 
@@ -55,6 +56,7 @@ export default class RabbitMQClient implements IClient {
       return;
     }
 
+    // Use addSetup to ensure the setup runs on the current channel
     await channel.addSetup(async (ch: ConfirmChannel) => {
       await this.queueManager.consumeType(ch, type);
     });
@@ -70,6 +72,7 @@ export default class RabbitMQClient implements IClient {
       return;
     }
 
+    // Remove the setup to unbind the exchange
     await channel.removeSetup(async (ch: ConfirmChannel) => {
       await this.queueManager.removeType(ch, type);
     });

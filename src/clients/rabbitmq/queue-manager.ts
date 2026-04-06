@@ -49,18 +49,29 @@ export class QueueManager {
 
     this.logger?.info(`Creating queue: ${queueName}`);
 
-    // If autoDelete is enabled, try to delete existing queue first
-    // to avoid argument conflicts (like maxPriority changes)
-    if (this.config.amqpSettings.queue.autoDelete) {
-      try {
-        await channel.deleteQueue(queueName);
-        this.logger?.info(`Deleted existing queue: ${queueName}`);
-      } catch {
-        // Queue didn't exist, ignore error
+    // When multiple consumers share a queue (competing consumers pattern),
+    // we should only delete the queue if it truly doesn't exist or if we're
+    // sure no other consumer is using it. This is tricky to determine reliably,
+    // so we use a simpler approach: try to assert the queue, and if it fails
+    // due to argument mismatch (another consumer created it with different args),
+    // we attempt to delete and recreate.
+    try {
+      await channel.assertQueue(queueName, queueOpts);
+    } catch (err: unknown) {
+      // If assertQueue fails, it might be because the queue exists with different arguments
+      // (e.g., different queue properties like maxPriority). In this case, try to delete
+      // and recreate, but only if autoDelete is enabled.
+      if (this.config.amqpSettings.queue.autoDelete) {
+        try {
+          await channel.deleteQueue(queueName);
+          this.logger?.info(`Deleted existing queue with mismatched args: ${queueName}`);
+          await channel.assertQueue(queueName, queueOpts);
+        } catch {
+          // If delete also fails (e.g., queue in use), fall back to just using existing
+          // This allows competing consumers to share the existing queue
+        }
       }
     }
-
-    await channel.assertQueue(queueName, queueOpts);
   }
 
   /**

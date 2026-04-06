@@ -149,7 +149,9 @@ describe("Scatter Gather", () => {
             await consumer2.addHandler("TestMessageType", messageHandler2);
 
             const replyCallback : MessageHandler<Message> = async (message : {[k:string]: any}, headers?: {[k: string]: unknown;}, type?: string, replyCallback?: (type: string, message: any) => void) => {
-                responseCount++;                
+                if (!headers?.timedOut) {
+                    responseCount++;
+                }
             };
 
             for (let i = 0; i < 10; i++) {

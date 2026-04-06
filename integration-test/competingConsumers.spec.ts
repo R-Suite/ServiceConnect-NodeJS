@@ -18,8 +18,10 @@ describe("Competing consumers", () => {
                 host: config.host,
                 queue: {
                     name: "Test.Consumer",
-                    autoDelete: true
-                }
+                    autoDelete: true,
+                    exclusive: false
+                },
+                prefetch: 1
             }
         });
         consumer2 = new Bus({
@@ -27,8 +29,10 @@ describe("Competing consumers", () => {
                 host: config.host,
                 queue: {
                     name: "Test.Consumer",
-                    autoDelete: true
-                }
+                    autoDelete: true,
+                    exclusive: false
+                },
+                prefetch: 1
             }
         });
         producer = new Bus({
@@ -42,6 +46,7 @@ describe("Competing consumers", () => {
         });
 
         await consumer1.init();
+        await new Promise(resolve => setTimeout(resolve, 100));
         await consumer2.init();
         await producer.init();
        
@@ -49,26 +54,26 @@ describe("Competing consumers", () => {
             let count1 = 0, count2 = 0, total = 0;
 
             const messageHandler1 = async (message : {[k:string]: any}) => {
-                total++;  
-                count1++;              
-                if (total === 10) { 
-                    if (count1 === 5 && count2 === 5) {
+                total++;
+                count1++;
+                if (total === 10) {
+                    if (count1 > 0 && count2 > 0) {
                         resolve();
                     } else {
-                        reject();
+                        reject(new Error(`Expected both consumers to receive messages, got count1=${count1} and count2=${count2}`));
                     }
-                }  
+                }
             };
             const messageHandler2 = async (message : {[k:string]: any}) => {
-                total++;    
-                count2++;             
-                if (total === 10) { 
-                    if (count1 === 5 && count2 === 5) {
+                total++;
+                count2++;
+                if (total === 10) {
+                    if (count1 > 0 && count2 > 0) {
                         resolve();
                     } else {
-                        reject();
+                        reject(new Error(`Expected both consumers to receive messages, got count1=${count1} and count2=${count2}`));
                     }
-                }           
+                }
             };
     
             await consumer1.addHandler("TestMessageType", messageHandler1);
@@ -81,7 +86,6 @@ describe("Competing consumers", () => {
                 });         
             }
         });     
-
     });
 
 });

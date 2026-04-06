@@ -92,8 +92,9 @@ export class MessageProcessor {
       );
     }
 
-    // If processing failed, throw error for the caller to handle
-    if (!success) {
+    // If processing failed and there's no retry manager, throw error for the caller to handle
+    // When channelWrapper exists, we've already handled the failure through RetryManager
+    if (!success && !this.channelWrapper) {
       throw new MessageError(
         'Failed to process message',
         MessageErrorCodes.HANDLER_FAILED,
