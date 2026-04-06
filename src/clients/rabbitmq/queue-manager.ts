@@ -7,10 +7,32 @@ import type { BusConfig } from '../../types';
 export class QueueManager {
   private config: BusConfig;
   private logger: BusConfig['logger'];
+  private setupErrors: Map<string, Error> = new Map();
 
   constructor(config: BusConfig) {
     this.config = config;
     this.logger = config.logger;
+  }
+
+  /**
+   * Check if there were setup errors
+   */
+  hasSetupErrors(): boolean {
+    return this.setupErrors.size > 0;
+  }
+
+  /**
+   * Get setup errors
+   */
+  getSetupErrors(): Map<string, Error> {
+    return this.setupErrors;
+  }
+
+  /**
+   * Clear setup errors
+   */
+  clearSetupErrors(): void {
+    this.setupErrors.clear();
   }
 
   /**
@@ -66,10 +88,13 @@ export class QueueManager {
           await channel.deleteQueue(queueName);
           this.logger?.info(`Deleted existing queue with mismatched args: ${queueName}`);
           await channel.assertQueue(queueName, queueOpts);
-        } catch {
-          // If delete also fails (e.g., queue in use), fall back to just using existing
-          // This allows competing consumers to share the existing queue
+        } catch (deleteErr: unknown) {
+          // If delete also fails (e.g., queue in use), log the error but continue
+          this.setupErrors.set(queueName, deleteErr as Error);
+          this.logger?.error(`Failed to delete queue ${queueName}:`, deleteErr);
         }
+      } else {
+        this.setupErrors.set(queueName, err as Error);
       }
     }
   }

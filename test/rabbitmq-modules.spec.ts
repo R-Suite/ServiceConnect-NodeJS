@@ -46,7 +46,11 @@ describe("RabbitMQ Modules", function() {
                 errorQueue: 'TestQueue.Errors',
                 auditQueue: 'TestQueue.Audit',
                 auditEnabled: false,
-                prefetch: 100
+                prefetch: 100,
+                connectionTimeout: 30000,
+                connectionRetryDelay: 30000,
+                connectionMaxRetries: 5,
+                defaultRequestTimeout: 10000
             },
             filters: {
                 after: [],

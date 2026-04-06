@@ -12,8 +12,16 @@ import type {
   Message,
   MessageHandler,
   MessageHeaders,
+  MessageId,
   ReplyCallback
 } from '../types';
+
+/**
+ * Create a branded MessageId from a string
+ */
+function createMessageId(id: string): MessageId {
+  return id as MessageId;
+}
 
 /**
  * Bus class - main entry point for messaging operations.
@@ -207,7 +215,7 @@ export class Bus {
       null
     );
 
-    headers.RequestMessageId = messageId as unknown as import('../types').MessageId;
+    headers.RequestMessageId = createMessageId(messageId);
 
     if (this.core.client) {
       await this.core.client.send(
@@ -227,7 +235,7 @@ export class Bus {
     message: T1,
     callback: MessageHandler<T2>,
     expected: number | null = null,
-    timeout: number | null = 10000,
+    timeout: number | null = null,
     headers: Partial<MessageHeaders> = {}
   ): Promise<void> {
     const shouldPublish = await this.filterManager.executeOutgoing(
@@ -244,15 +252,16 @@ export class Bus {
 
     const messageId = uuidv4();
     const expectedCount = expected === null ? -1 : expected;
+    const timeoutMs = timeout ?? this.config.amqpSettings.defaultRequestTimeout;
 
     this.requestReplyManager.registerRequest(
       messageId,
       expectedCount,
       callback as MessageHandler<Message>,
-      timeout
+      timeoutMs
     );
 
-    headers.RequestMessageId = messageId as unknown as import('../types').MessageId;
+    headers.RequestMessageId = createMessageId(messageId);
 
     if (this.core.client) {
       await this.core.client.publish(type, message, headers as MessageHeaders);
@@ -330,6 +339,7 @@ export class Bus {
       if (this.config.logger) {
         this.config.logger?.error('Error processing message', error);
       }
+      // Re-throw to let the MessageProcessor handle retry logic
       throw error;
     }
   }

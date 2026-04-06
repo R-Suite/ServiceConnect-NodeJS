@@ -1,17 +1,43 @@
 import type { ConfirmChannel, Options } from 'amqplib';
+import { ChannelWrapper } from 'amqp-connection-manager';
 import { ConnectionManager } from './connection-manager';
 import { QueueManager } from './queue-manager';
 import { MessageProcessor } from './message-processor';
 import { RetryManager } from './retry-manager';
 import { v4 as uuidv4 } from 'uuid';
 import merge from 'deepmerge';
+import { ValidationError, ValidationErrorCodes, ConnectionError, ConnectionErrorCodes } from '../../errors';
 import type {
   BusConfig,
   ConsumeMessageCallback,
   IClient,
   Message,
-  MessageHeaders
+  MessageHeaders,
+  MessageId
 } from '../../types';
+
+/**
+ * Create a branded MessageId from a string
+ */
+function createMessageId(id: string): MessageId {
+  return id as MessageId;
+}
+
+/**
+ * Interface for accessing internal amqplib channel methods
+ */
+interface AmqplibChannel {
+  cancel(consumerTag: string): Promise<unknown>;
+  deleteQueue(queue: string): Promise<unknown>;
+  consumers?: Record<string, unknown>;
+}
+
+/**
+ * Interface for accessing ChannelWrapper internals
+ */
+interface ChannelWrapperInternal {
+  _channel?: AmqplibChannel;
+}
 
 /**
  * RabbitMQ client implementation of IClient interface.
@@ -23,6 +49,7 @@ export default class RabbitMQClient implements IClient {
   private queueManager: QueueManager;
   private messageProcessor: MessageProcessor;
   private retryManager: RetryManager;
+  private assertedExchanges: Set<string> = new Set();
 
   constructor(config: BusConfig, consumeCallback: ConsumeMessageCallback) {
     this.config = config;
@@ -89,32 +116,74 @@ export default class RabbitMQClient implements IClient {
   ): Promise<void> {
     const channel = this.connectionManager.getChannel();
     if (!channel) {
-      throw new Error('Not connected');
+      throw new ConnectionError(
+        'Not connected to RabbitMQ',
+        ConnectionErrorCodes.NOT_CONNECTED,
+        false
+      );
     }
 
     const endpoints = Array.isArray(endpoint) ? endpoint : [endpoint];
     
+    if (endpoints.length === 0) {
+      throw new ValidationError(
+        'At least one endpoint must be provided',
+        ValidationErrorCodes.INVALID_ENDPOINT,
+        'endpoint'
+      );
+    }
+
+    for (const ep of endpoints) {
+      if (!ep || ep.trim() === '') {
+        throw new ValidationError(
+          'Endpoint cannot be empty',
+          ValidationErrorCodes.INVALID_ENDPOINT,
+          'endpoint'
+        );
+      }
+    }
+    
     await Promise.all(
       endpoints.map((ep) => {
-        // Pass the endpoint as DestinationAddress in headers
-        const headersWithDestination = {
-          ...headers,
-          DestinationAddress: headers.DestinationAddress ?? ep
-        };
-        const messageHeaders = this.buildHeaders(type, headersWithDestination, 'Send');
-        
-        const options: Options.Publish = {
-          headers: messageHeaders,
-          messageId: messageHeaders.MessageId
-        };
-        
-        if (messageHeaders.Priority !== undefined) {
-          options.priority = messageHeaders.Priority;
-        }
-
-        return channel.sendToQueue(ep, message, options);
+        return this.sendToEndpoint(channel, ep, type, message, headers);
       })
     );
+  }
+
+  /**
+   * Send a message to a single endpoint
+   */
+  private async sendToEndpoint<T extends Message>(
+    channel: ChannelWrapper,
+    endpoint: string,
+    type: string,
+    message: T,
+    headers: MessageHeaders
+  ): Promise<void> {
+    const headersWithDestination = {
+      ...headers,
+      DestinationAddress: headers.DestinationAddress ?? endpoint
+    };
+    const messageHeaders = this.buildHeaders(type, headersWithDestination, 'Send');
+    const options = this.buildPublishOptions(messageHeaders);
+
+    await channel.sendToQueue(endpoint, message, options);
+  }
+
+  /**
+   * Build publish options from message headers
+   */
+  private buildPublishOptions(messageHeaders: MessageHeaders): Options.Publish {
+    const options: Options.Publish = {
+      headers: messageHeaders,
+      messageId: messageHeaders.MessageId
+    };
+
+    if (messageHeaders.Priority !== undefined) {
+      options.priority = messageHeaders.Priority;
+    }
+
+    return options;
   }
 
   /**
@@ -127,24 +196,32 @@ export default class RabbitMQClient implements IClient {
   ): Promise<void> {
     const channel = this.connectionManager.getChannel();
     if (!channel) {
-      throw new Error('Not connected');
+      throw new ConnectionError(
+        'Not connected to RabbitMQ',
+        ConnectionErrorCodes.NOT_CONNECTED,
+        false
+      );
+    }
+
+    if (!type || type.trim() === '') {
+      throw new ValidationError(
+        'Message type cannot be empty',
+        ValidationErrorCodes.INVALID_MESSAGE_TYPE,
+        'type'
+      );
     }
 
     const normalizedType = type.replace(/\./g, '');
     const messageHeaders = this.buildHeaders(type, headers, 'Publish');
+    const options = this.buildPublishOptions(messageHeaders);
 
-    const options: Options.Publish = {
-      headers: messageHeaders,
-      messageId: messageHeaders.MessageId
-    };
-
-    if (messageHeaders.Priority !== undefined) {
-      options.priority = messageHeaders.Priority;
+    // Only assert exchange if not already asserted
+    if (!this.assertedExchanges.has(normalizedType)) {
+      await channel.addSetup(async (ch: ConfirmChannel) => {
+        await ch.assertExchange(normalizedType, 'fanout', { durable: true });
+      });
+      this.assertedExchanges.add(normalizedType);
     }
-
-    await channel.addSetup(async (ch: ConfirmChannel) => {
-      await ch.assertExchange(normalizedType, 'fanout', { durable: true });
-    });
 
     await channel.publish(normalizedType, '', message, options);
   }
@@ -158,7 +235,8 @@ export default class RabbitMQClient implements IClient {
     // Cancel channel consumers and cleanup queues before closing connection
     const channelWrapper = this.connectionManager.getChannel();
     if (channelWrapper) {
-      const underlyingChannel = (channelWrapper as unknown as { _channel: { cancel: (consumerTag: string) => Promise<unknown>; deleteQueue: (queue: string) => Promise<unknown>; consumers?: Record<string, unknown> } })._channel;
+      const wrapperInternal = channelWrapper as unknown as ChannelWrapperInternal;
+      const underlyingChannel = wrapperInternal._channel;
 
       if (underlyingChannel) {
         // Cancel any active consumers
@@ -202,7 +280,7 @@ export default class RabbitMQClient implements IClient {
     const merged = merge({}, headers) as MessageHeaders;
     
     merged.DestinationAddress = merged.DestinationAddress ?? this.config.amqpSettings.queue.name;
-    merged.MessageId = merged.MessageId ?? (uuidv4() as unknown as import('../../types').MessageId);
+    merged.MessageId = merged.MessageId ?? createMessageId(uuidv4());
     merged.MessageType = merged.MessageType ?? messageType;
     merged.SourceAddress = merged.SourceAddress ?? this.config.amqpSettings.queue.name;
     merged.TimeSent = merged.TimeSent ?? new Date().toISOString();

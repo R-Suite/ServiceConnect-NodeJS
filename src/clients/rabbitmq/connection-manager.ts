@@ -21,7 +21,7 @@ export class ConnectionManager {
    * Connect to RabbitMQ with retry logic
    */
   async connect(): Promise<void> {
-    const maxRetries = 5;
+    const maxRetries = this.config.amqpSettings.connectionMaxRetries;
     let lastError: Error | undefined;
     const hosts = Array.isArray(this.config.amqpSettings.host)
       ? this.config.amqpSettings.host
@@ -33,19 +33,20 @@ export class ConnectionManager {
         this.setupConnectionEvents();
 
         await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error('Connection timeout'));
+          }, this.config.amqpSettings.connectionTimeout);
+
           this.connection!.on('connect', () => {
+            clearTimeout(timeout);
             this.logger?.info(`Connected to RabbitMQ: ${this.config.amqpSettings.queue.name}`);
             resolve();
           });
 
           this.connection!.on('connectFailed', (err) => {
+            clearTimeout(timeout);
             reject(err.err);
           });
-
-          // Timeout if no connect event within 30 seconds
-          setTimeout(() => {
-            reject(new Error('Connection timeout'));
-          }, 30000);
         });
 
         return;
@@ -54,7 +55,7 @@ export class ConnectionManager {
         this.logger?.error(`Connection attempt ${attempt} failed`, error);
 
         if (attempt < maxRetries) {
-          const delay = Math.min(1000 * Math.pow(2, attempt), 30000);
+          const delay = Math.min(1000 * Math.pow(2, attempt), this.config.amqpSettings.connectionRetryDelay);
           await this.sleep(delay);
         }
       }
@@ -92,7 +93,7 @@ export class ConnectionManager {
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error('Channel creation timeout'));
-      }, 30000);
+      }, this.config.amqpSettings.connectionTimeout);
 
       this.channel!.on('connect', () => {
         clearTimeout(timeout);

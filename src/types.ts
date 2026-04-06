@@ -127,6 +127,10 @@ export interface AMQPSettings {
   auditQueue: string;
   auditEnabled: boolean;
   prefetch: number;
+  connectionTimeout: number;
+  connectionRetryDelay: number;
+  connectionMaxRetries: number;
+  defaultRequestTimeout: number;
 }
 
 /**
@@ -157,6 +161,10 @@ export interface ServiceConnectConfig {
     auditQueue?: string;
     auditEnabled?: boolean;
     prefetch?: number;
+    connectionTimeout?: number;
+    connectionRetryDelay?: number;
+    connectionMaxRetries?: number;
+    defaultRequestTimeout?: number;
   };
   filters?: Partial<FilterConfig>;
   handlers?: HandlersConfig;
