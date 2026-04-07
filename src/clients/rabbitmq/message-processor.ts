@@ -46,18 +46,20 @@ export class MessageProcessor {
 
     try {
       const typeName = rawMessage.properties.headers?.TypeName;
-      
+
       if (!typeName) {
         this.logger?.error('Message does not contain TypeName header');
         this.ackMessage(rawMessage);
+        this.processing--;
         return;
       }
 
       await this.processMessage(rawMessage);
+      this.ackMessage(rawMessage);
     } catch (error) {
       this.logger?.error('Error processing message', error);
+      // Do NOT ack — the message will be redelivered by RabbitMQ
     } finally {
-      this.ackMessage(rawMessage);
       this.processing--;
     }
   }

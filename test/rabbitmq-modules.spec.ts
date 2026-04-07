@@ -598,6 +598,24 @@ describe("RabbitMQ Modules", function() {
                 assert.isTrue((mockConfig.logger?.error as sinon.SinonStub).called);
             });
 
+            it("should not ack message if retryManager.handleResult fails", async function() {
+                mockRetryManager.handleResult.rejects(new Error('Channel closed'));
+                await messageProcessor.startConsuming(mockChannel, mockChannelWrapper);
+
+                const message: ConsumeMessage = {
+                    content: Buffer.from(JSON.stringify({ CorrelationId: '123' })),
+                    properties: {
+                        headers: { TypeName: 'TestMessage' },
+                        messageId: 'msg-123'
+                    }
+                } as any;
+
+                const consumeHandler = mockChannel.consume.getCall(0).args[1];
+                await consumeHandler(message);
+
+                assert.isFalse(mockChannel.ack.called, 'Message should not be ack\'d when retry routing fails');
+            });
+
             it("should handle null message", async function() {
                 await messageProcessor.startConsuming(mockChannel, mockChannelWrapper);
 
