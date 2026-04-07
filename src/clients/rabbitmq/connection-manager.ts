@@ -102,7 +102,6 @@ export class ConnectionManager {
     }
 
     this.channel = this.connection.createChannel({
-      json: true,
       setup: async (channel: ConfirmChannel) => {
         await channel.prefetch(this.config.amqpSettings.prefetch);
         await setup(channel);

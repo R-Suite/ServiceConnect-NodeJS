@@ -217,6 +217,37 @@ describe("RabbitMQ Modules", function() {
                 assert.isTrue(mockConnection.createChannel.called);
             });
 
+            it("should create channel without json:true option", async function() {
+                const mockChannel = {
+                    on: sandbox.stub().callsFake((event: string, cb: Function) => {
+                        if (event === 'connect') {
+                            setImmediate(() => cb());
+                        }
+                    }),
+                    once: sandbox.stub()
+                };
+                const mockConnection = {
+                    on: sandbox.stub().callsFake((event: string, cb: Function) => {
+                        if (event === 'connect') {
+                            setImmediate(() => cb());
+                        }
+                    }),
+                    isConnected: sandbox.stub().returns(true),
+                    close: sandbox.stub().resolves(),
+                    createChannel: sandbox.stub().returns(mockChannel)
+                };
+                sandbox.stub(amqp, 'connect').returns(mockConnection as any);
+
+                const connectionManager = new ConnectionManager(mockConfig);
+                await connectionManager.connect();
+
+                const setupFn = sandbox.stub().resolves();
+                await connectionManager.createChannel(setupFn);
+
+                const createChannelArgs = mockConnection.createChannel.firstCall.args[0];
+                assert.notStrictEqual(createChannelArgs.json, true, 'Channel should NOT be created with json:true');
+            });
+
             it("should throw ConnectionError if not connected", async function() {
                 const connectionManager = new ConnectionManager(mockConfig);
 
@@ -896,9 +927,11 @@ describe("RabbitMQ Modules", function() {
 
                 assert.isTrue(mockChannelWrapper.sendToQueue.calledWith(
                     mockConfig.amqpSettings.auditQueue,
-                    sinon.match({ CorrelationId: '123' }),
+                    sinon.match.instanceOf(Buffer),
                     sinon.match.any
                 ));
+                const sentContent = JSON.parse(mockChannelWrapper.sendToQueue.firstCall.args[1].toString());
+                assert.strictEqual(sentContent.CorrelationId, '123');
             });
 
             it("should not send to audit when auditEnabled is false", async function() {
@@ -1035,6 +1068,48 @@ describe("RabbitMQ Modules", function() {
 
                 const options = mockChannelWrapper.sendToQueue.getCall(0).args[2];
                 assert.equal(options.messageId, 'original-msg-id');
+            });
+        });
+
+        describe("RetryCount clamping", function() {
+            it("should clamp negative RetryCount to 0", async function() {
+                const parsedMessage = { CorrelationId: 'a' } as any;
+                const rawMessage: ConsumeMessage = {
+                    content: Buffer.from(JSON.stringify(parsedMessage)),
+                    properties: {
+                        headers: { TypeName: 'Test', RetryCount: -5 },
+                        messageId: 'msg-neg'
+                    }
+                } as any;
+
+                await retryManager.handleResult(mockChannelWrapper, rawMessage, {
+                    success: false,
+                    exception: new Error('fail'),
+                    parsedMessage
+                });
+
+                const sentHeaders = mockChannelWrapper.sendToQueue.firstCall.args[2].headers;
+                assert.strictEqual(sentHeaders.RetryCount, 1, 'should increment from clamped 0 to 1');
+            });
+
+            it("should clamp NaN RetryCount to 0", async function() {
+                const parsedMessage = { CorrelationId: 'a' } as any;
+                const rawMessage: ConsumeMessage = {
+                    content: Buffer.from(JSON.stringify(parsedMessage)),
+                    properties: {
+                        headers: { TypeName: 'Test', RetryCount: 'garbage' },
+                        messageId: 'msg-nan'
+                    }
+                } as any;
+
+                await retryManager.handleResult(mockChannelWrapper, rawMessage, {
+                    success: false,
+                    exception: new Error('fail'),
+                    parsedMessage
+                });
+
+                const sentHeaders = mockChannelWrapper.sendToQueue.firstCall.args[2].headers;
+                assert.strictEqual(sentHeaders.RetryCount, 1);
             });
         });
 

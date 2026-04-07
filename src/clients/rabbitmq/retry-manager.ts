@@ -1,10 +1,12 @@
 import type { ChannelWrapper } from 'amqp-connection-manager';
-import type { ConsumeMessage, ConfirmChannel } from 'amqplib';
-import type { BusConfig } from '../../types';
+import type { ConsumeMessage } from 'amqplib';
+import type { BusConfig, Message } from '../../types';
 
 interface ProcessingResult {
   success: boolean;
   exception?: unknown;
+  parsedMessage: Message;
+  rawContent?: Buffer | undefined;
 }
 
 /**
@@ -26,9 +28,9 @@ export class RetryManager {
     result: ProcessingResult
   ): Promise<void> {
     if (result.success) {
-      await this.handleSuccess(channel, rawMessage);
+      await this.handleSuccess(channel, rawMessage, result.parsedMessage);
     } else {
-      await this.handleFailure(channel, rawMessage, result.exception);
+      await this.handleFailure(channel, rawMessage, result.parsedMessage, result.exception, result.rawContent);
     }
   }
 
@@ -37,19 +39,20 @@ export class RetryManager {
    */
   private async handleSuccess(
     channel: ChannelWrapper,
-    rawMessage: ConsumeMessage
+    rawMessage: ConsumeMessage,
+    parsedMessage: Message
   ): Promise<void> {
     if (!this.config.amqpSettings.auditEnabled) {
       return;
     }
 
-    // Send to audit queue
-    const headers = rawMessage.properties.headers ?? {};
+    // Clone headers to avoid mutating the raw message
+    const headers = { ...(rawMessage.properties.headers ?? {}) };
     headers.TimeProcessed = headers.TimeProcessed ?? new Date().toISOString();
 
     await channel.sendToQueue(
       this.config.amqpSettings.auditQueue,
-      JSON.parse(rawMessage.content.toString()),
+      Buffer.from(JSON.stringify(parsedMessage)),
       {
         headers,
         messageId: rawMessage.properties.messageId
@@ -63,24 +66,27 @@ export class RetryManager {
   private async handleFailure(
     channel: ChannelWrapper,
     rawMessage: ConsumeMessage,
-    exception: unknown
+    parsedMessage: Message,
+    exception: unknown,
+    rawContent?: Buffer
   ): Promise<void> {
-    const headers = rawMessage.properties.headers ?? {};
-    const retryCount = (headers.RetryCount as number) ?? 0;
+    const headers = { ...(rawMessage.properties.headers ?? {}) };
+    const retryCount = Math.max(0, Math.floor(Number(headers.RetryCount) || 0));
 
     if (this.config.amqpSettings.maxRetries === 0) {
       // Retries disabled, send directly to error queue
-      await this.sendToErrorQueue(channel, rawMessage, exception);
+      await this.sendToErrorQueue(channel, rawMessage, parsedMessage, exception, rawContent);
       return;
     }
 
     if (retryCount < this.config.amqpSettings.maxRetries) {
-      // Retry the message
+      // Retry the message — use raw content to preserve original bytes
       headers.RetryCount = retryCount + 1;
+      const content = rawContent ?? Buffer.from(JSON.stringify(parsedMessage));
 
       await channel.sendToQueue(
         `${this.config.amqpSettings.queue.name}.Retries`,
-        JSON.parse(rawMessage.content.toString()),
+        content,
         {
           headers,
           messageId: rawMessage.properties.messageId
@@ -88,8 +94,7 @@ export class RetryManager {
       );
     } else {
       // Max retries exceeded, send to error queue
-      headers.Exception = exception;
-      await this.sendToErrorQueue(channel, rawMessage, exception);
+      await this.sendToErrorQueue(channel, rawMessage, parsedMessage, exception, rawContent);
     }
   }
 
@@ -99,36 +104,28 @@ export class RetryManager {
   private async sendToErrorQueue(
     channel: ChannelWrapper,
     rawMessage: ConsumeMessage,
-    exception: unknown
+    parsedMessage: Message,
+    exception: unknown,
+    rawContent?: Buffer
   ): Promise<void> {
-    const headers = rawMessage.properties.headers ?? {};
+    // Clone headers to avoid mutating the raw message
+    const headers = { ...(rawMessage.properties.headers ?? {}) };
     // Convert exception to string for header compatibility
-    // Using String() ensures we get the error message even for sinon stub errors
     headers.Exception = String(exception);
 
     // Log the error before sending to error queue
     this.config.logger?.error('Message processing failed, sending to error queue', exception);
 
+    // Use raw content to preserve original bytes (avoids data corruption on parse failure)
+    const content = rawContent ?? Buffer.from(JSON.stringify(parsedMessage));
+
     await channel.sendToQueue(
       this.config.amqpSettings.errorQueue,
-      JSON.parse(rawMessage.content.toString()),
+      content,
       {
         headers,
         messageId: rawMessage.properties.messageId
       }
     );
-  }
-
-  /**
-   * Delete the retry queue during cleanup
-   */
-  async cleanup(channel: ConfirmChannel): Promise<void> {
-    if (
-      this.config.amqpSettings.maxRetries > 0 &&
-      this.config.amqpSettings.queue.autoDelete
-    ) {
-      const retryQueue = `${this.config.amqpSettings.queue.name}.Retries`;
-      await channel.deleteQueue(retryQueue);
-    }
   }
 }

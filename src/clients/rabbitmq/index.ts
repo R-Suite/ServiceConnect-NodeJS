@@ -27,6 +27,7 @@ export default class RabbitMQClient implements IClient {
   private messageProcessor: MessageProcessor;
   private retryManager: RetryManager;
   private assertedExchanges: Set<string> = new Set();
+  private typeSetupFunctions: Map<string, (ch: ConfirmChannel) => Promise<void>> = new Map();
 
   constructor(config: BusConfig, consumeCallback: ConsumeMessageCallback) {
     this.config = config;
@@ -60,10 +61,13 @@ export default class RabbitMQClient implements IClient {
       return;
     }
 
-    // Use addSetup to ensure the setup runs on the current channel
-    await channel.addSetup(async (ch: ConfirmChannel) => {
+    // Store the setup function reference so removeType can pass the same reference to removeSetup
+    const setupFn = async (ch: ConfirmChannel) => {
       await this.queueManager.consumeType(ch, type);
-    });
+    };
+    this.typeSetupFunctions.set(type, setupFn);
+
+    await channel.addSetup(setupFn);
   }
 
   /**
@@ -76,10 +80,14 @@ export default class RabbitMQClient implements IClient {
       return;
     }
 
-    // Remove the setup to unbind the exchange
-    await channel.removeSetup(async (ch: ConfirmChannel) => {
-      await this.queueManager.removeType(ch, type);
-    });
+    // Use the same function reference that was passed to addSetup
+    const setupFn = this.typeSetupFunctions.get(type);
+    if (setupFn) {
+      await channel.removeSetup(setupFn, async (ch: ConfirmChannel) => {
+        await this.queueManager.removeType(ch, type);
+      });
+      this.typeSetupFunctions.delete(type);
+    }
   }
 
   /**
@@ -144,7 +152,7 @@ export default class RabbitMQClient implements IClient {
     const messageHeaders = this.buildHeaders(type, headersWithDestination, 'Send');
     const options = this.buildPublishOptions(messageHeaders);
 
-    await channel.sendToQueue(endpoint, message, options);
+    await channel.sendToQueue(endpoint, Buffer.from(JSON.stringify(message)), options);
   }
 
   /**
@@ -188,7 +196,7 @@ export default class RabbitMQClient implements IClient {
       );
     }
 
-    const normalizedType = type.replace(/\./g, '');
+    const normalizedType = type.replaceAll('.', '');
     const messageHeaders = this.buildHeaders(type, headers, 'Publish');
     const options = this.buildPublishOptions(messageHeaders);
 
@@ -200,7 +208,7 @@ export default class RabbitMQClient implements IClient {
       this.assertedExchanges.add(normalizedType);
     }
 
-    await channel.publish(normalizedType, '', message, options);
+    await channel.publish(normalizedType, '', Buffer.from(JSON.stringify(message)), options);
   }
 
   /**
