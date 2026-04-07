@@ -447,6 +447,54 @@ describe("Bus", function() {
 
     });
 
+    describe("createReplyCallback", function() {
+        var sendStub: any;
+        var consumeTypeStub: any;
+
+        beforeEach(function() {
+            sendStub = sinon.stub(settingsObject.client.prototype, 'send');
+            consumeTypeStub = sinon.stub(settingsObject.client.prototype, 'consumeType');
+        });
+
+        afterEach(function() {
+            (settingsObject.client as any).prototype.send.restore();
+            (settingsObject.client as any).prototype.consumeType.restore();
+        });
+
+        it("should not mutate original headers when reply is sent", async function() {
+            let bus = new Bus({ amqpSettings: { queue: { name: 'Test' } } });
+            await bus.init();
+
+            const originalHeaders: Record<string, unknown> = {
+                RequestMessageId: 'req-123',
+                SourceAddress: 'source-queue',
+                TypeName: 'TestMessage'
+            };
+            const headersBefore = { ...originalHeaders };
+
+            // Access the private consumeMessage method to trigger reply callback creation
+            const consumeMessage = (bus as any).consumeMessage.bind(bus);
+
+            // Add a handler that invokes the reply callback
+            await bus.addHandler('TestMessage', (_msg: any, _hdrs: any, _type: any, replyCallback: any) => {
+                if (replyCallback) {
+                    replyCallback('ReplyType', { CorrelationId: 'corr-1' });
+                }
+            });
+
+            // Simulate consuming a message
+            await consumeMessage(
+                { CorrelationId: 'corr-1' },
+                originalHeaders,
+                'TestMessage'
+            );
+
+            // Original headers should not have ResponseMessageId set
+            expect(originalHeaders.ResponseMessageId).to.be.undefined;
+            expect(originalHeaders.RequestMessageId).to.equal(headersBefore.RequestMessageId);
+        });
+    });
+
     describe("isConnected", function(){
 
         var stub : any;

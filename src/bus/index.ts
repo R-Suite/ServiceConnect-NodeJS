@@ -351,14 +351,17 @@ export class Bus {
     headers: Record<string, unknown>
   ): ReplyCallback<Message> {
     return async (type: string, message: Message): Promise<void> => {
-      headers.ResponseMessageId = headers.RequestMessageId;
+      const replyHeaders = {
+        ...headers,
+        ResponseMessageId: headers.RequestMessageId,
+      };
       const sourceAddress = headers.SourceAddress as string;
       if (sourceAddress && this.core.client) {
         await this.core.client.send(
           sourceAddress,
           type,
           message,
-          headers as MessageHeaders
+          replyHeaders as MessageHeaders
         );
       }
     };
