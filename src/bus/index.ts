@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import merge from 'deepmerge';
 import settings from '../settings';
-import { ValidationError, ValidationErrorCodes } from '../errors';
+import { ValidationError, ValidationErrorCodes, ConnectionError, ConnectionErrorCodes } from '../errors';
 import { BusCore } from './bus-core';
 import { MessageHandlerManager } from './message-handler';
 import { FilterManager } from './filter-manager';
@@ -10,6 +10,7 @@ import { createMessageId } from '../types';
 import type {
   ServiceConnectConfig,
   BusConfig,
+  IBus,
   Message,
   MessageHandler,
   MessageHeaders,
@@ -20,10 +21,10 @@ import type {
  * Bus class - main entry point for messaging operations.
  * Maintains backward-compatible public API while delegating to internal modules.
  */
-export class Bus {
+export class Bus implements IBus {
   public id: string;
   public initialized = false;
-  public config: BusConfig;
+  public readonly config: BusConfig;
 
   private core: BusCore;
   private handlerManager: MessageHandlerManager;
@@ -73,6 +74,43 @@ export class Bus {
         ValidationErrorCodes.CONFIG_MISSING_QUEUE_NAME,
         'amqpSettings.queue.name'
       );
+    }
+
+    const amqp = config.amqpSettings;
+
+    if (amqp.maxRetries !== undefined && (typeof amqp.maxRetries !== 'number' || amqp.maxRetries < 0)) {
+      throw new ValidationError(
+        'maxRetries must be a non-negative number.',
+        ValidationErrorCodes.CONFIG_INVALID_MAX_RETRIES,
+        'amqpSettings.maxRetries'
+      );
+    }
+
+    if (amqp.retryDelay !== undefined && (typeof amqp.retryDelay !== 'number' || amqp.retryDelay < 0)) {
+      throw new ValidationError(
+        'retryDelay must be a non-negative number.',
+        ValidationErrorCodes.CONFIG_INVALID_RETRY_DELAY,
+        'amqpSettings.retryDelay'
+      );
+    }
+
+    if (amqp.prefetch !== undefined && (typeof amqp.prefetch !== 'number' || amqp.prefetch < 1)) {
+      throw new ValidationError(
+        'prefetch must be a positive number.',
+        ValidationErrorCodes.CONFIG_INVALID_PREFETCH,
+        'amqpSettings.prefetch'
+      );
+    }
+
+    if (amqp.host !== undefined) {
+      const hosts = Array.isArray(amqp.host) ? amqp.host : [amqp.host];
+      if (hosts.length === 0 || hosts.some(h => !h || h.trim() === '')) {
+        throw new ValidationError(
+          'host must be a non-empty string or array of non-empty strings.',
+          ValidationErrorCodes.CONFIG_MISSING_HOST,
+          'amqpSettings.host'
+        );
+      }
     }
   }
 
@@ -143,8 +181,16 @@ export class Bus {
       this
     );
 
-    if (!shouldSend || !this.core.client) {
+    if (!shouldSend) {
       return;
+    }
+
+    if (!this.core.client) {
+      throw new ConnectionError(
+        'Bus is not initialized. Call init() before sending messages.',
+        ConnectionErrorCodes.NOT_CONNECTED,
+        false
+      );
     }
 
     await this.core.client.send(
@@ -171,8 +217,16 @@ export class Bus {
       this
     );
 
-    if (!shouldPublish || !this.core.client) {
+    if (!shouldPublish) {
       return;
+    }
+
+    if (!this.core.client) {
+      throw new ConnectionError(
+        'Bus is not initialized. Call init() before publishing messages.',
+        ConnectionErrorCodes.NOT_CONNECTED,
+        false
+      );
     }
 
     await this.core.client.publish(type, message, headers as MessageHeaders);
@@ -200,25 +254,38 @@ export class Bus {
       return;
     }
 
+    if (!this.core.client) {
+      throw new ConnectionError(
+        'Bus is not initialized. Call init() before sending requests.',
+        ConnectionErrorCodes.NOT_CONNECTED,
+        false
+      );
+    }
+
     const messageId = uuidv4();
     const endpoints = Array.isArray(endpoint) ? endpoint : [endpoint];
+    const timeoutMs = this.config.amqpSettings.defaultRequestTimeout;
 
     this.requestReplyManager.registerRequest(
       messageId,
       endpoints.length,
       callback as MessageHandler<Message>,
-      null
+      timeoutMs
     );
 
     headers.RequestMessageId = createMessageId(messageId);
 
-    if (this.core.client) {
+    try {
       await this.core.client.send(
         endpoint,
         type,
         message,
         headers as MessageHeaders
       );
+    } catch (error) {
+      // Clean up the pending request to avoid leaking state
+      this.requestReplyManager.cleanupRequest(messageId);
+      throw error;
     }
   }
 
@@ -245,6 +312,14 @@ export class Bus {
       return;
     }
 
+    if (!this.core.client) {
+      throw new ConnectionError(
+        'Bus is not initialized. Call init() before publishing requests.',
+        ConnectionErrorCodes.NOT_CONNECTED,
+        false
+      );
+    }
+
     const messageId = uuidv4();
     const expectedCount = expected === null ? -1 : expected;
     const timeoutMs = timeout ?? this.config.amqpSettings.defaultRequestTimeout;
@@ -258,8 +333,12 @@ export class Bus {
 
     headers.RequestMessageId = createMessageId(messageId);
 
-    if (this.core.client) {
+    try {
       await this.core.client.publish(type, message, headers as MessageHeaders);
+    } catch (error) {
+      // Clean up the pending request to avoid leaking state
+      this.requestReplyManager.cleanupRequest(messageId);
+      throw error;
     }
   }
 
@@ -322,18 +401,21 @@ export class Bus {
 
       await Promise.all(handlerPromises);
 
-      // Execute after filters
-      await this.filterManager.executeAfter(
-        this.config.filters.after,
-        message,
-        headers,
-        type,
-        this
-      );
-    } catch (error) {
-      if (this.config.logger) {
-        this.config.logger?.error('Error processing message', error);
+      // Execute after filters -- errors are logged but do NOT cause message nack
+      // since the handler already succeeded
+      try {
+        await this.filterManager.executeAfter(
+          this.config.filters.after,
+          message,
+          headers,
+          type,
+          this
+        );
+      } catch (afterFilterError) {
+        this.config.logger?.error('After filter failed (message already processed successfully)', afterFilterError);
       }
+    } catch (error) {
+      this.config.logger?.error('Error processing message', error);
       // Re-throw to let the MessageProcessor handle retry logic
       throw error;
     }
@@ -351,7 +433,13 @@ export class Bus {
         ResponseMessageId: headers.RequestMessageId,
       };
       const sourceAddress = headers.SourceAddress as string;
-      if (sourceAddress && this.core.client) {
+      if (!sourceAddress) {
+        this.config.logger?.warn?.(
+          'Cannot send reply: incoming message has no SourceAddress header'
+        );
+        return;
+      }
+      if (this.core.client) {
         await this.core.client.send(
           sourceAddress,
           type,

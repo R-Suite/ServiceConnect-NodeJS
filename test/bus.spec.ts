@@ -459,6 +459,39 @@ describe("Bus", function() {
 
     });
 
+    describe("consumeMessage after-filter error isolation", function() {
+        var consumeTypeStub: any;
+
+        beforeEach(function() {
+            consumeTypeStub = sinon.stub(settingsObject.client.prototype, 'consumeType');
+        });
+
+        afterEach(function() {
+            (settingsObject.client as any).prototype.consumeType.restore();
+        });
+
+        it("should not throw when after filter fails (handler already succeeded)", async function() {
+            const failingAfterFilter = sinon.stub().rejects(new Error('After filter failed'));
+            let bus = new Bus({
+                amqpSettings: { queue: { name: 'Test' } },
+                filters: { after: [failingAfterFilter], before: [], outgoing: [] }
+            } as any);
+            await bus.init();
+
+            // Add a handler so the message is processed
+            await bus.addHandler('TestType', () => {});
+
+            const consumeMessage = (bus as any).consumeMessage.bind(bus);
+
+            // Should not throw even though the after filter rejects
+            await consumeMessage(
+                { CorrelationId: 'abc' },
+                { TypeName: 'TestType' },
+                'TestType'
+            );
+        });
+    });
+
     describe("createReplyCallback", function() {
         var sendStub: any;
         var consumeTypeStub: any;

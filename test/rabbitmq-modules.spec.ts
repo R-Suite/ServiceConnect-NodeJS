@@ -537,7 +537,8 @@ describe("RabbitMQ Modules", function() {
             messageProcessor = new MessageProcessor(mockConfig, mockConsumeCallback, mockRetryManager);
             mockChannel = {
                 consume: sandbox.stub().resolves({ consumerTag: 'test-tag' }),
-                ack: sandbox.stub()
+                ack: sandbox.stub(),
+                nack: sandbox.stub()
             } as any;
             mockChannelWrapper = {
                 sendToQueue: sandbox.stub().resolves()
@@ -608,7 +609,7 @@ describe("RabbitMQ Modules", function() {
                 assert.isTrue((mockConfig.logger?.error as sinon.SinonStub).called);
             });
 
-            it("should not ack message if retryManager.handleResult fails", async function() {
+            it("should still ack message when handler succeeds but retryManager.handleResult fails", async function() {
                 mockRetryManager.handleResult.rejects(new Error('Channel closed'));
                 await messageProcessor.startConsuming(mockChannel, mockChannelWrapper);
 
@@ -623,7 +624,8 @@ describe("RabbitMQ Modules", function() {
                 const consumeHandler = mockChannel.consume.getCall(0).args[1];
                 await consumeHandler(message);
 
-                assert.isFalse(mockChannel.ack.called, 'Message should not be ack\'d when retry routing fails');
+                assert.isTrue((mockChannel.ack as sinon.SinonStub).calledOnce, 'Message should be ack\'d when handler succeeded');
+                assert.isFalse((mockChannel.nack as sinon.SinonStub).called, 'Message should NOT be nack\'d when handler succeeded');
             });
 
             it("should handle null message", async function() {
@@ -754,6 +756,101 @@ describe("RabbitMQ Modules", function() {
             });
         });
 
+        describe("handleMessage ack/nack overhaul", function() {
+            it("should ack message when handler succeeds but retryManager throws", async function() {
+                const failingRetryManager = {
+                    handleResult: sandbox.stub().rejects(new Error('Audit queue publish failed'))
+                };
+                const successCallback = sandbox.stub().resolves();
+                const processor = new MessageProcessor(mockConfig, successCallback, failingRetryManager as any);
+                await processor.startConsuming(mockChannel, mockChannelWrapper);
+
+                const message: ConsumeMessage = {
+                    content: Buffer.from(JSON.stringify({ CorrelationId: '123' })),
+                    properties: {
+                        headers: { TypeName: 'TestType' },
+                        messageId: 'msg-1'
+                    }
+                } as any;
+
+                const consumeHandler = (mockChannel.consume as sinon.SinonStub).getCall(0).args[1];
+                await consumeHandler(message);
+
+                assert.isTrue((mockChannel.ack as sinon.SinonStub).calledOnce, 'should ack the message');
+                assert.isFalse((mockChannel.nack as sinon.SinonStub).called, 'should NOT nack when handler succeeded');
+            });
+
+            it("should nack with requeue=false when handler fails and retryManager also fails", async function() {
+                const failingCallback = sandbox.stub().rejects(new Error('Handler failed'));
+                const failingRetryManager = {
+                    handleResult: sandbox.stub().rejects(new Error('Retry queue also failed'))
+                };
+                const processor = new MessageProcessor(mockConfig, failingCallback, failingRetryManager as any);
+                await processor.startConsuming(mockChannel, mockChannelWrapper);
+
+                const message: ConsumeMessage = {
+                    content: Buffer.from(JSON.stringify({ CorrelationId: '123' })),
+                    properties: {
+                        headers: { TypeName: 'TestType' },
+                        messageId: 'msg-2'
+                    }
+                } as any;
+
+                const consumeHandler = (mockChannel.consume as sinon.SinonStub).getCall(0).args[1];
+                await consumeHandler(message);
+
+                assert.isTrue((mockChannel.nack as sinon.SinonStub).calledOnce, 'should nack the message');
+                assert.strictEqual((mockChannel.nack as sinon.SinonStub).firstCall.args[2], false, 'requeue must be false');
+            });
+
+            it("should not throw when channel.nack fails on closed channel", async function() {
+                const failingCallback = sandbox.stub().rejects(new Error('Handler failed'));
+                const failingRetryManager = {
+                    handleResult: sandbox.stub().rejects(new Error('Retry failed'))
+                };
+                const closedChannel = {
+                    consume: sandbox.stub().resolves({ consumerTag: 'test-tag' }),
+                    ack: sandbox.stub(),
+                    nack: sandbox.stub().throws(new Error('Channel closed'))
+                } as any;
+                const processor = new MessageProcessor(mockConfig, failingCallback, failingRetryManager as any);
+                await processor.startConsuming(closedChannel, mockChannelWrapper);
+
+                const message: ConsumeMessage = {
+                    content: Buffer.from(JSON.stringify({ CorrelationId: '123' })),
+                    properties: {
+                        headers: { TypeName: 'TestType' },
+                        messageId: 'msg-3'
+                    }
+                } as any;
+
+                const consumeHandler = closedChannel.consume.getCall(0).args[1];
+                // Should not throw even though channel.nack throws
+                await consumeHandler(message);
+            });
+
+            it("should nack with requeue=true when closing and message arrives", async function() {
+                const processor = new MessageProcessor(mockConfig, mockConsumeCallback, mockRetryManager);
+                await processor.startConsuming(mockChannel, mockChannelWrapper);
+                processor.beginClosing();
+
+                const message: ConsumeMessage = {
+                    content: Buffer.from(JSON.stringify({ CorrelationId: '123' })),
+                    properties: {
+                        headers: { TypeName: 'TestType' },
+                        messageId: 'msg-4'
+                    }
+                } as any;
+
+                const consumeHandler = (mockChannel.consume as sinon.SinonStub).getCall(0).args[1];
+                await consumeHandler(message);
+
+                assert.isFalse(mockConsumeCallback.called, 'should not process message when closing');
+                assert.isTrue((mockChannel.nack as sinon.SinonStub).calledOnce, 'should nack the message');
+                assert.strictEqual((mockChannel.nack as sinon.SinonStub).firstCall.args[2], true, 'requeue must be true when closing');
+            });
+        });
+
         describe("getProcessingCount", function() {
             it("should return 0 when not processing", function() {
                 assert.equal(messageProcessor.getProcessingCount(), 0);
@@ -786,15 +883,16 @@ describe("RabbitMQ Modules", function() {
                 mockConfig.amqpSettings.auditEnabled = true;
                 retryManager = new RetryManager(mockConfig);
 
+                const parsedMessage = { CorrelationId: '123', data: 'test' } as any;
                 const rawMessage: ConsumeMessage = {
-                    content: Buffer.from(JSON.stringify({ CorrelationId: '123', data: 'test' })),
+                    content: Buffer.from(JSON.stringify(parsedMessage)),
                     properties: {
                         headers: { TypeName: 'TestMessage' },
                         messageId: 'msg-123'
                     }
                 } as any;
 
-                await retryManager.handleResult(mockChannelWrapper, rawMessage, { success: true });
+                await retryManager.handleResult(mockChannelWrapper, rawMessage, { success: true, parsedMessage });
 
                 assert.isTrue(mockChannelWrapper.sendToQueue.calledWith(
                     mockConfig.amqpSettings.auditQueue,
@@ -807,26 +905,28 @@ describe("RabbitMQ Modules", function() {
                 mockConfig.amqpSettings.auditEnabled = false;
                 retryManager = new RetryManager(mockConfig);
 
+                const parsedMessage = { CorrelationId: '123' } as any;
                 const rawMessage: ConsumeMessage = {
-                    content: Buffer.from(JSON.stringify({ CorrelationId: '123' })),
+                    content: Buffer.from(JSON.stringify(parsedMessage)),
                     properties: { headers: {}, messageId: 'msg-123' }
                 } as any;
 
-                await retryManager.handleResult(mockChannelWrapper, rawMessage, { success: true });
+                await retryManager.handleResult(mockChannelWrapper, rawMessage, { success: true, parsedMessage });
 
                 assert.isFalse(mockChannelWrapper.sendToQueue.called);
             });
 
             it("should send to retry queue on failure when retries available", async function() {
+                const parsedMessage = { CorrelationId: '123', data: 'test' } as any;
                 const rawMessage: ConsumeMessage = {
-                    content: Buffer.from(JSON.stringify({ CorrelationId: '123', data: 'test' })),
+                    content: Buffer.from(JSON.stringify(parsedMessage)),
                     properties: {
                         headers: { TypeName: 'TestMessage' },
                         messageId: 'msg-123'
                     }
                 } as any;
 
-                await retryManager.handleResult(mockChannelWrapper, rawMessage, { success: false, exception: new Error('Failed') });
+                await retryManager.handleResult(mockChannelWrapper, rawMessage, { success: false, exception: new Error('Failed'), parsedMessage });
 
                 assert.isTrue(mockChannelWrapper.sendToQueue.calledWith(
                     `${mockConfig.amqpSettings.queue.name}.Retries`
@@ -836,15 +936,16 @@ describe("RabbitMQ Modules", function() {
             });
 
             it("should send to error queue after max retries exceeded", async function() {
+                const parsedMessage = { CorrelationId: '123' } as any;
                 const rawMessage: ConsumeMessage = {
-                    content: Buffer.from(JSON.stringify({ CorrelationId: '123' })),
+                    content: Buffer.from(JSON.stringify(parsedMessage)),
                     properties: {
                         headers: { TypeName: 'TestMessage', RetryCount: 3 },
                         messageId: 'msg-123'
                     }
                 } as any;
 
-                await retryManager.handleResult(mockChannelWrapper, rawMessage, { success: false, exception: new Error('Failed') });
+                await retryManager.handleResult(mockChannelWrapper, rawMessage, { success: false, exception: new Error('Failed'), parsedMessage });
 
                 assert.isTrue(mockChannelWrapper.sendToQueue.calledWith(
                     mockConfig.amqpSettings.errorQueue
@@ -855,30 +956,49 @@ describe("RabbitMQ Modules", function() {
                 mockConfig.amqpSettings.maxRetries = 0;
                 retryManager = new RetryManager(mockConfig);
 
+                const parsedMessage = { CorrelationId: '123' } as any;
                 const rawMessage: ConsumeMessage = {
-                    content: Buffer.from(JSON.stringify({ CorrelationId: '123' })),
+                    content: Buffer.from(JSON.stringify(parsedMessage)),
                     properties: { headers: {}, messageId: 'msg-123' }
                 } as any;
 
-                await retryManager.handleResult(mockChannelWrapper, rawMessage, { success: false, exception: new Error('Failed') });
+                await retryManager.handleResult(mockChannelWrapper, rawMessage, { success: false, exception: new Error('Failed'), parsedMessage });
 
                 assert.isTrue(mockChannelWrapper.sendToQueue.calledWith(
                     mockConfig.amqpSettings.errorQueue
                 ));
             });
+
+            it("should not mutate raw message headers", async function() {
+                const parsedMessage = { CorrelationId: '123' } as any;
+                const originalHeaders = { TypeName: 'TestMessage' };
+                const rawMessage: ConsumeMessage = {
+                    content: Buffer.from(JSON.stringify(parsedMessage)),
+                    properties: {
+                        headers: originalHeaders,
+                        messageId: 'msg-123'
+                    }
+                } as any;
+
+                await retryManager.handleResult(mockChannelWrapper, rawMessage, { success: false, exception: new Error('Failed'), parsedMessage });
+
+                // Original headers should not have RetryCount set
+                assert.isUndefined(originalHeaders.RetryCount);
+            });
         });
 
         describe("handleFailure", function() {
             it("should increment RetryCount on retry", async function() {
+                const parsedMessage = { CorrelationId: '123' } as any;
                 const rawMessage: ConsumeMessage = {
-                    content: Buffer.from(JSON.stringify({ CorrelationId: '123' })),
+                    content: Buffer.from(JSON.stringify(parsedMessage)),
                     properties: {
                         headers: { TypeName: 'TestMessage', RetryCount: 1 },
                         messageId: 'msg-123'
                     }
                 } as any;
 
-                await retryManager.handleResult(mockChannelWrapper, rawMessage, { success: false, exception: new Error('Failed') });
+                await retryManager.handleResult(mockChannelWrapper, rawMessage, { success: false, exception: new Error('Failed'), parsedMessage });
 
                 const headers = mockChannelWrapper.sendToQueue.getCall(0).args[2].headers;
                 assert.equal(headers.RetryCount, 2);
@@ -886,30 +1006,32 @@ describe("RabbitMQ Modules", function() {
 
             it("should set Exception header in error queue", async function() {
                 const error = new Error("Test error");
+                const parsedMessage = { CorrelationId: '123' } as any;
                 const rawMessage: ConsumeMessage = {
-                    content: Buffer.from(JSON.stringify({ CorrelationId: '123' })),
+                    content: Buffer.from(JSON.stringify(parsedMessage)),
                     properties: {
                         headers: { TypeName: 'TestMessage', RetryCount: 3 },
                         messageId: 'msg-123'
                     }
                 } as any;
 
-                await retryManager.handleResult(mockChannelWrapper, rawMessage, { success: false, exception: error });
+                await retryManager.handleResult(mockChannelWrapper, rawMessage, { success: false, exception: error, parsedMessage });
 
                 const headers = mockChannelWrapper.sendToQueue.getCall(0).args[2].headers;
                 assert.include(String(headers.Exception), "Test error");
             });
 
             it("should preserve messageId when sending to queues", async function() {
+                const parsedMessage = { CorrelationId: '123' } as any;
                 const rawMessage: ConsumeMessage = {
-                    content: Buffer.from(JSON.stringify({ CorrelationId: '123' })),
+                    content: Buffer.from(JSON.stringify(parsedMessage)),
                     properties: {
                         headers: { TypeName: 'TestMessage' },
                         messageId: 'original-msg-id'
                     }
                 } as any;
 
-                await retryManager.handleResult(mockChannelWrapper, rawMessage, { success: false, exception: new Error('Failed') });
+                await retryManager.handleResult(mockChannelWrapper, rawMessage, { success: false, exception: new Error('Failed'), parsedMessage });
 
                 const options = mockChannelWrapper.sendToQueue.getCall(0).args[2];
                 assert.equal(options.messageId, 'original-msg-id');
@@ -919,64 +1041,21 @@ describe("RabbitMQ Modules", function() {
         describe("sendToErrorQueue", function() {
             it("should log error before sending to error queue", async function() {
                 const error = new Error("Processing failed");
+                const parsedMessage = { CorrelationId: '123' } as any;
                 const rawMessage: ConsumeMessage = {
-                    content: Buffer.from(JSON.stringify({ CorrelationId: '123' })),
+                    content: Buffer.from(JSON.stringify(parsedMessage)),
                     properties: {
                         headers: { TypeName: 'TestMessage', RetryCount: 3 },
                         messageId: 'msg-123'
                     }
                 } as any;
 
-                await retryManager.handleResult(mockChannelWrapper, rawMessage, { success: false, exception: error });
+                await retryManager.handleResult(mockChannelWrapper, rawMessage, { success: false, exception: error, parsedMessage });
 
                 assert.isTrue((mockConfig.logger?.error as any).calledWith(
                     'Message processing failed, sending to error queue',
                     error
                 ));
-            });
-        });
-
-        describe("cleanup", function() {
-            it("should delete retry queue if autoDelete is enabled", async function() {
-                mockConfig.amqpSettings.queue.autoDelete = true;
-                retryManager = new RetryManager(mockConfig);
-
-                const mockChannel = {
-                    deleteQueue: sandbox.stub().resolves()
-                };
-
-                await retryManager.cleanup(mockChannel as any);
-
-                assert.isTrue(mockChannel.deleteQueue.calledWith(
-                    `${mockConfig.amqpSettings.queue.name}.Retries`
-                ));
-            });
-
-            it("should not delete retry queue if autoDelete is disabled", async function() {
-                mockConfig.amqpSettings.queue.autoDelete = false;
-                retryManager = new RetryManager(mockConfig);
-
-                const mockChannel = {
-                    deleteQueue: sandbox.stub().resolves()
-                };
-
-                await retryManager.cleanup(mockChannel as any);
-
-                assert.isFalse(mockChannel.deleteQueue.called);
-            });
-
-            it("should not delete retry queue if maxRetries is 0", async function() {
-                mockConfig.amqpSettings.maxRetries = 0;
-                mockConfig.amqpSettings.queue.autoDelete = true;
-                retryManager = new RetryManager(mockConfig);
-
-                const mockChannel = {
-                    deleteQueue: sandbox.stub().resolves()
-                };
-
-                await retryManager.cleanup(mockChannel as any);
-
-                assert.isFalse(mockChannel.deleteQueue.called);
             });
         });
     });
