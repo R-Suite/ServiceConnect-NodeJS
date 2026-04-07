@@ -1,5 +1,5 @@
 import RabbitMQClient from './clients/rabbitMQ';
-import type { ILogger, ServiceConnectConfig } from './types';
+import type { BusConfig, ConsumeMessageCallback, IClient, ILogger, ServiceConnectConfig } from './types';
 
 /**
  * Default settings for ServiceConnect
@@ -42,7 +42,7 @@ export default function settings(): ServiceConnectConfig {
       outgoing: []
     },
     handlers: {},
-    client: RabbitMQClient as unknown as ServiceConnectConfig['client'],
+    client: RabbitMQClient as unknown as new (config: BusConfig, callback: ConsumeMessageCallback) => IClient,
     logger: {
       info: (message: string): void => console.log(message),
       error: (message: string, err?: unknown): void => {
