@@ -32,12 +32,6 @@ describe("RabbitMQ Modules", function() {
                 },
                 ssl: {
                     enabled: false,
-                    key: null,
-                    passphrase: null,
-                    cert: null,
-                    ca: [],
-                    pfx: null,
-                    fail_if_no_peer_cert: false,
                     verify: 'verify_peer'
                 },
                 host: 'amqp://localhost',
@@ -188,6 +182,130 @@ describe("RabbitMQ Modules", function() {
                     assert.isTrue(error instanceof ConnectionError);
                     assert.include((error as ConnectionError).message, 'Failed to connect to RabbitMQ');
                 }
+            });
+
+            it("should pass SSL/TLS options to amqp.connect when SSL is enabled", async function() {
+                const cert = Buffer.from('test-cert');
+                const key = Buffer.from('test-key');
+                const ca = Buffer.from('test-ca');
+                const passphrase = 'test-pass';
+
+                mockConfig.amqpSettings.ssl = {
+                    enabled: true,
+                    cert,
+                    key,
+                    ca,
+                    passphrase,
+                    verify: 'verify_peer'
+                };
+
+                const mockConnection = {
+                    on: sandbox.stub(),
+                    once: sandbox.stub().callsFake((event: string, cb: Function) => {
+                        if (event === 'connect') {
+                            setImmediate(() => cb());
+                        }
+                    }),
+                    isConnected: sandbox.stub().returns(true),
+                    close: sandbox.stub().resolves()
+                };
+                const connectStub = sandbox.stub(amqp, 'connect').returns(mockConnection as any);
+
+                const connectionManager = new ConnectionManager(mockConfig);
+                await connectionManager.connect();
+
+                assert.isTrue(connectStub.calledOnce);
+                const connectOptions = connectStub.firstCall.args[1] as any;
+                assert.isDefined(connectOptions.connectionOptions, 'Should pass connectionOptions');
+                assert.strictEqual(connectOptions.connectionOptions.cert, cert);
+                assert.strictEqual(connectOptions.connectionOptions.key, key);
+                assert.strictEqual(connectOptions.connectionOptions.ca, ca);
+                assert.strictEqual(connectOptions.connectionOptions.passphrase, passphrase);
+                assert.strictEqual(connectOptions.connectionOptions.rejectUnauthorized, true);
+            });
+
+            it("should set rejectUnauthorized to false when verify is 'verify_none'", async function() {
+                mockConfig.amqpSettings.ssl = {
+                    enabled: true,
+                    pfx: Buffer.from('test-pfx'),
+                    verify: 'verify_none'
+                };
+
+                const mockConnection = {
+                    on: sandbox.stub(),
+                    once: sandbox.stub().callsFake((event: string, cb: Function) => {
+                        if (event === 'connect') {
+                            setImmediate(() => cb());
+                        }
+                    }),
+                    isConnected: sandbox.stub().returns(true),
+                    close: sandbox.stub().resolves()
+                };
+                const connectStub = sandbox.stub(amqp, 'connect').returns(mockConnection as any);
+
+                const connectionManager = new ConnectionManager(mockConfig);
+                await connectionManager.connect();
+
+                const connectOptions = connectStub.firstCall.args[1] as any;
+                assert.strictEqual(connectOptions.connectionOptions.rejectUnauthorized, false);
+            });
+
+            it("should not pass connectionOptions when SSL is disabled", async function() {
+                mockConfig.amqpSettings.ssl = {
+                    enabled: false,
+                    verify: 'verify_peer'
+                };
+
+                const mockConnection = {
+                    on: sandbox.stub(),
+                    once: sandbox.stub().callsFake((event: string, cb: Function) => {
+                        if (event === 'connect') {
+                            setImmediate(() => cb());
+                        }
+                    }),
+                    isConnected: sandbox.stub().returns(true),
+                    close: sandbox.stub().resolves()
+                };
+                const connectStub = sandbox.stub(amqp, 'connect').returns(mockConnection as any);
+
+                const connectionManager = new ConnectionManager(mockConfig);
+                await connectionManager.connect();
+
+                const connectOptions = connectStub.firstCall.args[1] as any;
+                assert.isUndefined(connectOptions.connectionOptions, 'Should not pass connectionOptions when SSL is disabled');
+            });
+
+            it("should pass pfx option to amqp.connect when using PFX certificate", async function() {
+                const pfx = Buffer.from('test-pfx');
+                const passphrase = 'pfx-pass';
+
+                mockConfig.amqpSettings.ssl = {
+                    enabled: true,
+                    pfx,
+                    passphrase,
+                    verify: 'verify_peer'
+                };
+
+                const mockConnection = {
+                    on: sandbox.stub(),
+                    once: sandbox.stub().callsFake((event: string, cb: Function) => {
+                        if (event === 'connect') {
+                            setImmediate(() => cb());
+                        }
+                    }),
+                    isConnected: sandbox.stub().returns(true),
+                    close: sandbox.stub().resolves()
+                };
+                const connectStub = sandbox.stub(amqp, 'connect').returns(mockConnection as any);
+
+                const connectionManager = new ConnectionManager(mockConfig);
+                await connectionManager.connect();
+
+                const connectOptions = connectStub.firstCall.args[1] as any;
+                assert.strictEqual(connectOptions.connectionOptions.pfx, pfx);
+                assert.strictEqual(connectOptions.connectionOptions.passphrase, passphrase);
+                assert.isUndefined(connectOptions.connectionOptions.cert, 'Should not include cert when using pfx');
+                assert.isUndefined(connectOptions.connectionOptions.key, 'Should not include key when using pfx');
             });
         });
 

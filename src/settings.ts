@@ -1,5 +1,5 @@
 import RabbitMQClient from './clients/rabbitMQ';
-import type { BusConfig, ConsumeMessageCallback, IClient, ILogger, ServiceConnectConfig } from './types';
+import type { ILogger, ServiceConnectConfig } from './types';
 
 /**
  * Default settings for ServiceConnect
@@ -16,12 +16,6 @@ export default function settings(): ServiceConnectConfig {
       },
       ssl: {
         enabled: false,
-        key: null,
-        passphrase: null,
-        cert: null,
-        ca: [],
-        pfx: null,
-        fail_if_no_peer_cert: false,
         verify: 'verify_peer'
       },
       host: 'amqp://localhost',
@@ -42,7 +36,7 @@ export default function settings(): ServiceConnectConfig {
       outgoing: []
     },
     handlers: {},
-    client: RabbitMQClient as unknown as new (config: BusConfig, callback: ConsumeMessageCallback) => IClient,
+    client: RabbitMQClient,
     logger: {
       info: (message: string): void => console.log(message),
       error: (message: string, err?: unknown): void => {

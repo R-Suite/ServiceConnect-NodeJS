@@ -45,14 +45,12 @@ describe("Bus", function() {
 
             // SSL
             expect(bus.config.amqpSettings.ssl?.enabled).to.equal(false);
-            expect(bus.config.amqpSettings.ssl?.key).to.equal(null);
-            expect(bus.config.amqpSettings.ssl?.passphrase).to.equal(null);
-            expect(bus.config.amqpSettings.ssl?.cert).to.equal(null);
-            expect(bus.config.amqpSettings.ssl?.ca).to.be.a('Array');
-            expect(bus.config.amqpSettings.ssl?.ca).to.have.length(0);
-            expect(bus.config.amqpSettings.ssl?.pfx).to.equal(null);
-            expect(bus.config.amqpSettings.ssl?.fail_if_no_peer_cert).to.equal(false);
             expect(bus.config.amqpSettings.ssl?.verify).to.equal('verify_peer');
+            expect(bus.config.amqpSettings.ssl?.key).to.be.undefined;
+            expect(bus.config.amqpSettings.ssl?.cert).to.be.undefined;
+            expect(bus.config.amqpSettings.ssl?.ca).to.be.undefined;
+            expect(bus.config.amqpSettings.ssl?.pfx).to.be.undefined;
+            expect(bus.config.amqpSettings.ssl?.passphrase).to.be.undefined;
 
             // Other
             expect(bus.config.amqpSettings.host).to.equal("amqp://localhost");
@@ -706,6 +704,43 @@ describe("Bus", function() {
         it("should throw when host is a non-string value", function() {
             assert.throws(() => {
                 new Bus({ amqpSettings: { queue: { name: 'test' }, host: 123 as any } } as any);
+            });
+        });
+
+        it("should throw CONFIG_INVALID_SSL when SSL enabled without cert+key or pfx", function() {
+            try {
+                new Bus({ amqpSettings: { queue: { name: 'test' }, ssl: { enabled: true } } } as any);
+                assert.fail('should have thrown');
+            } catch (err: any) {
+                assert.strictEqual(err.code, 'CONFIG_INVALID_SSL');
+                assert.include(err.message, 'SSL is enabled but no certificate provided');
+            }
+        });
+
+        it("should throw CONFIG_INVALID_SSL when SSL enabled with cert but no key", function() {
+            try {
+                new Bus({ amqpSettings: { queue: { name: 'test' }, ssl: { enabled: true, cert: Buffer.from('c') } } } as any);
+                assert.fail('should have thrown');
+            } catch (err: any) {
+                assert.strictEqual(err.code, 'CONFIG_INVALID_SSL');
+            }
+        });
+
+        it("should not throw when SSL enabled with cert+key", function() {
+            assert.doesNotThrow(() => {
+                new Bus({ amqpSettings: { queue: { name: 'test' }, ssl: { enabled: true, cert: Buffer.from('c'), key: Buffer.from('k') } } } as any);
+            });
+        });
+
+        it("should not throw when SSL enabled with pfx", function() {
+            assert.doesNotThrow(() => {
+                new Bus({ amqpSettings: { queue: { name: 'test' }, ssl: { enabled: true, pfx: Buffer.from('p') } } } as any);
+            });
+        });
+
+        it("should not throw when SSL is disabled without certificates", function() {
+            assert.doesNotThrow(() => {
+                new Bus({ amqpSettings: { queue: { name: 'test' }, ssl: { enabled: false } } } as any);
             });
         });
 

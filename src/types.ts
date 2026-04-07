@@ -105,13 +105,13 @@ export interface QueueConfig {
  */
 export interface SSLConfig {
   enabled?: boolean;
-  key?: string | null;
-  passphrase?: string | null;
-  cert?: string | null;
-  ca?: string[];
-  pfx?: string | null;
+  key?: Buffer | Buffer[];
+  passphrase?: string;
+  cert?: Buffer | Buffer[];
+  ca?: Buffer | Buffer[];
+  pfx?: Buffer | Buffer[];
   fail_if_no_peer_cert?: boolean;
-  verify?: string;
+  verify?: 'verify_peer' | 'verify_none';
 }
 
 /**
@@ -209,6 +209,8 @@ export interface IClient {
  * Public Bus interface
  */
 export interface IBus {
+  readonly initialized: boolean;
+  readonly config: BusConfig;
   init(): Promise<void>;
   addHandler<T extends Message>(type: string, callback: MessageHandler<T>): Promise<void>;
   removeHandler<T extends Message>(type: string, callback: MessageHandler<T>): Promise<void>;
@@ -241,8 +243,6 @@ export interface IBus {
   ): Promise<void>;
   close(): Promise<void>;
   isConnected(): Promise<boolean>;
-  client: IClient | null;
-  initialized: boolean;
 }
 
 /**

@@ -39,7 +39,20 @@ export class ConnectionManager {
       }
 
       try {
-        this.connection = amqp.connect(hosts);
+        const connectionOptions: Record<string, unknown> = {};
+        if (this.config.amqpSettings.ssl?.enabled) {
+          const ssl = this.config.amqpSettings.ssl;
+          const tlsOptions: Record<string, unknown> = {};
+          if (ssl.cert) tlsOptions.cert = ssl.cert;
+          if (ssl.key) tlsOptions.key = ssl.key;
+          if (ssl.ca) tlsOptions.ca = ssl.ca;
+          if (ssl.pfx) tlsOptions.pfx = ssl.pfx;
+          if (ssl.passphrase) tlsOptions.passphrase = ssl.passphrase;
+          tlsOptions.rejectUnauthorized = ssl.verify !== 'verify_none';
+          connectionOptions.connectionOptions = tlsOptions;
+        }
+
+        this.connection = amqp.connect(hosts, connectionOptions);
         this.setupConnectionEvents();
 
         await new Promise<void>((resolve, reject) => {

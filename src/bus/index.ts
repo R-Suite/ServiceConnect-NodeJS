@@ -120,6 +120,19 @@ export class Bus implements IBus {
         );
       }
     }
+
+    if (amqp.ssl?.enabled) {
+      const ssl = amqp.ssl;
+      const hasCertKey = ssl.cert && ssl.key;
+      const hasPfx = ssl.pfx;
+      if (!hasCertKey && !hasPfx) {
+        throw new ValidationError(
+          'SSL is enabled but no certificate provided. Provide either cert+key or pfx.',
+          ValidationErrorCodes.CONFIG_INVALID_SSL,
+          'amqpSettings.ssl'
+        );
+      }
+    }
   }
 
   /**
