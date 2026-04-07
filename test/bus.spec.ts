@@ -452,7 +452,7 @@ describe("Bus", function() {
             let bus = new Bus({ amqpSettings: { queue:{name: "Test"} } });
             await bus.init();
 
-            bus.close();
+            await bus.close();
 
             assert.isTrue(stub.called);
         });

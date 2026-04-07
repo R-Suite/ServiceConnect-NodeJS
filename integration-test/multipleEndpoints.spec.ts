@@ -7,9 +7,9 @@ describe("Multiple Endpoints", () => {
     let consumer1 : Bus, consumer2 : Bus, producer : Bus;
 
     afterEach(async () => {
-        await consumer1.close();
-        await consumer2.close();
-        await producer.close();
+        await consumer1?.close();
+        await consumer2?.close();
+        await producer?.close();
     })
 
     it("should send message to multiple endpoints", async () => {
@@ -46,10 +46,10 @@ describe("Multiple Endpoints", () => {
         await consumer1.init();
         await consumer2.init();
         await producer.init();
-       
-        return new Promise<void>(async (resolve, reject) => {
-            let count1 = 0, count2 = 0;
 
+        let count1 = 0, count2 = 0;
+
+        const allReceived = new Promise<void>((resolve) => {
             const handler1 = async (message : {[k:string]: any}) => {
                 count1++;
                 if (count1 === 1 && count2 === 1) {
@@ -63,16 +63,18 @@ describe("Multiple Endpoints", () => {
                     resolve();
                 }
             };
-    
-            await consumer1.addHandler("TestMessageType", handler1);
-            await consumer2.addHandler("TestMessageType", handler2);
 
-            await producer.send(
-                ["Test.Consumer1", "Test.Consumer2"], 
-                "TestMessageType", 
-                { CorrelationId: "1" }
-            );
-        });     
+            consumer1.addHandler("TestMessageType", handler1);
+            consumer2.addHandler("TestMessageType", handler2);
+        });
+
+        await producer.send(
+            ["Test.Consumer1", "Test.Consumer2"],
+            "TestMessageType",
+            { CorrelationId: "1" }
+        );
+
+        await allReceived;
     });
 });
 
@@ -81,7 +83,7 @@ describe("Connection Status", () => {
     let consumer : Bus;
 
     afterEach(async () => {
-        await consumer.close();
+        await consumer?.close();
     })
 
     it("should report connected status correctly", async () => {
@@ -96,12 +98,10 @@ describe("Connection Status", () => {
         });
 
         await consumer.init();
-       
+
         const connected = await consumer.isConnected();
-        if (connected) {
-            return Promise.resolve();
-        } else {
-            return Promise.reject(new Error("Expected to be connected"));
+        if (!connected) {
+            throw new Error("Expected to be connected");
         }
     });
 });

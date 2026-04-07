@@ -7,8 +7,8 @@ describe("Wildcard Handlers", () => {
     let consumer : Bus, producer : Bus;
 
     afterEach(async () => {
-        await consumer.close();
-        await producer.close();
+        await consumer?.close();
+        await producer?.close();
     })
 
     it("should receive messages of any type using wildcard handler", async () => {
@@ -34,11 +34,11 @@ describe("Wildcard Handlers", () => {
 
         await consumer.init();
         await producer.init();
-       
-        return new Promise<void>(async (resolve, reject) => {
-            let count = 0;
-            const receivedTypes : string[] = [];
 
+        let count = 0;
+        const receivedTypes : string[] = [];
+
+        const allReceived = new Promise<void>((resolve) => {
             const messageHandler = async (message : {[k:string]: any}, headers : {[k:string]: any}) => {
                 count++;
                 receivedTypes.push(headers.TypeName);
@@ -46,18 +46,20 @@ describe("Wildcard Handlers", () => {
                     resolve();
                 }
             };
-    
-            // Add specific handlers first to create exchanges
-            await consumer.addHandler("TestMessageType1", async () => {});
-            await consumer.addHandler("TestMessageType2", async () => {});
-            await consumer.addHandler("TestMessageType3", async () => {});
-            // Then add wildcard handler
-            await consumer.addHandler("*", messageHandler);
 
-            await producer.publish("TestMessageType1", { CorrelationId: "1", data: "test1" });
-            await producer.publish("TestMessageType2", { CorrelationId: "2", data: "test2" });
-            await producer.publish("TestMessageType3", { CorrelationId: "3", data: "test3" });
-        });     
+            // Add specific handlers first to create exchanges
+            consumer.addHandler("TestMessageType1", async () => {});
+            consumer.addHandler("TestMessageType2", async () => {});
+            consumer.addHandler("TestMessageType3", async () => {});
+            // Then add wildcard handler
+            consumer.addHandler("*", messageHandler);
+        });
+
+        await producer.publish("TestMessageType1", { CorrelationId: "1", data: "test1" });
+        await producer.publish("TestMessageType2", { CorrelationId: "2", data: "test2" });
+        await producer.publish("TestMessageType3", { CorrelationId: "3", data: "test3" });
+
+        await allReceived;
     });
 
     it("should handle both specific and wildcard handlers", async () => {
@@ -83,11 +85,11 @@ describe("Wildcard Handlers", () => {
 
         await consumer.init();
         await producer.init();
-       
-        return new Promise<void>(async (resolve, reject) => {
-            let specificCount = 0;
-            let wildcardCount = 0;
 
+        let specificCount = 0;
+        let wildcardCount = 0;
+
+        const allReceived = new Promise<void>((resolve) => {
             const specificHandler = async (message : {[k:string]: any}, headers : {[k:string]: any}) => {
                 specificCount++;
                 if (specificCount === 1 && wildcardCount === 1) {
@@ -101,11 +103,13 @@ describe("Wildcard Handlers", () => {
                     resolve();
                 }
             };
-    
-            await consumer.addHandler("SpecificType", specificHandler);
-            await consumer.addHandler("*", wildcardHandler);
 
-            await producer.publish("SpecificType", { CorrelationId: "1", data: "test" });
-        });     
+            consumer.addHandler("SpecificType", specificHandler);
+            consumer.addHandler("*", wildcardHandler);
+        });
+
+        await producer.publish("SpecificType", { CorrelationId: "1", data: "test" });
+
+        await allReceived;
     });
 });

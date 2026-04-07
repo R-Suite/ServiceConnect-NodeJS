@@ -7,8 +7,8 @@ describe("Remove Handler", () => {
     let consumer : Bus, producer : Bus;
 
     afterEach(async () => {
-        await consumer.close();
-        await producer.close();
+        await consumer?.close();
+        await producer?.close();
     })
 
     it("should stop receiving messages after handler is removed", async () => {
@@ -34,10 +34,11 @@ describe("Remove Handler", () => {
 
         await consumer.init();
         await producer.init();
-       
-        return new Promise<void>(async (resolve, reject) => {
-            let receivedCount = 0;
-            const maxMessages = 3;
+
+        let receivedCount = 0;
+        const maxMessages = 3;
+
+        const allReceived = new Promise<void>((resolve, reject) => {
             const timeout = setTimeout(() => {
                 if (receivedCount === maxMessages) {
                     resolve();
@@ -57,13 +58,15 @@ describe("Remove Handler", () => {
                     }
                 }, 500);
             };
-    
-            await consumer.addHandler("TestMessageType", messageHandler);
 
-            await producer.send("Test.Consumer", "TestMessageType", { CorrelationId: "1" });
-            await producer.send("Test.Consumer", "TestMessageType", { CorrelationId: "2" });
-            await producer.send("Test.Consumer", "TestMessageType", { CorrelationId: "3" });
-        });     
+            consumer.addHandler("TestMessageType", messageHandler);
+        });
+
+        await producer.send("Test.Consumer", "TestMessageType", { CorrelationId: "1" });
+        await producer.send("Test.Consumer", "TestMessageType", { CorrelationId: "2" });
+        await producer.send("Test.Consumer", "TestMessageType", { CorrelationId: "3" });
+
+        await allReceived;
     });
 
     it("should allow dynamic handler addition and removal", async () => {
@@ -89,38 +92,33 @@ describe("Remove Handler", () => {
 
         await consumer.init();
         await producer.init();
-       
-        return new Promise<void>(async (resolve, reject) => {
-            let receivedCount = 0;
 
-            const messageHandler = async (message : {[k:string]: any}) => {
-                receivedCount++;
-            };
-    
-            await consumer.addHandler("TestMessageType", messageHandler);
-            
-            await producer.send("Test.Consumer", "TestMessageType", { CorrelationId: "1" });
-            await producer.send("Test.Consumer", "TestMessageType", { CorrelationId: "2" });
+        let receivedCount = 0;
 
-            await new Promise(resolve => setTimeout(resolve, 200));
+        const messageHandler = async (message : {[k:string]: any}) => {
+            receivedCount++;
+        };
 
-            if (receivedCount !== 2) {
-                reject(new Error(`Expected 2 messages but received ${receivedCount}`));
-                return;
-            }
+        await consumer.addHandler("TestMessageType", messageHandler);
 
-            await consumer.removeHandler("TestMessageType", messageHandler);
+        await producer.send("Test.Consumer", "TestMessageType", { CorrelationId: "1" });
+        await producer.send("Test.Consumer", "TestMessageType", { CorrelationId: "2" });
 
-            receivedCount = 0;
-            await producer.send("Test.Consumer", "TestMessageType", { CorrelationId: "3" });
+        await new Promise(resolve => setTimeout(resolve, 200));
 
-            await new Promise(resolve => setTimeout(resolve, 200));
+        if (receivedCount !== 2) {
+            throw new Error(`Expected 2 messages but received ${receivedCount}`);
+        }
 
-            if (receivedCount === 0) {
-                resolve();
-            } else {
-                reject(new Error(`Expected 0 messages after removal but received ${receivedCount}`));
-            }
-        });     
+        await consumer.removeHandler("TestMessageType", messageHandler);
+
+        receivedCount = 0;
+        await producer.send("Test.Consumer", "TestMessageType", { CorrelationId: "3" });
+
+        await new Promise(resolve => setTimeout(resolve, 200));
+
+        if (receivedCount !== 0) {
+            throw new Error(`Expected 0 messages after removal but received ${receivedCount}`);
+        }
     });
 });
