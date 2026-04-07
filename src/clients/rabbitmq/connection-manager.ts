@@ -47,13 +47,13 @@ export class ConnectionManager {
             reject(new Error('Connection timeout'));
           }, this.config.amqpSettings.connectionTimeout);
 
-          this.connection!.on('connect', () => {
+          this.connection!.once('connect', () => {
             clearTimeout(timeout);
             this.logger?.info(`Connected to RabbitMQ: ${this.config.amqpSettings.queue.name}`);
             resolve();
           });
 
-          this.connection!.on('connectFailed', (err) => {
+          this.connection!.once('connectFailed', (err) => {
             clearTimeout(timeout);
             reject(err.err);
           });
@@ -114,12 +114,12 @@ export class ConnectionManager {
         reject(new Error('Channel creation timeout'));
       }, this.config.amqpSettings.connectionTimeout);
 
-      this.channel!.on('connect', () => {
+      this.channel!.once('connect', () => {
         clearTimeout(timeout);
         resolve();
       });
 
-      this.channel!.on('error', (err) => {
+      this.channel!.once('error', (err) => {
         clearTimeout(timeout);
         reject(err);
       });

@@ -45,6 +45,7 @@ export default class RabbitMQClient implements IClient {
     await this.connectionManager.connect();
 
     await this.connectionManager.createChannel(async (channel) => {
+      this.assertedExchanges.clear();
       await this.queueManager.setupQueues(channel, this.config.handlers);
 
       // Register static handler types (from config) in typeSetupFunctions
@@ -240,6 +241,7 @@ export default class RabbitMQClient implements IClient {
    * Close the connection gracefully
    */
   async close(): Promise<void> {
+    this.messageProcessor.beginClosing();
     await this.messageProcessor.waitForProcessing();
     await this.connectionManager.close();
   }

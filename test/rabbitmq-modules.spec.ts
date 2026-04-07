@@ -75,7 +75,8 @@ describe("RabbitMQ Modules", function() {
         describe("connect", function() {
             it("should connect to RabbitMQ successfully", async function() {
                 const mockConnection = {
-                    on: sandbox.stub().callsFake((event: string, cb: Function) => {
+                    on: sandbox.stub(),
+                    once: sandbox.stub().callsFake((event: string, cb: Function) => {
                         if (event === 'connect') {
                             setImmediate(() => cb());
                         }
@@ -95,12 +96,13 @@ describe("RabbitMQ Modules", function() {
             it("should retry connection on failure before succeeding", async function() {
                 let attempt = 0;
                 const mockConnection = {
-                    on: sandbox.stub().callsFake((event: string, cb: Function) => {
+                    on: sandbox.stub(),
+                    once: sandbox.stub().callsFake((event: string, cb: Function) => {
                         if (event === 'connect') {
                             if (++attempt < 2) {
                                 // Simulate connectFailed event
                                 setImmediate(() => {
-                                    const connectFailedHandlers = mockConnection.on
+                                    const connectFailedHandlers = mockConnection.once
                                         .getCalls()
                                         .filter((c: any) => c.args[0] === 'connectFailed')
                                         .map((c: any) => c.args[1]);
@@ -132,7 +134,8 @@ describe("RabbitMQ Modules", function() {
 
                 const connections = [
                     {
-                        on: sandbox.stub().callsFake((event: string, cb: Function) => {
+                        on: sandbox.stub(),
+                        once: sandbox.stub().callsFake((event: string, cb: Function) => {
                             if (event === 'connectFailed') {
                                 setImmediate(() => cb({ err: new Error('Connection refused') }));
                             }
@@ -141,7 +144,8 @@ describe("RabbitMQ Modules", function() {
                         isConnected: sandbox.stub().returns(false)
                     },
                     {
-                        on: sandbox.stub().callsFake((event: string, cb: Function) => {
+                        on: sandbox.stub(),
+                        once: sandbox.stub().callsFake((event: string, cb: Function) => {
                             if (event === 'connect') {
                                 setImmediate(() => cb());
                             }
@@ -165,7 +169,8 @@ describe("RabbitMQ Modules", function() {
 
             it("should throw ConnectionError after max retries exceeded", async function() {
                 const mockConnection = {
-                    on: sandbox.stub().callsFake((event: string, cb: Function) => {
+                    on: sandbox.stub(),
+                    once: sandbox.stub().callsFake((event: string, cb: Function) => {
                         if (event === 'connectFailed') {
                             setImmediate(() => cb({ err: new Error('Connection refused') }));
                         }
@@ -189,15 +194,16 @@ describe("RabbitMQ Modules", function() {
         describe("createChannel", function() {
             it("should create a channel successfully", async function() {
                 const mockChannel = {
-                    on: sandbox.stub().callsFake((event: string, cb: Function) => {
+                    on: sandbox.stub(),
+                    once: sandbox.stub().callsFake((event: string, cb: Function) => {
                         if (event === 'connect') {
                             setImmediate(() => cb());
                         }
-                    }),
-                    once: sandbox.stub()
+                    })
                 };
                 const mockConnection = {
-                    on: sandbox.stub().callsFake((event: string, cb: Function) => {
+                    on: sandbox.stub(),
+                    once: sandbox.stub().callsFake((event: string, cb: Function) => {
                         if (event === 'connect') {
                             setImmediate(() => cb());
                         }
@@ -219,15 +225,16 @@ describe("RabbitMQ Modules", function() {
 
             it("should create channel without json:true option", async function() {
                 const mockChannel = {
-                    on: sandbox.stub().callsFake((event: string, cb: Function) => {
+                    on: sandbox.stub(),
+                    once: sandbox.stub().callsFake((event: string, cb: Function) => {
                         if (event === 'connect') {
                             setImmediate(() => cb());
                         }
-                    }),
-                    once: sandbox.stub()
+                    })
                 };
                 const mockConnection = {
-                    on: sandbox.stub().callsFake((event: string, cb: Function) => {
+                    on: sandbox.stub(),
+                    once: sandbox.stub().callsFake((event: string, cb: Function) => {
                         if (event === 'connect') {
                             setImmediate(() => cb());
                         }
@@ -269,7 +276,8 @@ describe("RabbitMQ Modules", function() {
 
             it("should return true when connected", async function() {
                 const mockConnection = {
-                    on: sandbox.stub().callsFake((event: string, cb: Function) => {
+                    on: sandbox.stub(),
+                    once: sandbox.stub().callsFake((event: string, cb: Function) => {
                         if (event === 'connect') {
                             setImmediate(() => cb());
                         }
@@ -289,16 +297,17 @@ describe("RabbitMQ Modules", function() {
         describe("close", function() {
             it("should close channel and connection gracefully", async function() {
                 const mockChannel = {
-                    on: sandbox.stub().callsFake((event: string, cb: Function) => {
+                    on: sandbox.stub(),
+                    once: sandbox.stub().callsFake((event: string, cb: Function) => {
                         if (event === 'connect') {
                             setImmediate(() => cb());
                         }
                     }),
-                    once: sandbox.stub(),
                     close: sandbox.stub().resolves()
                 };
                 const mockConnection = {
-                    on: sandbox.stub().callsFake((event: string, cb: Function) => {
+                    on: sandbox.stub(),
+                    once: sandbox.stub().callsFake((event: string, cb: Function) => {
                         if (event === 'connect') {
                             setImmediate(() => cb());
                         }
@@ -335,16 +344,17 @@ describe("RabbitMQ Modules", function() {
 
             it("should return channel after creation", async function() {
                 const mockChannel = {
-                    on: sandbox.stub().callsFake((event: string, cb: Function) => {
+                    on: sandbox.stub(),
+                    once: sandbox.stub().callsFake((event: string, cb: Function) => {
                         if (event === 'connect') {
                             setImmediate(() => cb());
                         }
                     }),
-                    once: sandbox.stub(),
                     close: sandbox.stub().resolves()
                 };
                 const mockConnection = {
-                    on: sandbox.stub().callsFake((event: string, cb: Function) => {
+                    on: sandbox.stub(),
+                    once: sandbox.stub().callsFake((event: string, cb: Function) => {
                         if (event === 'connect') {
                             setImmediate(() => cb());
                         }
