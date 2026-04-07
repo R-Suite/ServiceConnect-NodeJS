@@ -223,6 +223,56 @@ describe("Bus Modules", function() {
             });
         });
 
+        describe("request/reply overhaul", function() {
+            it("should enforce timeout when endpointCount is -1 and no timeout given", function() {
+                manager.registerRequest('msg1', -1, sinon.stub(), null, 30000);
+                assert.isTrue(manager.hasPendingRequest('msg1'));
+                manager.cleanupAll();
+            });
+
+            it("should increment processedCount only after callback succeeds", async function() {
+                let callCount = 0;
+                const callback = sinon.stub().callsFake(async () => {
+                    callCount++;
+                    if (callCount === 1) {
+                        throw new Error('Callback failed');
+                    }
+                });
+                // endpointCount=1: a single successful callback should complete the request
+                manager.registerRequest('msg1', 1, callback, 5000, 30000);
+
+                // First call fails - processedCount should NOT be incremented
+                try {
+                    await manager.processReply('msg1', { CorrelationId: 'a' } as any, { SourceAddress: 'ep-A' }, 'Type');
+                } catch {
+                    // expected
+                }
+
+                // With buggy code: processedCount was incremented to 1 before callback,
+                // so the request would already be cleaned up (endpointCount=1).
+                // With correct code: processedCount stays 0, request remains pending.
+                assert.isTrue(manager.hasPendingRequest('msg1'), 'request should still be pending after failed callback');
+
+                // Second call succeeds - now processedCount should increment and complete
+                await manager.processReply('msg1', { CorrelationId: 'b' } as any, { SourceAddress: 'ep-B' }, 'Type');
+                assert.isFalse(manager.hasPendingRequest('msg1'), 'request should be completed after successful callback');
+                manager.cleanupAll();
+            });
+
+            it("should deduplicate retried replies by message source", async function() {
+                const callback = sinon.stub().resolves();
+                manager.registerRequest('msg1', 2, callback, 5000, 30000);
+
+                const headers1 = { SourceAddress: 'endpoint-A' };
+                await manager.processReply('msg1', { CorrelationId: 'a' } as any, headers1, 'Type');
+                await manager.processReply('msg1', { CorrelationId: 'a' } as any, headers1, 'Type');
+
+                assert.strictEqual(callback.callCount, 1, 'duplicate reply should be ignored');
+                assert.isTrue(manager.hasPendingRequest('msg1'));
+                manager.cleanupAll();
+            });
+        });
+
         describe("timeout expiration", function() {
             it("should call callback with timeout indicator on expiration", function(done) {
                 const messageId = "timeout-test";

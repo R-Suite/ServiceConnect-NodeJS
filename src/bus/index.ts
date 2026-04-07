@@ -270,7 +270,8 @@ export class Bus implements IBus {
       messageId,
       endpoints.length,
       callback as MessageHandler<Message>,
-      timeoutMs
+      timeoutMs,
+      this.config.amqpSettings.defaultRequestTimeout
     );
 
     headers.RequestMessageId = createMessageId(messageId);
@@ -328,7 +329,8 @@ export class Bus implements IBus {
       messageId,
       expectedCount,
       callback as MessageHandler<Message>,
-      timeoutMs
+      timeoutMs,
+      this.config.amqpSettings.defaultRequestTimeout
     );
 
     headers.RequestMessageId = createMessageId(messageId);
@@ -380,7 +382,8 @@ export class Bus implements IBus {
         return;
       }
 
-      // Process handlers
+      // Process handlers — must complete before processReply to avoid
+      // race conditions where reply callbacks see incomplete state
       const handlers = this.handlerManager.getHandlers(type);
       const replyCallback = this.createReplyCallback(headers);
 
@@ -388,7 +391,9 @@ export class Bus implements IBus {
         handler(message, headers as MessageHeaders, type, replyCallback)
       );
 
-      // Process request/reply callbacks
+      await Promise.all(handlerPromises);
+
+      // Process request/reply callbacks after handlers have completed
       const responseId = headers.ResponseMessageId as string;
       if (responseId) {
         await this.requestReplyManager.processReply(
@@ -398,8 +403,6 @@ export class Bus implements IBus {
           type
         );
       }
-
-      await Promise.all(handlerPromises);
 
       // Execute after filters -- errors are logged but do NOT cause message nack
       // since the handler already succeeded
@@ -422,16 +425,15 @@ export class Bus implements IBus {
   }
 
   /**
-   * Create a reply callback for handlers
+   * Create a reply callback for handlers.
+   * Strips routing headers (DestinationAddress, SourceAddress, ConsumerType)
+   * from the reply to prevent stale routing data from propagating.
+   * Errors are caught internally to prevent unhandled rejections.
    */
   private createReplyCallback(
     headers: Record<string, unknown>
   ): ReplyCallback<Message> {
     return async (type: string, message: Message): Promise<void> => {
-      const replyHeaders = {
-        ...headers,
-        ResponseMessageId: headers.RequestMessageId,
-      };
       const sourceAddress = headers.SourceAddress as string;
       if (!sourceAddress) {
         this.config.logger?.warn?.(
@@ -439,13 +441,26 @@ export class Bus implements IBus {
         );
         return;
       }
-      if (this.core.client) {
-        await this.core.client.send(
-          sourceAddress,
-          type,
-          message,
-          replyHeaders as MessageHeaders
-        );
+
+      // Strip routing headers that should not be forwarded to the reply recipient
+      const { DestinationAddress, SourceAddress, ConsumerType, ...preservedHeaders } = headers;
+
+      const replyHeaders = {
+        ...preservedHeaders,
+        ResponseMessageId: headers.RequestMessageId,
+      };
+
+      try {
+        if (this.core.client) {
+          await this.core.client.send(
+            sourceAddress,
+            type,
+            message,
+            replyHeaders as MessageHeaders
+          );
+        }
+      } catch (error) {
+        this.config.logger?.error('Failed to send reply', error);
       }
     };
   }

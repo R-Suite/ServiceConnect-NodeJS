@@ -540,6 +540,42 @@ describe("Bus", function() {
         });
     });
 
+    describe("createReplyCallback error handling", function() {
+        var sendStub: any;
+        var consumeTypeStub: any;
+
+        beforeEach(function() {
+            sendStub = sinon.stub(settingsObject.client.prototype, 'send').rejects(new Error('Send failed'));
+            consumeTypeStub = sinon.stub(settingsObject.client.prototype, 'consumeType');
+        });
+
+        afterEach(function() {
+            (settingsObject.client as any).prototype.send.restore();
+            (settingsObject.client as any).prototype.consumeType.restore();
+        });
+
+        it("should catch errors in replyCallback internally", async function() {
+            let bus = new Bus({ amqpSettings: { queue: { name: 'Test' } } });
+            await bus.init();
+
+            // Add a handler that invokes the reply callback
+            await bus.addHandler('TestMessage', async (_msg: any, _hdrs: any, _type: any, replyCallback: any) => {
+                if (replyCallback) {
+                    await replyCallback('ReplyType', { CorrelationId: 'abc' });
+                }
+            });
+
+            const consumeMessage = (bus as any).consumeMessage.bind(bus);
+
+            // Should NOT throw even though send fails
+            await consumeMessage(
+                { CorrelationId: 'abc' },
+                { SourceAddress: 'origin', RequestMessageId: '123' },
+                'TestMessage'
+            );
+        });
+    });
+
     describe("isConnected", function(){
 
         var stub : any;
