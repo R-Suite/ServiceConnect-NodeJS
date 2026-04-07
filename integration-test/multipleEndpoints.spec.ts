@@ -49,24 +49,15 @@ describe("Multiple Endpoints", () => {
 
         let count1 = 0, count2 = 0;
 
-        const allReceived = new Promise<void>((resolve) => {
-            const handler1 = async (message : {[k:string]: any}) => {
-                count1++;
-                if (count1 === 1 && count2 === 1) {
-                    resolve();
-                }
-            };
+        const handler1 = async (message : {[k:string]: any}) => {
+            count1++;
+        };
+        const handler2 = async (message : {[k:string]: any}) => {
+            count2++;
+        };
 
-            const handler2 = async (message : {[k:string]: any}) => {
-                count2++;
-                if (count1 === 1 && count2 === 1) {
-                    resolve();
-                }
-            };
-
-            consumer1.addHandler("TestMessageType", handler1);
-            consumer2.addHandler("TestMessageType", handler2);
-        });
+        await consumer1.addHandler("TestMessageType", handler1);
+        await consumer2.addHandler("TestMessageType", handler2);
 
         await producer.send(
             ["Test.Consumer1", "Test.Consumer2"],
@@ -74,7 +65,14 @@ describe("Multiple Endpoints", () => {
             { CorrelationId: "1" }
         );
 
-        await allReceived;
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        if (count1 !== 1) {
+            throw new Error(`Expected consumer1 to receive 1 message, got ${count1}`);
+        }
+        if (count2 !== 1) {
+            throw new Error(`Expected consumer2 to receive 1 message, got ${count2}`);
+        }
     });
 });
 

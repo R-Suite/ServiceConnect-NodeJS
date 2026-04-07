@@ -1,5 +1,6 @@
 
 import { Bus } from '../src/index';
+import amqplib from 'amqplib';
 import config from "./config"
 
 describe("Audit Queue", () => {
@@ -37,21 +38,47 @@ describe("Audit Queue", () => {
         await consumer.init();
         await producer.init();
 
-        const messageReceived = new Promise<void>((resolve) => {
-            const messageHandler = async (message : {[k:string]: any}) => {
-                resolve();
-            };
+        let received = false;
 
-            consumer.addHandler("TestMessageType", messageHandler);
-        });
+        const messageHandler = async (message : {[k:string]: any}) => {
+            received = true;
+        };
 
-        await producer.send("Test.Consumer", "TestMessageType", { CorrelationId: "123" });
+        await consumer.addHandler("TestMessageType", messageHandler);
 
-        await messageReceived;
+        await producer.send("Test.Consumer", "TestMessageType", { CorrelationId: "audit-test-123" });
 
-        // TODO (#23): After the handler resolves, consume from the "Test.Consumer.Audit"
-        // queue and assert that the message is present. This requires creating a separate
-        // AMQP connection to directly consume from the audit queue and verify the message
-        // was forwarded there after successful processing.
+        // Wait for handler to process and audit message to be forwarded
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        if (!received) {
+            throw new Error("Handler was not called");
+        }
+
+        // Verify audit queue received the message using a direct amqplib connection
+        const conn = await amqplib.connect(config.host);
+        const ch = await conn.createChannel();
+        try {
+            const msg = await ch.get("Test.Consumer.Audit", { noAck: true });
+            if (!msg) {
+                throw new Error("Audit queue is empty — no message was forwarded after successful processing");
+            }
+
+            const body = JSON.parse(msg.content.toString());
+            if (body.CorrelationId !== "audit-test-123") {
+                throw new Error(`Expected CorrelationId 'audit-test-123' in audit message, got '${body.CorrelationId}'`);
+            }
+
+            const headers = msg.properties.headers;
+            if (!headers.TimeProcessed) {
+                throw new Error("Audit message is missing TimeProcessed header");
+            }
+            if (!headers.TypeName || headers.TypeName !== "TestMessageType") {
+                throw new Error(`Expected TypeName 'TestMessageType' in audit headers, got '${headers.TypeName}'`);
+            }
+        } finally {
+            await ch.close();
+            await conn.close();
+        }
     });
 });

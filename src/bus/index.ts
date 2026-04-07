@@ -159,14 +159,16 @@ export class Bus implements IBus {
       );
     }
 
+    // Register handler synchronously first so it's available immediately,
+    // even when addHandler is called without await
+    this.handlerManager.addHandler(messageType, handler);
+
     const normalizedType = messageType.replaceAll('.', '');
 
     // Start consuming the type if not wildcard
     if (normalizedType !== '*' && this.core.client) {
       await this.core.client.consumeType(normalizedType);
     }
-
-    this.handlerManager.addHandler(messageType, handler);
   }
 
   /**

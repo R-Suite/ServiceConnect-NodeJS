@@ -88,6 +88,10 @@ describe("Scatter Gather", () => {
 
         // Wait for all replies
         await pollWithDeadline(() => count >= 20);
+
+        if (count !== 20) {
+            throw new Error(`Expected exactly 20 replies (10 messages x 2 consumers), got ${count}`);
+        }
     });
 
     it("should timeout after 100ms", async () => {

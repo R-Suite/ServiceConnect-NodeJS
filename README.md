@@ -50,10 +50,10 @@ const sender = new Bus({
 await sender.init();
 
 // Send to a single endpoint
-await sender.send('processor-queue', 'ProcessOrder', { orderId: 123 });
+await sender.send('processor-queue', 'ProcessOrder', { CorrelationId: 'abc', orderId: 123 });
 
 // Send to multiple endpoints
-await sender.send(['processor-queue', 'audit-queue'], 'ProcessOrder', { orderId: 123 });
+await sender.send(['processor-queue', 'audit-queue'], 'ProcessOrder', { CorrelationId: 'abc', orderId: 123 });
 ```
 
 ### 2. Events (Publish/Subscribe)
@@ -71,7 +71,7 @@ const publisher = new Bus({
 await publisher.init();
 
 // Publish an event (all subscribers receive it)
-await publisher.publish('OrderCreated', { orderId: 123, total: 99.99 });
+await publisher.publish('OrderCreated', { CorrelationId: 'abc', orderId: 123, total: 99.99 });
 ```
 
 ### 3. Request/Reply
@@ -98,7 +98,7 @@ await service.init();
 
 // Handle the request
 await service.addHandler('GetOrderStatus', async (message, headers, type, reply) => {
-  const status = { orderId: message.orderId, status: 'processing' };
+  const status = { CorrelationId: message.CorrelationId, orderId: message.orderId, status: 'processing' };
   await reply('OrderStatus', status);
 });
 
@@ -106,7 +106,7 @@ await service.addHandler('GetOrderStatus', async (message, headers, type, reply)
 await client.sendRequest(
   'service-queue',
   'GetOrderStatus',
-  { orderId: 123 },
+  { CorrelationId: 'abc', orderId: 123 },
   async (response) => {
     console.log('Got response:', response);
   }
@@ -130,7 +130,7 @@ await aggregator.init();
 // Publish request and wait for up to 5 responses within 10 seconds
 await aggregator.publishRequest(
   'PriceRequest',
-  { productId: 'ABC' },
+  { CorrelationId: 'abc', productId: 'ABC' },
   async (response) => {
     console.log('Received quote:', response);
   },

@@ -29,7 +29,7 @@ describe("Retries", () => {
             amqpSettings: {
                 host: config.host,
                 queue: {
-                    name: "Test.Consumer",
+                    name: "Test.Consumer.RetryTest",
                     autoDelete: true
                 },
                 maxRetries: 3,
@@ -41,7 +41,7 @@ describe("Retries", () => {
             amqpSettings: {
                 host: config.host,
                 queue: {
-                    name: "Test.Producer",
+                    name: "Test.Producer.RetryTest",
                     autoDelete: true
                 }
             }
@@ -61,7 +61,7 @@ describe("Retries", () => {
 
         await consumer.addHandler("TestMessageType", messageHandler);
 
-        await producer.send("Test.Consumer", "TestMessageType", {
+        await producer.send("Test.Consumer.RetryTest", "TestMessageType", {
             CorrelationId: "123"
         });
 

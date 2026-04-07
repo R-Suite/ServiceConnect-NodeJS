@@ -70,6 +70,10 @@ describe("Request Reply", () => {
 
         // Wait for all replies
         await pollWithDeadline(() => count >= 10);
+
+        if (count !== 10) {
+            throw new Error(`Expected exactly 10 replies, got ${count}`);
+        }
     });
 
 });

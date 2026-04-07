@@ -13,9 +13,14 @@ export class BusCore {
   }
 
   /**
-   * Initialize the bus by creating and connecting to the client
+   * Initialize the bus by creating and connecting to the client.
+   * If already initialized, closes the existing client first to prevent connection leaks.
    */
   async init(consumeCallback: ConsumeMessageCallback): Promise<void> {
+    if (this.client) {
+      await this.close();
+    }
+
     const ClientConstructor = this.config.client;
     this.client = new ClientConstructor(this.config, consumeCallback);
     await this.client.connect();

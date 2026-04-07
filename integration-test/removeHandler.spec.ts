@@ -36,37 +36,36 @@ describe("Remove Handler", () => {
         await producer.init();
 
         let receivedCount = 0;
-        const maxMessages = 3;
 
-        const allReceived = new Promise<void>((resolve, reject) => {
-            const timeout = setTimeout(() => {
-                if (receivedCount === maxMessages) {
-                    resolve();
-                } else {
-                    reject(new Error(`Expected ${maxMessages} messages but received ${receivedCount}`));
-                }
-            }, 1500);
+        const messageHandler = async (message : {[k:string]: any}) => {
+            receivedCount++;
+        };
 
-            const messageHandler = async (message : {[k:string]: any}) => {
-                receivedCount++;
-                clearTimeout(timeout);
-                setTimeout(() => {
-                    if (receivedCount === maxMessages) {
-                        resolve();
-                    } else {
-                        reject(new Error(`Expected ${maxMessages} messages but received ${receivedCount}`));
-                    }
-                }, 500);
-            };
+        await consumer.addHandler("TestMessageType", messageHandler);
 
-            consumer.addHandler("TestMessageType", messageHandler);
-        });
-
+        // Send 2 messages and verify they are received
         await producer.send("Test.Consumer", "TestMessageType", { CorrelationId: "1" });
         await producer.send("Test.Consumer", "TestMessageType", { CorrelationId: "2" });
-        await producer.send("Test.Consumer", "TestMessageType", { CorrelationId: "3" });
 
-        await allReceived;
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        if (receivedCount !== 2) {
+            throw new Error(`Expected 2 messages before removal but received ${receivedCount}`);
+        }
+
+        // Remove handler
+        await consumer.removeHandler("TestMessageType", messageHandler);
+
+        // Send more messages — these should NOT be received
+        receivedCount = 0;
+        await producer.send("Test.Consumer", "TestMessageType", { CorrelationId: "3" });
+        await producer.send("Test.Consumer", "TestMessageType", { CorrelationId: "4" });
+
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        if (receivedCount !== 0) {
+            throw new Error(`Expected 0 messages after removal but received ${receivedCount}`);
+        }
     });
 
     it("should allow dynamic handler addition and removal", async () => {
