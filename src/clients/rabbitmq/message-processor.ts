@@ -50,7 +50,6 @@ export class MessageProcessor {
       if (!typeName) {
         this.logger?.error('Message does not contain TypeName header');
         this.ackMessage(rawMessage);
-        this.processing--;
         return;
       }
 
