@@ -2,13 +2,26 @@
 import { Bus } from '../src/index';
 import config from "./config"
 
+const pollWithDeadline = (check: () => boolean, deadline: number = 30000): Promise<void> => {
+    return new Promise((resolve, reject) => {
+        const start = Date.now();
+        const interval = setInterval(() => {
+            if (check()) { clearInterval(interval); resolve(); }
+            else if (Date.now() - start > deadline) {
+                clearInterval(interval);
+                reject(new Error(`Poll deadline exceeded after ${deadline}ms`));
+            }
+        }, 100);
+    });
+};
+
 describe("Retries", () => {
 
     let consumer : Bus, producer : Bus;
 
     afterEach(async () => {
-        await consumer.close();
-        await producer.close();
+        await consumer?.close();
+        await producer?.close();
     })
 
     it("should retry message 3 times if exception is thrown", async () => {
@@ -16,7 +29,7 @@ describe("Retries", () => {
             amqpSettings: {
                 host: config.host,
                 queue: {
-                    name: "Test.Consumer",
+                    name: "Test.Consumer.RetryTest",
                     autoDelete: true
                 },
                 maxRetries: 3,
@@ -28,7 +41,7 @@ describe("Retries", () => {
             amqpSettings: {
                 host: config.host,
                 queue: {
-                    name: "Test.Producer",
+                    name: "Test.Producer.RetryTest",
                     autoDelete: true
                 }
             }
@@ -36,26 +49,24 @@ describe("Retries", () => {
 
         await consumer.init();
         await producer.init();
-       
-        return new Promise<void>(async (resolve, reject) => {
-            let count = 0;
 
-            const messageHandler = async (message : {[k:string]: any}) => {
-                count++;
-                if (count === 4) {
-                    resolve();
-                } else {
-                    throw new Error("Retry test")
-                }
-            };
-    
-            await consumer.addHandler("TestMessageType", messageHandler);
+        let count = 0;
 
-            producer.send("Test.Consumer", "TestMessageType", {
-                CorrelationId: "123"
-            }); 
-        });     
+        const messageHandler = async (message : {[k:string]: any}) => {
+            count++;
+            if (count < 4) {
+                throw new Error("Retry test")
+            }
+        };
 
+        await consumer.addHandler("TestMessageType", messageHandler);
+
+        await producer.send("Test.Consumer.RetryTest", "TestMessageType", {
+            CorrelationId: "123"
+        });
+
+        // Wait for retries to complete
+        await pollWithDeadline(() => count >= 4);
     });
 
 });

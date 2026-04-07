@@ -7,8 +7,8 @@ describe("Priority Queue", () => {
     let consumer : Bus, producer : Bus;
 
     afterEach(async () => {
-        await consumer.close();
-        await producer.close();
+        await consumer?.close();
+        await producer?.close();
     })
 
     it("should send and receive all events", async () => {
@@ -37,7 +37,7 @@ describe("Priority Queue", () => {
         await consumer.init();
         await consumer.addHandler("TestMessageType", (m:any) => {});
         await consumer.close();
-        
+
         await producer.init();
 
         // Add messages onto queue
@@ -45,13 +45,13 @@ describe("Priority Queue", () => {
             await producer.send("Test.Consumer.PriorityQueue", "TestMessageType", {
                 CorrelationId: "123",
                 number: i
-            }, { "Priority": i + 1});         
-        }       
-       
-        return new Promise<void>(async (resolve, reject) => {
-            let first : number | null = null, count : number = 0;
+            }, { "Priority": i + 1});
+        }
 
-             // Init new consumer.  The high priority message should get processed first.
+        let first : number | null = null, count : number = 0;
+
+        const allReceived = new Promise<void>((resolve, reject) => {
+            // Init new consumer.  The high priority message should get processed first.
             consumer = new Bus({
                 amqpSettings: {
                     host: config.host,
@@ -72,22 +72,17 @@ describe("Priority Queue", () => {
                             if (first === 1) {
                                 resolve();
                             } else {
-                                reject();
+                                reject(new Error(`Expected first message to have number 1, got ${first}`));
                             }
                         }
                     }]
                 }
             });
-            
-            await consumer.init();
-        });     
 
+            consumer.init();
+        });
+
+        await allReceived;
     });
 
 });
-
-const sleep = async (milliseconds : number) => {
-    return new Promise<void> ((resolve, _) => {
-        setTimeout(() => resolve(), milliseconds);
-    })
-}
