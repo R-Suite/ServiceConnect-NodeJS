@@ -1,19 +1,28 @@
 {
   "name": "service-connect",
   "version": "2.0.0",
-  "description": "",
+  "description": "Asynchronous messaging framework for Node.js over RabbitMQ (AMQP)",
   "main": "index.js",
   "types": "lib/index.d.ts",
+  "files": [
+    "lib/",
+    "index.js",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "test": "TS_NODE_TRANSPILE_ONLY=true mocha --require ts-node/register test/**/*.spec.ts",
+    "prepublishOnly": "npm run build && npm test",
     "rabbitmq": "cross-env RABBITMQ_PLUGINS=rabbitmq_management docker run -p 5672:5672 -p 15672:15672 --name rabbitmq bitnami/rabbitmq:latest",
     "integration-test": "TS_NODE_TRANSPILE_ONLY=true mocha --require ts-node/register integration-test/**/*.spec.ts  --timeout 60000",
     "auto-integration-test": "TS_NODE_TRANSPILE_ONLY=true mocha --require ts-node/register --require ./integration-test/setupDocker.ts integration-test/**/*.spec.ts  --timeout 60000"
   },
-  "author": "Tim Watson",
-  "email": "tswatson123@gmail.com",
-  "url": "https://github.com/twatson83",
+  "author": {
+    "name": "Tim Watson",
+    "email": "tswatson123@gmail.com",
+    "url": "https://github.com/twatson83"
+  },
   "license": "MIT",
   "devDependencies": {
     "@types/amqplib": "^0.10.8",
@@ -24,7 +33,6 @@
     "@types/uuid": "^10.0.0",
     "chai": "^6.2.2",
     "cross-env": "^7.0.3",
-    "eslint": "^9.23.0",
     "mocha": "^11.7.5",
     "sinon": "^21.0.3",
     "ts-node": "^10.9.2",
@@ -35,6 +43,9 @@
     "amqplib": "^1.0.3",
     "deepmerge": "^4.3.1",
     "uuid": "^13.0.0"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "repository": {
     "type": "git",

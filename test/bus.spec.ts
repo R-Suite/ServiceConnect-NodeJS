@@ -606,4 +606,108 @@ describe("Bus", function() {
         });
 
     });
+
+    describe("validation hardening", function() {
+
+        it("should throw NOT_INITIALIZED when addHandler called before init", async function() {
+            let bus = new Bus({ amqpSettings: { queue: { name: 'test' } } });
+            try {
+                await bus.addHandler('SomeType', () => {});
+                assert.fail('should have thrown');
+            } catch (err: any) {
+                assert.strictEqual(err.code, 'NOT_INITIALIZED');
+            }
+        });
+
+        it("should throw on send with empty type", async function() {
+            let bus = new Bus({ amqpSettings: { queue: { name: 'test' } } } as any);
+            (bus as any).initialized = true;
+            (bus as any).core.client = { send: sinon.stub() };
+            try {
+                await bus.send('endpoint', '', { CorrelationId: 'a' } as any);
+                assert.fail('should have thrown');
+            } catch (err: any) {
+                assert.strictEqual(err.code, 'INVALID_MESSAGE_TYPE');
+            }
+        });
+
+        it("should throw on send with whitespace-only type", async function() {
+            let bus = new Bus({ amqpSettings: { queue: { name: 'test' } } } as any);
+            (bus as any).initialized = true;
+            (bus as any).core.client = { send: sinon.stub() };
+            try {
+                await bus.send('endpoint', '   ', { CorrelationId: 'a' } as any);
+                assert.fail('should have thrown');
+            } catch (err: any) {
+                assert.strictEqual(err.code, 'INVALID_MESSAGE_TYPE');
+            }
+        });
+
+        it("should throw when maxRetries is NaN", function() {
+            assert.throws(() => {
+                new Bus({ amqpSettings: { queue: { name: 'test' }, maxRetries: NaN } } as any);
+            });
+        });
+
+        it("should throw when maxRetries is Infinity", function() {
+            assert.throws(() => {
+                new Bus({ amqpSettings: { queue: { name: 'test' }, maxRetries: Infinity } } as any);
+            });
+        });
+
+        it("should throw when retryDelay is NaN", function() {
+            assert.throws(() => {
+                new Bus({ amqpSettings: { queue: { name: 'test' }, retryDelay: NaN } } as any);
+            });
+        });
+
+        it("should throw when prefetch is Infinity", function() {
+            assert.throws(() => {
+                new Bus({ amqpSettings: { queue: { name: 'test' }, prefetch: Infinity } } as any);
+            });
+        });
+
+        it("should throw when prefetch is not an integer", function() {
+            assert.throws(() => {
+                new Bus({ amqpSettings: { queue: { name: 'test' }, prefetch: 1.5 } } as any);
+            });
+        });
+
+        it("should throw when connectionMaxRetries is 0", function() {
+            assert.throws(() => {
+                new Bus({ amqpSettings: { queue: { name: 'test' }, connectionMaxRetries: 0 } } as any);
+            });
+        });
+
+        it("should throw when connectionMaxRetries is NaN", function() {
+            assert.throws(() => {
+                new Bus({ amqpSettings: { queue: { name: 'test' }, connectionMaxRetries: NaN } } as any);
+            });
+        });
+
+        it("should throw when queue name is whitespace-only", function() {
+            assert.throws(() => {
+                new Bus({ amqpSettings: { queue: { name: '   ' } } } as any);
+            });
+        });
+
+        it("should throw when queue name is not a string", function() {
+            assert.throws(() => {
+                new Bus({ amqpSettings: { queue: { name: 123 } } } as any);
+            });
+        });
+
+        it("should throw when host contains non-string", function() {
+            assert.throws(() => {
+                new Bus({ amqpSettings: { queue: { name: 'test' }, host: [123 as any] } } as any);
+            });
+        });
+
+        it("should throw when host is a non-string value", function() {
+            assert.throws(() => {
+                new Bus({ amqpSettings: { queue: { name: 'test' }, host: 123 as any } } as any);
+            });
+        });
+
+    });
 });

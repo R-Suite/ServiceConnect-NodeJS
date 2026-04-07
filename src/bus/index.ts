@@ -68,7 +68,7 @@ export class Bus implements IBus {
    * Validate user-provided configuration
    */
   private validateConfig(config: ServiceConnectConfig): void {
-    if (!config.amqpSettings?.queue?.name) {
+    if (typeof config.amqpSettings?.queue?.name !== 'string' || config.amqpSettings.queue.name.trim() === '') {
       throw new ValidationError(
         'Queue name is required. Provide amqpSettings.queue.name in config.',
         ValidationErrorCodes.CONFIG_MISSING_QUEUE_NAME,
@@ -78,33 +78,41 @@ export class Bus implements IBus {
 
     const amqp = config.amqpSettings;
 
-    if (amqp.maxRetries !== undefined && (typeof amqp.maxRetries !== 'number' || amqp.maxRetries < 0)) {
+    if (amqp.maxRetries !== undefined && (!Number.isFinite(amqp.maxRetries) || amqp.maxRetries < 0)) {
       throw new ValidationError(
-        'maxRetries must be a non-negative number.',
+        'maxRetries must be a finite non-negative number.',
         ValidationErrorCodes.CONFIG_INVALID_MAX_RETRIES,
         'amqpSettings.maxRetries'
       );
     }
 
-    if (amqp.retryDelay !== undefined && (typeof amqp.retryDelay !== 'number' || amqp.retryDelay < 0)) {
+    if (amqp.retryDelay !== undefined && (!Number.isFinite(amqp.retryDelay) || amqp.retryDelay < 0)) {
       throw new ValidationError(
-        'retryDelay must be a non-negative number.',
+        'retryDelay must be a finite non-negative number.',
         ValidationErrorCodes.CONFIG_INVALID_RETRY_DELAY,
         'amqpSettings.retryDelay'
       );
     }
 
-    if (amqp.prefetch !== undefined && (typeof amqp.prefetch !== 'number' || amqp.prefetch < 1)) {
+    if (amqp.prefetch !== undefined && (!Number.isFinite(amqp.prefetch) || !Number.isInteger(amqp.prefetch) || amqp.prefetch < 1)) {
       throw new ValidationError(
-        'prefetch must be a positive number.',
+        'prefetch must be a finite positive integer.',
         ValidationErrorCodes.CONFIG_INVALID_PREFETCH,
         'amqpSettings.prefetch'
       );
     }
 
+    if (amqp.connectionMaxRetries !== undefined && (!Number.isFinite(amqp.connectionMaxRetries) || amqp.connectionMaxRetries < 1)) {
+      throw new ValidationError(
+        'connectionMaxRetries must be a finite number >= 1.',
+        ValidationErrorCodes.CONFIG_INVALID_CONNECTION_MAX_RETRIES,
+        'amqpSettings.connectionMaxRetries'
+      );
+    }
+
     if (amqp.host !== undefined) {
       const hosts = Array.isArray(amqp.host) ? amqp.host : [amqp.host];
-      if (hosts.length === 0 || hosts.some(h => !h || h.trim() === '')) {
+      if (hosts.length === 0 || hosts.some(h => typeof h !== 'string' || h.trim() === '')) {
         throw new ValidationError(
           'host must be a non-empty string or array of non-empty strings.',
           ValidationErrorCodes.CONFIG_MISSING_HOST,
@@ -181,6 +189,14 @@ export class Bus implements IBus {
     message: T,
     headers: Partial<MessageHeaders> = {}
   ): Promise<void> {
+    if (!type || type.trim() === '') {
+      throw new ValidationError(
+        'Message type is required and cannot be empty.',
+        ValidationErrorCodes.INVALID_MESSAGE_TYPE,
+        'type'
+      );
+    }
+
     const shouldSend = await this.filterManager.executeOutgoing(
       this.config.filters.outgoing,
       message,
