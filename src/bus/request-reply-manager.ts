@@ -61,7 +61,7 @@ export class RequestReplyManager {
     await config.callback(message, headers, type);
     config.processedCount++;
 
-    if (config.processedCount >= config.endpointCount) {
+    if (config.endpointCount >= 0 && config.processedCount >= config.endpointCount) {
       this.cleanupRequest(messageId);
     }
   }

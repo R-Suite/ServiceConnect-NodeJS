@@ -130,6 +130,21 @@ describe("Bus Modules", function() {
                 expect(manager.getPendingCount()).to.equal(0);
             });
 
+            it("should not clean up request with endpointCount -1 after first reply", async function() {
+                const messageId = "scatter-gather-test";
+                const callback = sinon.stub();
+
+                manager.registerRequest(messageId, -1, callback, null);
+
+                await manager.processReply(messageId, createMessage({ data: 1 }), createHeaders(), "Reply1");
+                expect(callback.calledOnce).to.be.true;
+                expect(manager.hasPendingRequest(messageId)).to.be.true;
+
+                await manager.processReply(messageId, createMessage({ data: 2 }), createHeaders(), "Reply2");
+                expect(callback.calledTwice).to.be.true;
+                expect(manager.hasPendingRequest(messageId)).to.be.true;
+            });
+
             it("should track multiple endpoints independently", async function() {
                 const messageId1 = "test-msg-6";
                 const messageId2 = "test-msg-7";
