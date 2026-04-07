@@ -6,22 +6,15 @@ import { BusCore } from './bus-core';
 import { MessageHandlerManager } from './message-handler';
 import { FilterManager } from './filter-manager';
 import { RequestReplyManager } from './request-reply-manager';
+import { createMessageId } from '../types';
 import type {
   ServiceConnectConfig,
   BusConfig,
   Message,
   MessageHandler,
   MessageHeaders,
-  MessageId,
   ReplyCallback
 } from '../types';
-
-/**
- * Create a branded MessageId from a string
- */
-function createMessageId(id: string): MessageId {
-  return id as MessageId;
-}
 
 /**
  * Bus class - main entry point for messaging operations.

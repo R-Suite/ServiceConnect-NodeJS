@@ -7,21 +7,14 @@ import { RetryManager } from './retry-manager';
 import { v4 as uuidv4 } from 'uuid';
 import merge from 'deepmerge';
 import { ValidationError, ValidationErrorCodes, ConnectionError, ConnectionErrorCodes } from '../../errors';
+import { createMessageId } from '../../types';
 import type {
   BusConfig,
   ConsumeMessageCallback,
   IClient,
   Message,
-  MessageHeaders,
-  MessageId
+  MessageHeaders
 } from '../../types';
-
-/**
- * Create a branded MessageId from a string
- */
-function createMessageId(id: string): MessageId {
-  return id as MessageId;
-}
 
 /**
  * RabbitMQ client implementation of IClient interface.

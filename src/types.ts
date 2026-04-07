@@ -264,3 +264,10 @@ export interface ILogger {
   warn?(message: string): void;
   debug?(message: string): void;
 }
+
+/**
+ * Create a branded MessageId from a string
+ */
+export function createMessageId(id: string): MessageId {
+  return id as MessageId;
+}
