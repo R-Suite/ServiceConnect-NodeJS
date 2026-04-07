@@ -28,6 +28,16 @@ export class ConnectionManager {
       : [this.config.amqpSettings.host];
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      // Clean up previous connection attempt if any
+      if (this.connection) {
+        try {
+          await this.connection.close();
+        } catch {
+          // Ignore close errors during retry
+        }
+        this.connection = null;
+      }
+
       try {
         this.connection = amqp.connect(hosts);
         this.setupConnectionEvents();
@@ -59,6 +69,16 @@ export class ConnectionManager {
           await this.sleep(delay);
         }
       }
+    }
+
+    // Clean up last failed connection attempt
+    if (this.connection) {
+      try {
+        await this.connection.close();
+      } catch {
+        // Ignore close errors during cleanup
+      }
+      this.connection = null;
     }
 
     throw new ConnectionError(

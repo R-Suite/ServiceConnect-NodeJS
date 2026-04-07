@@ -125,6 +125,44 @@ describe("RabbitMQ Modules", function() {
                 assert.isTrue(connectionManager.isConnected());
             });
 
+            it("should close previous connection on retry", async function() {
+                let attempt = 0;
+                const mockConnection1Close = sandbox.stub().resolves();
+                const mockConnection2Close = sandbox.stub().resolves();
+
+                const connections = [
+                    {
+                        on: sandbox.stub().callsFake((event: string, cb: Function) => {
+                            if (event === 'connectFailed') {
+                                setImmediate(() => cb({ err: new Error('Connection refused') }));
+                            }
+                        }),
+                        close: mockConnection1Close,
+                        isConnected: sandbox.stub().returns(false)
+                    },
+                    {
+                        on: sandbox.stub().callsFake((event: string, cb: Function) => {
+                            if (event === 'connect') {
+                                setImmediate(() => cb());
+                            }
+                        }),
+                        close: mockConnection2Close,
+                        isConnected: sandbox.stub().returns(true)
+                    }
+                ];
+
+                const connectStub = sandbox.stub(amqp, 'connect');
+                connectStub.onCall(0).returns(connections[0] as any);
+                connectStub.onCall(1).returns(connections[1] as any);
+                sandbox.stub(ConnectionManager.prototype as any, 'sleep').resolves();
+
+                const connectionManager = new ConnectionManager(mockConfig);
+                await connectionManager.connect();
+
+                assert.isTrue(mockConnection1Close.calledOnce, 'Previous connection should be closed on retry');
+                assert.isTrue(connectionManager.isConnected());
+            });
+
             it("should throw ConnectionError after max retries exceeded", async function() {
                 const mockConnection = {
                     on: sandbox.stub().callsFake((event: string, cb: Function) => {
