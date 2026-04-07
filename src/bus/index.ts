@@ -112,7 +112,7 @@ export class Bus {
 
     // Stop consuming if no more handlers
     if (messageType !== '*' && this.handlerManager.hasNoHandlers(messageType)) {
-      const normalizedType = messageType.replace(/\./g, '');
+      const normalizedType = messageType.replaceAll('.', '');
       if (this.core.client) {
         await this.core.client.removeType(normalizedType);
       }
