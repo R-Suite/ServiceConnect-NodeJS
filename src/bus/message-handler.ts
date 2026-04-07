@@ -7,6 +7,16 @@ export class MessageHandlerManager {
   private handlers: HandlersConfig = {};
 
   /**
+   * Normalize a type name by removing dots, except for the wildcard '*'.
+   */
+  private normalizeType(messageType: string): string {
+    if (messageType === '*') {
+      return messageType;
+    }
+    return messageType.replaceAll('.', '');
+  }
+
+  /**
    * Add a handler for a message type
    * @param messageType - The message type to handle
    * @param handler - The handler function
@@ -15,10 +25,11 @@ export class MessageHandlerManager {
     messageType: string,
     handler: MessageHandler<T>
   ): void {
-    if (!this.handlers[messageType]) {
-      this.handlers[messageType] = [];
+    const normalized = this.normalizeType(messageType);
+    if (!this.handlers[normalized]) {
+      this.handlers[normalized] = [];
     }
-    this.handlers[messageType].push(handler as MessageHandler<Message>);
+    this.handlers[normalized].push(handler as MessageHandler<Message>);
   }
 
   /**
@@ -31,7 +42,8 @@ export class MessageHandlerManager {
     messageType: string,
     handler: MessageHandler<T>
   ): boolean {
-    const handlers = this.handlers[messageType];
+    const normalized = this.normalizeType(messageType);
+    const handlers = this.handlers[normalized];
     if (!handlers) {
       return false;
     }
@@ -42,6 +54,9 @@ export class MessageHandlerManager {
     }
 
     handlers.splice(index, 1);
+    if (handlers.length === 0) {
+      delete this.handlers[normalized];
+    }
     return true;
   }
 
@@ -50,7 +65,8 @@ export class MessageHandlerManager {
    * @param messageType - The message type to check
    */
   isHandled(messageType: string): boolean {
-    const handlers = this.handlers[messageType];
+    const normalized = this.normalizeType(messageType);
+    const handlers = this.handlers[normalized];
     return handlers !== undefined && handlers.length > 0;
   }
 
@@ -60,7 +76,8 @@ export class MessageHandlerManager {
    * @returns Array of handlers
    */
   getHandlers(messageType: string): MessageHandler<Message>[] {
-    const specific = this.handlers[messageType] || [];
+    const normalized = this.normalizeType(messageType);
+    const specific = this.handlers[normalized] || [];
     const wildcard = this.handlers['*'] || [];
     return [...specific, ...wildcard];
   }
@@ -78,7 +95,8 @@ export class MessageHandlerManager {
    * @param messageType - The message type
    */
   hasNoHandlers(messageType: string): boolean {
-    const handlers = this.handlers[messageType];
+    const normalized = this.normalizeType(messageType);
+    const handlers = this.handlers[normalized];
     return handlers === undefined || handlers.length === 0;
   }
 
@@ -90,10 +108,21 @@ export class MessageHandlerManager {
   }
 
   /**
-   * Initialize handlers from config (for restoring state)
+   * Initialize handlers from config (for restoring state).
+   * Normalizes type names to ensure consistent lookup.
    * @param config - Handlers configuration
    */
   initializeFromConfig(config: HandlersConfig): void {
-    this.handlers = { ...config };
+    this.handlers = {};
+    for (const key of Object.keys(config)) {
+      const normalized = this.normalizeType(key);
+      const sourceHandlers = config[key] ?? [];
+      // Merge handlers if a dotted and non-dotted key would collide
+      if (this.handlers[normalized]) {
+        this.handlers[normalized].push(...sourceHandlers);
+      } else {
+        this.handlers[normalized] = [...sourceHandlers];
+      }
+    }
   }
 }

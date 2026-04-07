@@ -46,6 +46,22 @@ export default class RabbitMQClient implements IClient {
 
     await this.connectionManager.createChannel(async (channel) => {
       await this.queueManager.setupQueues(channel, this.config.handlers);
+
+      // Register static handler types (from config) in typeSetupFunctions
+      // so that removeType() can unbind them later (#46)
+      for (const key of Object.keys(this.config.handlers)) {
+        if (key === '*') {
+          continue;
+        }
+        const normalizedType = key.replaceAll('.', '');
+        if (!this.typeSetupFunctions.has(normalizedType)) {
+          const setupFn = async (ch: ConfirmChannel) => {
+            await this.queueManager.consumeType(ch, normalizedType);
+          };
+          this.typeSetupFunctions.set(normalizedType, setupFn);
+        }
+      }
+
       const channelWrapper = this.connectionManager.getChannel();
       await this.messageProcessor.startConsuming(channel, channelWrapper ?? undefined);
     });
@@ -59,6 +75,15 @@ export default class RabbitMQClient implements IClient {
     if (!channel) {
       // For backward compatibility: don't throw if no channel (test environment)
       return;
+    }
+
+    // Guard against duplicate setup functions (#42):
+    // If a setup already exists for this type, remove the old one first
+    const existingSetupFn = this.typeSetupFunctions.get(type);
+    if (existingSetupFn) {
+      await channel.removeSetup(existingSetupFn, async (ch: ConfirmChannel) => {
+        await this.queueManager.removeType(ch, type);
+      });
     }
 
     // Store the setup function reference so removeType can pass the same reference to removeSetup

@@ -523,6 +523,21 @@ describe("RabbitMQ Modules", function() {
             });
         });
 
+        describe("bindMessageTypes wildcard filtering", function() {
+            it('should skip wildcard "*" key in bindMessageTypes', async function() {
+                const handlers = { '*': [], 'OrderCreated': [] };
+                await queueManager.setupQueues(mockChannel as any, handlers);
+
+                // assertExchange should NOT be called with '*' for the bindMessageTypes step
+                // It IS called for 'OrderCreated' (normalized to 'OrderCreated')
+                const assertExchangeCalls = mockChannel.assertExchange.getCalls();
+                const exchangeNames = assertExchangeCalls.map((c: any) => c.args[0]);
+
+                assert.isFalse(exchangeNames.includes('*'), 'Should not create exchange for wildcard "*"');
+                assert.isTrue(exchangeNames.includes('OrderCreated'), 'Should create exchange for OrderCreated');
+            });
+        });
+
         describe("consumeType", function() {
             it("should create exchange and bind queue for type", async function() {
                 await queueManager.consumeType(mockChannel as any, "TestType");

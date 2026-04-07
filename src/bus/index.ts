@@ -129,6 +129,14 @@ export class Bus implements IBus {
     messageType: string,
     handler: MessageHandler<T>
   ): Promise<void> {
+    if (!this.initialized) {
+      throw new ValidationError(
+        'Bus is not initialized. Call init() before adding handlers.',
+        ValidationErrorCodes.NOT_INITIALIZED,
+        'addHandler'
+      );
+    }
+
     const normalizedType = messageType.replaceAll('.', '');
 
     // Start consuming the type if not wildcard

@@ -976,6 +976,59 @@ describe("Bus Modules", function() {
             });
         });
 
+        describe("delete handler key when last handler removed", function() {
+            it("should delete handler key when last handler is removed", function() {
+                const handler = createHandlerStub();
+                manager.addHandler('TestType', handler);
+                manager.removeHandler('TestType', handler);
+                assert.isFalse(manager.isHandled('TestType'));
+                assert.deepEqual(Object.keys(manager.getHandlersConfig()), []);
+            });
+
+            it("should not leave dead empty arrays in handlers config", function() {
+                const handler1 = createHandlerStub();
+                const handler2 = createHandlerStub();
+                manager.addHandler('TypeA', handler1);
+                manager.addHandler('TypeB', handler2);
+                manager.removeHandler('TypeA', handler1);
+
+                const config = manager.getHandlersConfig();
+                assert.notProperty(config, 'TypeA', 'TypeA key should be deleted after last handler removed');
+                assert.property(config, 'TypeB');
+            });
+        });
+
+        describe("type name normalization", function() {
+            it("should normalize dotted type names when adding handlers", function() {
+                const handler = createHandlerStub();
+                manager.addHandler('Order.Created', handler);
+                assert.isTrue(manager.isHandled('Order.Created'));
+                assert.isTrue(manager.isHandled('OrderCreated'));
+            });
+
+            it("should normalize dotted type names when removing handlers", function() {
+                const handler = createHandlerStub();
+                manager.addHandler('Order.Created', handler);
+                manager.removeHandler('OrderCreated', handler);
+                assert.isFalse(manager.isHandled('Order.Created'));
+                assert.isFalse(manager.isHandled('OrderCreated'));
+            });
+
+            it("should not normalize wildcard '*'", function() {
+                const handler = createHandlerStub();
+                manager.addHandler('*', handler);
+                assert.isTrue(manager.isHandled('*'));
+            });
+
+            it("should retrieve handlers using either dotted or normalized names", function() {
+                const handler = createHandlerStub();
+                manager.addHandler('My.Message.Type', handler);
+                const handlers1 = manager.getHandlers('My.Message.Type');
+                const handlers2 = manager.getHandlers('MyMessageType');
+                assert.deepEqual(handlers1, handlers2);
+            });
+        });
+
         describe("handler count tracking", function() {
             it("should track multiple handlers across multiple types", function() {
                 const handlerA1 = createHandlerStub();

@@ -7,32 +7,10 @@ import type { BusConfig } from '../../types';
 export class QueueManager {
   private config: BusConfig;
   private logger: BusConfig['logger'];
-  private setupErrors: Map<string, Error> = new Map();
 
   constructor(config: BusConfig) {
     this.config = config;
     this.logger = config.logger;
-  }
-
-  /**
-   * Check if there were setup errors
-   */
-  hasSetupErrors(): boolean {
-    return this.setupErrors.size > 0;
-  }
-
-  /**
-   * Get setup errors
-   */
-  getSetupErrors(): Map<string, Error> {
-    return this.setupErrors;
-  }
-
-  /**
-   * Clear setup errors
-   */
-  clearSetupErrors(): void {
-    this.setupErrors.clear();
   }
 
   /**
@@ -71,32 +49,7 @@ export class QueueManager {
 
     this.logger?.info(`Creating queue: ${queueName}`);
 
-    // When multiple consumers share a queue (competing consumers pattern),
-    // we should only delete the queue if it truly doesn't exist or if we're
-    // sure no other consumer is using it. This is tricky to determine reliably,
-    // so we use a simpler approach: try to assert the queue, and if it fails
-    // due to argument mismatch (another consumer created it with different args),
-    // we attempt to delete and recreate.
-    try {
-      await channel.assertQueue(queueName, queueOpts);
-    } catch (err: unknown) {
-      // If assertQueue fails, it might be because the queue exists with different arguments
-      // (e.g., different queue properties like maxPriority). In this case, try to delete
-      // and recreate, but only if autoDelete is enabled.
-      if (this.config.amqpSettings.queue.autoDelete) {
-        try {
-          await channel.deleteQueue(queueName);
-          this.logger?.info(`Deleted existing queue with mismatched args: ${queueName}`);
-          await channel.assertQueue(queueName, queueOpts);
-        } catch (deleteErr: unknown) {
-          // If delete also fails (e.g., queue in use), log the error but continue
-          this.setupErrors.set(queueName, deleteErr as Error);
-          this.logger?.error(`Failed to delete queue ${queueName}:`, deleteErr);
-        }
-      } else {
-        this.setupErrors.set(queueName, err as Error);
-      }
-    }
+    await channel.assertQueue(queueName, queueOpts);
   }
 
   /**
@@ -109,8 +62,13 @@ export class QueueManager {
     this.logger?.info('Binding message handlers to queue');
     
     for (const key of Object.keys(handlers)) {
-      const type = key.replace(/\./g, '');
-      
+      // Skip wildcard — it's a handler-level concept, not an exchange
+      if (key === '*') {
+        continue;
+      }
+
+      const type = key.replaceAll('.', '');
+
       await channel.assertExchange(type, 'fanout', { durable: true });
       await channel.bindQueue(this.config.amqpSettings.queue.name, type, '');
     }
