@@ -261,7 +261,9 @@ export default class RabbitMQClient implements IClient {
     headers: MessageHeaders,
     messageType: 'Send' | 'Publish'
   ): MessageHeaders {
-    const merged = merge({}, headers) as MessageHeaders;
+    const merged = merge({}, headers, {
+      arrayMerge: (_target: unknown[], source: unknown[]) => source,
+    }) as MessageHeaders;
     
     merged.DestinationAddress = merged.DestinationAddress ?? this.config.amqpSettings.queue.name;
     merged.MessageId = merged.MessageId ?? createMessageId(uuidv4());

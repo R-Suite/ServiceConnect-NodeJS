@@ -10,6 +10,7 @@ import { MessageProcessor } from '../src/clients/rabbitmq/message-processor';
 import { RetryManager } from '../src/clients/rabbitmq/retry-manager';
 import type { BusConfig, Message, MessageHeaders } from '../src/types';
 import { ConnectionError } from '../src/errors';
+import RabbitMQClient from '../src/clients/rabbitmq/index';
 
 let expect = chai.expect;
 let assert = chai.assert;
@@ -1275,6 +1276,21 @@ describe("RabbitMQ Modules", function() {
                     error
                 ));
             });
+        });
+    });
+
+    describe("RabbitMQClient buildHeaders", function() {
+        it("should use source-replace array merge in buildHeaders", function() {
+            const client = new RabbitMQClient(mockConfig, sandbox.stub() as any);
+            const headers: MessageHeaders = {
+                CustomArray: ['a', 'b'] as any,
+            } as any;
+
+            // Call the private buildHeaders method
+            const result = (client as any).buildHeaders('TestType', headers, 'Send');
+
+            // The array should be exactly ['a', 'b'], not duplicated via concatenation
+            assert.deepEqual((result as any).CustomArray, ['a', 'b']);
         });
     });
 });
