@@ -445,6 +445,16 @@ describe("RabbitMQ Modules", function() {
                     })
                 })));
             });
+
+            it("should not delete existing retry queue on setup", async function() {
+                await queueManager.setupQueues(mockChannel as any, {});
+
+                const retryQueue = `${mockConfig.amqpSettings.queue.name}.Retries`;
+                assert.isFalse(
+                    mockChannel.deleteQueue.calledWith(retryQueue),
+                    'Should not delete retry queue during setup — in-flight retries would be lost'
+                );
+            });
         });
 
         describe("createErrorQueue", function() {

@@ -128,14 +128,6 @@ export class QueueManager {
 
     await channel.assertExchange(deadLetterExchange, 'direct', { durable: true });
 
-    // Try to delete existing retry queue first to avoid TTL conflicts
-    try {
-      await channel.deleteQueue(retryQueue);
-      this.logger?.info(`Deleted existing retry queue: ${retryQueue}`);
-    } catch {
-      // Queue didn't exist, ignore error
-    }
-
     await channel.assertQueue(retryQueue, {
       durable: this.config.amqpSettings.queue.durable,
       arguments: {
