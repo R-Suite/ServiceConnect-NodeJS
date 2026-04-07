@@ -62,6 +62,18 @@ describe("Bus", function() {
             expect(bus.config.amqpSettings.auditQueue).to.equal("audit");
             expect(bus.config.amqpSettings.auditEnabled).to.equal(false);
         });
+
+        it("should replace host array instead of concatenating with defaults", async function() {
+            let bus = new Bus({
+                amqpSettings: {
+                    queue: { name: 'ServiceConnectWebTest' },
+                    host: ['amqp://host1', 'amqp://host2']
+                }
+            });
+            await bus.init();
+
+            expect(bus.config.amqpSettings.host).to.deep.equal(['amqp://host1', 'amqp://host2']);
+        });
     });
 
     describe("init", function() {

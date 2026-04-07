@@ -44,7 +44,9 @@ export class Bus {
     this.validateConfig(config);
 
     // Merge with defaults
-    this.config = merge(settings(), config) as BusConfig;
+    this.config = merge(settings(), config, {
+      arrayMerge: (_target, source) => source,
+    }) as BusConfig;
 
     // Initialize modules
     this.core = new BusCore(this.config);
