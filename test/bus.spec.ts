@@ -3,6 +3,8 @@ import { Bus } from '../src/index';
 import chai from 'chai';
 import sinon from 'sinon';
 import settings from '../src/settings';
+import { ValidationError } from '../src/errors/ValidationError';
+import { ServiceConnectError } from '../src/errors/ServiceConnectError';
 
 let expect = chai.expect;
 let assert = chai.assert;
@@ -744,5 +746,66 @@ describe("Bus", function() {
             });
         });
 
+    });
+
+    describe("CorrelationId validation", function() {
+
+        var stub: any;
+        beforeEach(function() {
+            stub = sinon.stub(settingsObject.client.prototype, 'send');
+        });
+
+        afterEach(function() {
+            (settingsObject.client as any).prototype.send.restore();
+        });
+
+        it("should throw when sending message without CorrelationId", async function() {
+            let bus = new Bus({ amqpSettings: { queue: { name: 'test' } } } as any);
+            await bus.init();
+            try {
+                await bus.send('endpoint', 'Type', {} as any);
+                assert.fail('should have thrown');
+            } catch (err: any) {
+                assert.strictEqual(err.code, 'INVALID_MESSAGE_FORMAT');
+                assert.include(err.message, 'CorrelationId');
+            }
+        });
+
+        it("should throw when publishing message without CorrelationId", async function() {
+            let publishStub = sinon.stub(settingsObject.client.prototype, 'publish');
+            let bus = new Bus({ amqpSettings: { queue: { name: 'test' } } } as any);
+            await bus.init();
+            try {
+                await bus.publish('Type', {} as any);
+                assert.fail('should have thrown');
+            } catch (err: any) {
+                assert.strictEqual(err.code, 'INVALID_MESSAGE_FORMAT');
+                assert.include(err.message, 'CorrelationId');
+            } finally {
+                publishStub.restore();
+            }
+        });
+
+        it("should not throw when sending message with valid CorrelationId", async function() {
+            let bus = new Bus({ amqpSettings: { queue: { name: 'test' } } } as any);
+            await bus.init();
+            await bus.send('endpoint', 'Type', { CorrelationId: 'abc' } as any);
+            assert.isTrue(stub.calledOnce);
+        });
+    });
+
+    describe("Error.captureStackTrace", function() {
+        it("should fix Error.captureStackTrace to target correct constructor", function() {
+            const err = new ValidationError('test', 'TEST_CODE', 'field');
+            // The stack trace should not include 'new ServiceConnectError' since
+            // new.target points to ValidationError, not ServiceConnectError
+            assert.isFalse(err.stack?.includes('new ServiceConnectError'));
+        });
+
+        it("should produce correct stack for ServiceConnectError itself", function() {
+            const err = new ServiceConnectError('test', 'CODE', false);
+            assert.isDefined(err.stack);
+            assert.include(err.stack!, 'test');
+        });
     });
 });

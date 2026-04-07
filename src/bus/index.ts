@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import merge from 'deepmerge';
 import settings from '../settings';
-import { ValidationError, ValidationErrorCodes, ConnectionError, ConnectionErrorCodes } from '../errors';
+import { ValidationError, ValidationErrorCodes, ConnectionError, ConnectionErrorCodes, MessageError, MessageErrorCodes } from '../errors';
 import { BusCore } from './bus-core';
 import { MessageHandlerManager } from './message-handler';
 import { FilterManager } from './filter-manager';
@@ -19,7 +19,8 @@ import type {
 
 /**
  * Bus class - main entry point for messaging operations.
- * Maintains backward-compatible public API while delegating to internal modules.
+ * Note: This class is not designed for subclassing. Constructor method binding
+ * is intentional for safe callback passing and will override subclass methods.
  */
 export class Bus implements IBus {
   public id: string;
@@ -210,6 +211,16 @@ export class Bus implements IBus {
       );
     }
 
+    if (!message.CorrelationId || typeof message.CorrelationId !== 'string') {
+      throw new MessageError(
+        'Message must include a non-empty CorrelationId',
+        MessageErrorCodes.INVALID_MESSAGE_FORMAT,
+        false,
+        undefined,
+        type
+      );
+    }
+
     const shouldSend = await this.filterManager.executeOutgoing(
       this.config.filters.outgoing,
       message,
@@ -246,6 +257,16 @@ export class Bus implements IBus {
     message: T,
     headers: Partial<MessageHeaders> = {}
   ): Promise<void> {
+    if (!message.CorrelationId || typeof message.CorrelationId !== 'string') {
+      throw new MessageError(
+        'Message must include a non-empty CorrelationId',
+        MessageErrorCodes.INVALID_MESSAGE_FORMAT,
+        false,
+        undefined,
+        type
+      );
+    }
+
     const shouldPublish = await this.filterManager.executeOutgoing(
       this.config.filters.outgoing,
       message,

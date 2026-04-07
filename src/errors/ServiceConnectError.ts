@@ -47,7 +47,7 @@ export class ServiceConnectError extends Error {
 
     // Maintain proper stack trace in V8 environments
     if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, ServiceConnectError);
+      Error.captureStackTrace(this, new.target);
     }
   }
 
