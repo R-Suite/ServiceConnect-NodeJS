@@ -39,6 +39,8 @@ importers:
         specifier: workspace:*
         version: link:../core
 
+  packages/telemetry: {}
+
 packages:
 
   '@babel/runtime@7.29.2':
