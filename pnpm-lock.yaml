@@ -29,6 +29,8 @@ importers:
 
   packages/core: {}
 
+  packages/healthchecks: {}
+
   packages/persistence-memory: {}
 
   packages/persistence-mongodb: {}
