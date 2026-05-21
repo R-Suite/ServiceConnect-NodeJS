@@ -29,6 +29,8 @@ importers:
 
   packages/core: {}
 
+  packages/persistence-memory: {}
+
   packages/rabbitmq:
     dependencies:
       '@serviceconnect/core':
