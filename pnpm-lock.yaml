@@ -29,6 +29,12 @@ importers:
 
   packages/core: {}
 
+  packages/rabbitmq:
+    dependencies:
+      '@serviceconnect/core':
+        specifier: workspace:*
+        version: link:../core
+
 packages:
 
   '@babel/runtime@7.29.2':
