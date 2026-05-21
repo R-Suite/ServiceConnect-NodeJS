@@ -10,10 +10,15 @@ export function jsonSerializer(registry: IMessageTypeRegistry): IMessageSerializ
 
   function validateOrThrow<T>(schema: StandardSchemaV1<T>, value: unknown): T {
     const result = schema['~standard'].validate(value);
-    if (result instanceof Promise) {
+    // Duck-type the async return: any thenable (not just native Promise) is unsupported here.
+    if (
+      result !== null &&
+      typeof result === 'object' &&
+      typeof (result as { then?: unknown }).then === 'function'
+    ) {
       throw new ValidationError('schema validation must be synchronous for the JSON serializer');
     }
-    if ('issues' in result && result.issues) {
+    if ('issues' in result && result.issues != null && result.issues.length > 0) {
       const summary = result.issues.map((issue) => issue.message).join('; ');
       throw new ValidationError(`schema validation failed: ${summary}`);
     }
