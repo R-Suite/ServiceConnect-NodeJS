@@ -39,6 +39,8 @@ export function createDispatcher(deps: DispatcherDeps): ConsumeCallback {
     try {
       const action = await deps.pipelines.before.execute(envelope, { signal, logger: deps.logger });
       if (action === FilterAction.Stop) {
+        // afterConsuming runs unconditionally — also on a clean Stop short-circuit.
+        await runAfterSafe(deps, envelope, signal);
         return { success: true, notHandled: false, terminalFailure: false };
       }
     } catch (error) {

@@ -76,6 +76,18 @@ describe('dispatcher', () => {
     expect(result.notHandled).toBe(false);
   });
 
+  it('afterConsuming still runs when beforeConsuming returns Stop', async () => {
+    const { dispatch, handlers, before, after } = setup();
+    handlers.add('Foo', async () => {});
+    before.add(asFilter(() => FilterAction.Stop));
+    const afterCall = vi.fn(async (_c, next) => {
+      await next();
+    });
+    after.add(asMiddleware(afterCall));
+    await dispatch(envelopeFor('Foo', { correlationId: 'c', v: 1 }), new AbortController().signal);
+    expect(afterCall).toHaveBeenCalledOnce();
+  });
+
   it('beforeConsuming filter throws: success=false, retry', async () => {
     const { dispatch, handlers, before } = setup();
     handlers.add('Foo', async () => {});
