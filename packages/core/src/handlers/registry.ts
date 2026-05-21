@@ -49,7 +49,8 @@ function makeResolver(handler: Handler<Message>): Registration['resolve'] {
   }
   if ('handle' in handler) {
     const inst = handler as HandlerClass<Message>;
-    return () => inst.handle.bind(inst);
+    const bound = inst.handle.bind(inst);
+    return () => bound;
   }
   return (ctx) => {
     const resolved = handler.factory(ctx);
