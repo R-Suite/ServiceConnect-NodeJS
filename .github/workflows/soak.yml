@@ -1,0 +1,13 @@
+name: soak
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  soak:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Placeholder
+        run: echo "no soak harness in Phase A; see Phase H spec"
