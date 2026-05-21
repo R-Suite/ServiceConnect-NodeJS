@@ -263,7 +263,7 @@ class BusImpl implements Bus {
     }
   }
 
-  sendRequest<TReq extends Message, TRep extends Message>(
+  async sendRequest<TReq extends Message, TRep extends Message>(
     _typeName: string,
     _message: TReq,
     _options: RequestOptions,
@@ -271,7 +271,7 @@ class BusImpl implements Bus {
     throw new Error('not implemented; see Phase D');
   }
 
-  sendRequestMulti<TReq extends Message, TRep extends Message>(
+  async sendRequestMulti<TReq extends Message, TRep extends Message>(
     _typeName: string,
     _message: TReq,
     _options: RequestOptions,
@@ -279,7 +279,7 @@ class BusImpl implements Bus {
     throw new Error('not implemented; see Phase D');
   }
 
-  publishRequest<TReq extends Message, TRep extends Message>(
+  async publishRequest<TReq extends Message, TRep extends Message>(
     _typeName: string,
     _message: TReq,
     _onReply: (reply: TRep) => void,

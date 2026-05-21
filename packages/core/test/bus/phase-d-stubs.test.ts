@@ -4,30 +4,30 @@ import type { Message } from '../../src/message.js';
 import { fakeTransport } from '../../src/testing/fake-transport.js';
 
 describe('Phase D stubs', () => {
-  it('sendRequest throws with the Phase D message', () => {
+  it('sendRequest rejects with the Phase D message', async () => {
     const bus = createBus({ transport: fakeTransport(), queue: { name: 'q-self' } });
-    expect(() =>
+    await expect(
       bus.sendRequest<Message, Message>('Req', { correlationId: 'c' }, { timeoutMs: 100 }),
-    ).toThrow('not implemented; see Phase D');
+    ).rejects.toThrow('not implemented; see Phase D');
   });
 
-  it('sendRequestMulti throws with the Phase D message', () => {
+  it('sendRequestMulti rejects with the Phase D message', async () => {
     const bus = createBus({ transport: fakeTransport(), queue: { name: 'q-self' } });
-    expect(() =>
+    await expect(
       bus.sendRequestMulti<Message, Message>(
         'Req',
         { correlationId: 'c' },
         { timeoutMs: 100, expectedReplyCount: 2 },
       ),
-    ).toThrow('not implemented; see Phase D');
+    ).rejects.toThrow('not implemented; see Phase D');
   });
 
-  it('publishRequest throws with the Phase D message', () => {
+  it('publishRequest rejects with the Phase D message', async () => {
     const bus = createBus({ transport: fakeTransport(), queue: { name: 'q-self' } });
-    expect(() =>
+    await expect(
       bus.publishRequest<Message, Message>('Req', { correlationId: 'c' }, () => {}, {
         timeoutMs: 100,
       }),
-    ).toThrow('not implemented; see Phase D');
+    ).rejects.toThrow('not implemented; see Phase D');
   });
 });
