@@ -37,3 +37,5 @@ export function createMessageTypeRegistry(): IMessageTypeRegistry {
     },
   };
 }
+
+export type { IMessageSerializer } from './serializer.js';
