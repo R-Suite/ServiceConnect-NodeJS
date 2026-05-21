@@ -1,18 +1,21 @@
-import { MessageTypeNotRegisteredError } from './errors.js';
+import type { Envelope } from './envelope.js';
+import { MessageTypeNotRegisteredError, OutgoingFiltersBlockedError } from './errors.js';
 import { FilterPipeline } from './filter-pipeline.js';
 import { createDispatcher } from './handlers/dispatch.js';
 import type { Handler } from './handlers/index.js';
 import { HandlerRegistry } from './handlers/registry.js';
 import { type Logger, consoleLogger } from './logger.js';
 import type { Message } from './message.js';
+import { newMessageId } from './message.js';
 import type { PublishOptions } from './options/publish.js';
 import type { ReplyOptions } from './options/reply.js';
 import type { RequestOptions } from './options/request.js';
 import type { SendOptions } from './options/send.js';
-import type {
-  FilterRegistration,
-  MiddlewareRegistration,
-  PipelineStage,
+import {
+  FilterAction,
+  type FilterRegistration,
+  type MiddlewareRegistration,
+  type PipelineStage,
 } from './pipeline/index.js';
 import { jsonSerializer } from './serialization/json.js';
 import { type IMessageTypeRegistry, createMessageTypeRegistry } from './serialization/registry.js';
@@ -156,25 +159,104 @@ class BusImpl implements Bus {
     }
   }
 
-  publish<T extends Message>(
-    _typeName: string,
-    _message: T,
-    _options?: PublishOptions,
+  async publish<T extends Message>(
+    typeName: string,
+    message: T,
+    options?: PublishOptions,
   ): Promise<void> {
-    throw new Error('publish() is implemented in Task 12');
+    if (!this.registry.resolve(typeName)) {
+      throw new MessageTypeNotRegisteredError(
+        `type ${typeName} is not registered; call registerMessage() first`,
+      );
+    }
+    const body = this.serializer.serialize(message);
+    const envelope = this.buildOutgoingEnvelope(typeName, message, body, options?.headers);
+    await this.runOutgoing(envelope);
+    const headers = stringifyHeaders(envelope.headers);
+    await this.producer.publish(typeName, body, { headers, routingKey: options?.routingKey });
   }
 
-  send<T extends Message>(_typeName: string, _message: T, _options: SendOptions): Promise<void> {
-    throw new Error('send() is implemented in Task 12');
+  async send<T extends Message>(typeName: string, message: T, options: SendOptions): Promise<void> {
+    if (!this.registry.resolve(typeName)) {
+      throw new MessageTypeNotRegisteredError(
+        `type ${typeName} is not registered; call registerMessage() first`,
+      );
+    }
+    const body = this.serializer.serialize(message);
+    const envelope = this.buildOutgoingEnvelope(
+      typeName,
+      message,
+      body,
+      options.headers,
+      options.endpoint,
+    );
+    await this.runOutgoing(envelope);
+    const headers = stringifyHeaders(envelope.headers);
+    await this.producer.send(options.endpoint, typeName, body, { headers });
   }
 
-  sendToMany<T extends Message>(
-    _typeName: string,
-    _message: T,
-    _endpoints: readonly string[],
-    _options?: Omit<SendOptions, 'endpoint'>,
+  async sendToMany<T extends Message>(
+    typeName: string,
+    message: T,
+    endpoints: readonly string[],
+    options?: Omit<SendOptions, 'endpoint'>,
   ): Promise<void> {
-    throw new Error('sendToMany() is implemented in Task 12');
+    if (!this.registry.resolve(typeName)) {
+      throw new MessageTypeNotRegisteredError(
+        `type ${typeName} is not registered; call registerMessage() first`,
+      );
+    }
+    if (endpoints.length === 0) {
+      throw new Error('sendToMany requires at least one endpoint');
+    }
+    const body = this.serializer.serialize(message);
+    const envelope = this.buildOutgoingEnvelope(typeName, message, body, options?.headers);
+    await this.runOutgoing(envelope);
+    const headers = stringifyHeaders(envelope.headers);
+    const errors: unknown[] = [];
+    for (const endpoint of endpoints) {
+      try {
+        await this.producer.send(endpoint, typeName, body, { headers });
+      } catch (err) {
+        errors.push(err);
+      }
+    }
+    if (errors.length > 0) {
+      throw new AggregateError(
+        errors,
+        `sendToMany: ${errors.length} of ${endpoints.length} endpoints failed`,
+      );
+    }
+  }
+
+  private buildOutgoingEnvelope<T extends Message>(
+    typeName: string,
+    message: T,
+    body: Uint8Array,
+    callerHeaders?: Readonly<Record<string, string>>,
+    destinationAddress?: string,
+  ): Envelope {
+    const headers: Record<string, unknown> = { ...(callerHeaders ?? {}) };
+    headers.messageType = typeName;
+    headers.correlationId = message.correlationId;
+    headers.messageId = headers.messageId ?? newMessageId();
+    headers.timeSent = new Date().toISOString();
+    headers.sourceAddress = this.queue;
+    if (destinationAddress) {
+      headers.destinationAddress = destinationAddress;
+    }
+    return { headers, body };
+  }
+
+  private async runOutgoing(envelope: Envelope): Promise<void> {
+    const ac = new AbortController();
+    const action = await this.pipelines.outgoing.execute(envelope, {
+      signal: ac.signal,
+      logger: this.logger,
+    });
+    if (action === FilterAction.Stop) {
+      throw new OutgoingFiltersBlockedError('outgoing filter returned Stop');
+    }
   }
 
   sendRequest<TReq extends Message, TRep extends Message>(
@@ -238,3 +320,12 @@ export function createBus(options: BusOptions): Bus {
 
 // `ReplyOptions` re-exported here for surface-stability when Task 12+ extends the bus.
 export type { ReplyOptions };
+
+function stringifyHeaders(headers: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(headers)) {
+    if (v === undefined) continue;
+    out[k] = typeof v === 'string' ? v : String(v);
+  }
+  return out;
+}
