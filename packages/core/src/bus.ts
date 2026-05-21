@@ -1,5 +1,9 @@
 import type { Envelope } from './envelope.js';
-import { MessageTypeNotRegisteredError, OutgoingFiltersBlockedError } from './errors.js';
+import {
+  InvalidOperationError,
+  MessageTypeNotRegisteredError,
+  OutgoingFiltersBlockedError,
+} from './errors.js';
 import { FilterPipeline } from './filter-pipeline.js';
 import { createDispatcher } from './handlers/dispatch.js';
 import type { Handler } from './handlers/index.js';
@@ -207,7 +211,7 @@ class BusImpl implements Bus {
       );
     }
     if (endpoints.length === 0) {
-      throw new Error('sendToMany requires at least one endpoint');
+      throw new InvalidOperationError('sendToMany requires at least one endpoint');
     }
     const body = this.serializer.serialize(message);
     const envelope = this.buildOutgoingEnvelope(typeName, message, body, options?.headers);

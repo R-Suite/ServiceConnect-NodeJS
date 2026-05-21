@@ -24,3 +24,7 @@ export class MessageTypeNotRegisteredError extends ServiceConnectError {
 export class TerminalDeserializationError extends ServiceConnectError {
   override readonly name = 'TerminalDeserializationError';
 }
+
+export class InvalidOperationError extends ServiceConnectError {
+  override readonly name = 'InvalidOperationError';
+}
