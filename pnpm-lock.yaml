@@ -31,6 +31,8 @@ importers:
 
   packages/persistence-memory: {}
 
+  packages/persistence-mongodb: {}
+
   packages/rabbitmq:
     dependencies:
       '@serviceconnect/core':
