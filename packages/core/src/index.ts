@@ -78,6 +78,9 @@ export {
   ValidationError,
 } from './errors.js';
 
+// Aggregator (Phase E)
+export { Aggregator } from './aggregator/aggregator.js';
+
 // Process Manager (Phase E)
 export type { ProcessContext, ProcessHandler } from './process/handler.js';
 
