@@ -63,3 +63,7 @@ export class ConcurrencyError extends ServiceConnectError {
 export class DuplicateSagaError extends ServiceConnectError {
   override readonly name = 'DuplicateSagaError';
 }
+
+export class AggregatorConfigurationError extends ServiceConnectError {
+  override readonly name = 'AggregatorConfigurationError';
+}
