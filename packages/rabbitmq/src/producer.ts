@@ -1,0 +1,131 @@
+import type { ITransportProducer } from '@serviceconnect/core';
+import type { Connection, Publisher } from 'rabbitmq-client';
+import { RabbitMQPayloadTooLargeError } from './errors.js';
+import type { ResolvedProducerOptions } from './options.js';
+
+export interface ProducerSnapshot {
+  readonly isHealthy: boolean;
+  readonly isConnected: boolean;
+  readonly supportsRoutingKey: boolean;
+  readonly maxMessageSize: number;
+  readonly publishCount: number;
+  readonly lastPublishAt: string | null;
+}
+
+export interface RabbitMQProducer extends ITransportProducer {
+  snapshot(): ProducerSnapshot;
+}
+
+export function createProducer(
+  connection: Connection,
+  opts: ResolvedProducerOptions,
+): RabbitMQProducer {
+  const publisher: Publisher = connection.createPublisher({
+    confirm: true,
+    maxAttempts: opts.maxAttempts,
+  });
+  const declaredExchanges = new Set<string>();
+  let publishCount = 0;
+  let lastPublishAt: string | null = null;
+
+  async function ensureExchangeDeclared(typeName: string): Promise<void> {
+    if (declaredExchanges.has(typeName)) return;
+    await connection.exchangeDeclare({
+      exchange: typeName,
+      type: 'fanout',
+      durable: true,
+    });
+    declaredExchanges.add(typeName);
+  }
+
+  function validateBodySize(body: Uint8Array): void {
+    if (body.byteLength > opts.maxMessageSize) {
+      throw new RabbitMQPayloadTooLargeError(
+        `message body of ${body.byteLength} bytes exceeds maxMessageSize ${opts.maxMessageSize}`,
+      );
+    }
+  }
+
+  function recordPublish(): void {
+    publishCount += 1;
+    lastPublishAt = new Date().toISOString();
+  }
+
+  return {
+    get isHealthy(): boolean {
+      return Boolean((connection as unknown as { ready?: boolean }).ready);
+    },
+    supportsRoutingKey: true,
+    maxMessageSize: opts.maxMessageSize,
+
+    async publish(typeName, body, options) {
+      validateBodySize(body);
+      await ensureExchangeDeclared(typeName);
+      await publisher.send(
+        {
+          exchange: typeName,
+          routingKey: options?.routingKey ?? '',
+          headers: { ...(options?.headers ?? {}) },
+          contentType: 'application/json',
+          deliveryMode: 2,
+        },
+        Buffer.from(body),
+      );
+      recordPublish();
+    },
+
+    async send(endpoint, typeName, body, options) {
+      validateBodySize(body);
+      const headers: Record<string, unknown> = {
+        MessageType: typeName,
+        ...(options?.headers ?? {}),
+      };
+      if (options?.routingSlipHopsCompleted !== undefined) {
+        headers.RoutingSlipHopsCompleted = String(options.routingSlipHopsCompleted);
+      }
+      await publisher.send(
+        {
+          exchange: '',
+          routingKey: endpoint,
+          headers,
+          contentType: 'application/json',
+          deliveryMode: 2,
+        },
+        Buffer.from(body),
+      );
+      recordPublish();
+    },
+
+    async sendBytes(endpoint, typeName, body, options) {
+      validateBodySize(body);
+      await publisher.send(
+        {
+          exchange: '',
+          routingKey: endpoint,
+          headers: { MessageType: typeName, ...(options?.headers ?? {}) },
+          contentType: 'application/octet-stream',
+          deliveryMode: 2,
+        },
+        Buffer.from(body),
+      );
+      recordPublish();
+    },
+
+    snapshot() {
+      const connected = Boolean((connection as unknown as { ready?: boolean }).ready);
+      return {
+        isHealthy: connected,
+        isConnected: connected,
+        supportsRoutingKey: true,
+        maxMessageSize: opts.maxMessageSize,
+        publishCount,
+        lastPublishAt,
+      };
+    },
+
+    async [Symbol.asyncDispose]() {
+      await publisher.close();
+      await connection.close();
+    },
+  };
+}
