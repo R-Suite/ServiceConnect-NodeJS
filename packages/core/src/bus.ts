@@ -1,8 +1,11 @@
 import type { Envelope } from './envelope.js';
 import {
+  ArgumentError,
+  ArgumentOutOfRangeError,
   InvalidOperationError,
   MessageTypeNotRegisteredError,
   OutgoingFiltersBlockedError,
+  RequestSendCancelledError,
 } from './errors.js';
 import { FilterPipeline } from './filter-pipeline.js';
 import { createDispatcher } from './handlers/dispatch.js';
@@ -21,6 +24,7 @@ import {
   type MiddlewareRegistration,
   type PipelineStage,
 } from './pipeline/index.js';
+import { RequestReplyManager } from './request-reply.js';
 import { jsonSerializer } from './serialization/json.js';
 import { type IMessageTypeRegistry, createMessageTypeRegistry } from './serialization/registry.js';
 import type { IMessageSerializer } from './serialization/serializer.js';
@@ -91,6 +95,7 @@ class BusImpl implements Bus {
   private readonly serializer: IMessageSerializer;
   private readonly logger: Logger;
   private readonly handlers: HandlerRegistry;
+  private readonly requestReplyManager = new RequestReplyManager();
   private readonly pipelines = {
     outgoing: new FilterPipeline('outgoing'),
     before: new FilterPipeline('beforeConsuming'),
@@ -265,28 +270,175 @@ class BusImpl implements Bus {
   }
 
   async sendRequest<TReq extends Message, TRep extends Message>(
-    _typeName: string,
-    _message: TReq,
-    _options: RequestOptions,
+    typeName: string,
+    message: TReq,
+    options: RequestOptions,
   ): Promise<TRep> {
-    throw new Error('not implemented; see Phase D');
+    if (this._stopped) {
+      throw new Error('bus is stopped');
+    }
+    if (!this.registry.resolve(typeName)) {
+      throw new MessageTypeNotRegisteredError(
+        `type ${typeName} is not registered; call registerMessage() first`,
+      );
+    }
+    if (typeof options.timeoutMs !== 'number' || options.timeoutMs <= 0) {
+      throw new ArgumentOutOfRangeError(
+        'RequestOptions.timeoutMs must be a positive number for sendRequest',
+      );
+    }
+
+    const { requestMessageId, promise } = this.requestReplyManager.registerSingle<TRep>({
+      timeoutMs: options.timeoutMs,
+    });
+
+    const callerHeaders: Record<string, string> = {
+      ...(options.headers ?? {}),
+      requestMessageId,
+      messageId: requestMessageId,
+    };
+    const body = this.serializer.serialize(message);
+    const envelope = this.buildOutgoingEnvelope(
+      typeName,
+      message,
+      body,
+      callerHeaders,
+      options.endpoint,
+    );
+
+    try {
+      await this.runOutgoing(envelope);
+      const headers = stringifyHeaders(envelope.headers);
+      if (options.endpoint) {
+        await this.producer.send(options.endpoint, typeName, body, { headers });
+      } else {
+        await this.producer.publish(typeName, body, { headers });
+      }
+    } catch (err) {
+      this.requestReplyManager.cancel(
+        requestMessageId,
+        new RequestSendCancelledError(
+          `sendRequest send failed before reaching the broker: ${err instanceof Error ? err.message : String(err)}`,
+          err,
+        ),
+      );
+      throw err;
+    }
+
+    return promise;
   }
 
   async sendRequestMulti<TReq extends Message, TRep extends Message>(
-    _typeName: string,
-    _message: TReq,
-    _options: RequestOptions,
+    typeName: string,
+    message: TReq,
+    options: RequestOptions,
   ): Promise<TRep[]> {
-    throw new Error('not implemented; see Phase D');
+    if (this._stopped) {
+      throw new Error('bus is stopped');
+    }
+    if (!this.registry.resolve(typeName)) {
+      throw new MessageTypeNotRegisteredError(
+        `type ${typeName} is not registered; call registerMessage() first`,
+      );
+    }
+    if (typeof options.timeoutMs !== 'number' || options.timeoutMs <= 0) {
+      throw new ArgumentOutOfRangeError(
+        'RequestOptions.timeoutMs must be a positive number for sendRequestMulti',
+      );
+    }
+
+    const { requestMessageId, promise } = this.requestReplyManager.registerMulti<TRep>({
+      timeoutMs: options.timeoutMs,
+      expectedReplyCount: options.expectedReplyCount,
+    });
+
+    const callerHeaders: Record<string, string> = {
+      ...(options.headers ?? {}),
+      requestMessageId,
+      messageId: requestMessageId,
+    };
+    const body = this.serializer.serialize(message);
+    const envelope = this.buildOutgoingEnvelope(
+      typeName,
+      message,
+      body,
+      callerHeaders,
+      options.endpoint,
+    );
+
+    try {
+      await this.runOutgoing(envelope);
+      const headers = stringifyHeaders(envelope.headers);
+      if (options.endpoint) {
+        await this.producer.send(options.endpoint, typeName, body, { headers });
+      } else {
+        await this.producer.publish(typeName, body, { headers });
+      }
+    } catch (err) {
+      this.requestReplyManager.cancel(
+        requestMessageId,
+        new RequestSendCancelledError(
+          `sendRequestMulti send failed before reaching the broker: ${err instanceof Error ? err.message : String(err)}`,
+          err,
+        ),
+      );
+      throw err;
+    }
+
+    return promise;
   }
 
   async publishRequest<TReq extends Message, TRep extends Message>(
-    _typeName: string,
-    _message: TReq,
-    _onReply: (reply: TRep) => void,
-    _options?: RequestOptions,
+    typeName: string,
+    message: TReq,
+    onReply: (reply: TRep) => void,
+    options: RequestOptions = { timeoutMs: 0 },
   ): Promise<void> {
-    throw new Error('not implemented; see Phase D');
+    if (this._stopped) {
+      throw new Error('bus is stopped');
+    }
+    if (!this.registry.resolve(typeName)) {
+      throw new MessageTypeNotRegisteredError(
+        `type ${typeName} is not registered; call registerMessage() first`,
+      );
+    }
+    if (options.endpoint) {
+      throw new ArgumentError(
+        'publishRequest does not accept options.endpoint; use sendRequest for single-destination requests',
+      );
+    }
+    const timeoutMs =
+      typeof options.timeoutMs === 'number' && options.timeoutMs > 0 ? options.timeoutMs : 10_000;
+
+    const { requestMessageId, promise } = this.requestReplyManager.registerCallback<TRep>(onReply, {
+      timeoutMs,
+      expectedReplyCount: options.expectedReplyCount,
+    });
+
+    const callerHeaders: Record<string, string> = {
+      ...(options.headers ?? {}),
+      requestMessageId,
+      messageId: requestMessageId,
+    };
+    const body = this.serializer.serialize(message);
+    const envelope = this.buildOutgoingEnvelope(typeName, message, body, callerHeaders);
+
+    try {
+      await this.runOutgoing(envelope);
+      const headers = stringifyHeaders(envelope.headers);
+      await this.producer.publish(typeName, body, { headers });
+    } catch (err) {
+      this.requestReplyManager.cancel(
+        requestMessageId,
+        new RequestSendCancelledError(
+          `publishRequest publish failed before reaching the broker: ${err instanceof Error ? err.message : String(err)}`,
+          err,
+        ),
+      );
+      throw err;
+    }
+
+    return promise;
   }
 
   async start(): Promise<void> {
@@ -301,6 +453,7 @@ class BusImpl implements Bus {
       serializer: this.serializer,
       handlers: this.handlers,
       pipelines: this.pipelines,
+      requestReplyManager: this.requestReplyManager,
     });
     await this.consumer.start(this.queue, this.registry.allRegisteredNames(), dispatcher);
     this._started = true;
@@ -309,6 +462,7 @@ class BusImpl implements Bus {
   async stop(_signal?: AbortSignal): Promise<void> {
     if (this._stopped) return;
     this._stopped = true;
+    this.requestReplyManager.shutdown(new Error('bus is stopped'));
     await this.consumer.stop();
     await this.consumer[Symbol.asyncDispose]();
     await this.producer[Symbol.asyncDispose]();
