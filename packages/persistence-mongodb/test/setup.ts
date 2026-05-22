@@ -8,7 +8,7 @@ export async function setup(): Promise<void> {
     return;
   }
   container = await new MongoDBContainer('mongo:7').start();
-  process.env.MONGODB_URI = container.getConnectionString();
+  process.env.MONGODB_URI = `${container.getConnectionString()}?directConnection=true`;
 }
 
 export async function teardown(): Promise<void> {
