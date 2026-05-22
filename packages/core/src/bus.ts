@@ -50,6 +50,7 @@ import { jsonSerializer } from './serialization/json.js';
 import { type IMessageTypeRegistry, createMessageTypeRegistry } from './serialization/registry.js';
 import type { IMessageSerializer } from './serialization/serializer.js';
 import type { StandardSchemaV1 } from './serialization/standard-schema.js';
+import { StreamRegistry, runStreamBranch } from './streaming/dispatch.js';
 import { type StreamSender, createStreamSender } from './streaming/sender.js';
 import type { ITransportConsumer, ITransportProducer } from './transport.js';
 
@@ -126,6 +127,10 @@ export interface Bus extends AsyncDisposable {
   ): Promise<void>;
 
   openStream<T extends Message>(endpoint: string, typeName: string): Promise<StreamSender<T>>;
+  handleStream<T extends Message>(
+    messageType: string,
+    handler: (stream: AsyncIterable<T>) => Promise<void>,
+  ): Bus;
 
   start(): Promise<void>;
   stop(signal?: AbortSignal): Promise<void>;
@@ -152,6 +157,7 @@ class BusImpl implements Bus {
   };
   private readonly _processRegistry = new ProcessRegistry();
   private readonly _aggregatorRegistry = new AggregatorRegistry();
+  private readonly _streamRegistry = new StreamRegistry();
   private _activeProcessRuntime: ProcessRuntimeOptions | undefined;
   private timeoutPoller?: TimeoutPoller;
   private aggregatorFlushTimer?: AggregatorFlushTimer;
@@ -615,6 +621,15 @@ class BusImpl implements Bus {
     });
   }
 
+  handleStream<T extends Message>(
+    messageType: string,
+    handler: (stream: AsyncIterable<T>) => Promise<void>,
+  ): Bus {
+    this.registerMessage(messageType);
+    this._streamRegistry.registerHandler(messageType, handler);
+    return this;
+  }
+
   async start(): Promise<void> {
     if (this._stopped) {
       throw new Error('bus is stopped; create a new instance to resume');
@@ -647,6 +662,12 @@ class BusImpl implements Bus {
       });
       return true;
     };
+    const streamBranch = (envelope: Envelope) =>
+      runStreamBranch(envelope, {
+        registry: this._streamRegistry,
+        serializer: this.serializer,
+        logger: this.logger,
+      });
     const dispatcher = createDispatcher({
       bus: this,
       logger: this.logger,
@@ -655,6 +676,7 @@ class BusImpl implements Bus {
       handlers: this.handlers,
       pipelines: this.pipelines,
       requestReplyManager: this.requestReplyManager,
+      streamBranch,
       sagaBranch,
       aggregatorBranch,
       routingForward,
@@ -704,6 +726,7 @@ class BusImpl implements Bus {
       this.aggregatorFlushTimer = undefined;
     }
     this.requestReplyManager.shutdown(new InvalidOperationError('bus is stopped'));
+    await this._streamRegistry.drain();
     await this.producer[Symbol.asyncDispose]();
   }
 

@@ -11,6 +11,7 @@ import type { SagaBranchOutcome } from '../process/dispatch.js';
 import type { RequestReplyManager } from '../request-reply.js';
 import type { IMessageTypeRegistry } from '../serialization/registry.js';
 import type { IMessageSerializer } from '../serialization/serializer.js';
+import type { StreamBranchOutcome } from '../streaming/dispatch.js';
 import type { ConsumeCallback, ConsumeResult } from '../transport.js';
 import type { HandlerRegistry } from './registry.js';
 
@@ -26,6 +27,7 @@ export interface DispatcherDeps {
     onSuccess: FilterPipeline;
   };
   requestReplyManager?: RequestReplyManager;
+  streamBranch?: (envelope: Envelope) => Promise<StreamBranchOutcome>;
   sagaBranch?: (
     envelope: Envelope,
     message: object,
@@ -63,6 +65,17 @@ export function createDispatcher(deps: DispatcherDeps): ConsumeCallback {
       // afterConsuming always runs (best effort)
       await runAfterSafe(deps, envelope, signal);
       return { success: false, notHandled: false, error: err, terminalFailure: false };
+    }
+
+    // Phase E stream-branch. Runs before deserialization because stream chunks (end-of-stream,
+    // fault) may carry empty or absent bodies that would fail JSON.parse. The branch performs
+    // its own selective deserialization for data-bearing chunks only.
+    if (deps.streamBranch) {
+      const streamOutcome = await deps.streamBranch(envelope);
+      if (streamOutcome.ran && streamOutcome.result) {
+        await runAfterSafe(deps, envelope, signal);
+        return streamOutcome.result;
+      }
     }
 
     // Step 3: deserialize
