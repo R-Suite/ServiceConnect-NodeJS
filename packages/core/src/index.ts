@@ -78,6 +78,9 @@ export {
   ValidationError,
 } from './errors.js';
 
+// Process Manager (Phase E)
+export type { ProcessContext, ProcessHandler } from './process/handler.js';
+
 // Persistence
 export type {
   ConcurrencyToken,
