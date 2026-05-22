@@ -6,6 +6,7 @@ import type { FilterPipeline } from '../filter-pipeline.js';
 import type { Logger } from '../logger.js';
 import type { MessageHeaders } from '../message.js';
 import { FilterAction } from '../pipeline/index.js';
+import type { RequestReplyManager } from '../request-reply.js';
 import type { IMessageTypeRegistry } from '../serialization/registry.js';
 import type { IMessageSerializer } from '../serialization/serializer.js';
 import type { ConsumeCallback, ConsumeResult } from '../transport.js';
@@ -22,6 +23,7 @@ export interface DispatcherDeps {
     after: FilterPipeline;
     onSuccess: FilterPipeline;
   };
+  requestReplyManager?: RequestReplyManager;
 }
 
 export function createDispatcher(deps: DispatcherDeps): ConsumeCallback {
@@ -60,6 +62,19 @@ export function createDispatcher(deps: DispatcherDeps): ConsumeCallback {
       const isTerminal =
         err instanceof TerminalDeserializationError || err instanceof ValidationError;
       return { success: false, notHandled: false, error: err, terminalFailure: isTerminal };
+    }
+
+    // Phase D: reply-branch. If this envelope is a reply correlated to a pending request,
+    // route it to the manager and skip the handler chain. afterConsuming still runs.
+    if (deps.requestReplyManager) {
+      const matched = deps.requestReplyManager.tryRouteReply(
+        envelope,
+        message as { correlationId: string },
+      );
+      if (matched) {
+        await runAfterSafe(deps, envelope, signal);
+        return { success: true, notHandled: false, terminalFailure: false };
+      }
     }
 
     // Step 4: resolve handlers

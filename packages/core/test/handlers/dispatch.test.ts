@@ -7,6 +7,7 @@ import { HandlerRegistry } from '../../src/handlers/registry.js';
 import { consoleLogger } from '../../src/logger.js';
 import type { Message, MessageHeaders } from '../../src/message.js';
 import { FilterAction, asFilter, asMiddleware } from '../../src/pipeline/index.js';
+import { RequestReplyManager } from '../../src/request-reply.js';
 import { jsonSerializer } from '../../src/serialization/json.js';
 import { createMessageTypeRegistry } from '../../src/serialization/registry.js';
 
@@ -14,7 +15,7 @@ interface Foo extends Message {
   v: number;
 }
 
-function setup() {
+function setup(opts: { requestReplyManager?: RequestReplyManager } = {}) {
   const registry = createMessageTypeRegistry();
   registry.register<Foo>('Foo');
   const serializer = jsonSerializer(registry);
@@ -31,6 +32,7 @@ function setup() {
     serializer,
     handlers,
     pipelines: { before, after, onSuccess: success },
+    requestReplyManager: opts.requestReplyManager,
   });
   return { registry, serializer, handlers, before, after, success, dispatch };
 }
@@ -255,5 +257,53 @@ describe('dispatcher', () => {
     after.add(asMiddleware(afterCall));
     await dispatch(envelopeFor('Foo', { correlationId: 'c', v: 1 }), new AbortController().signal);
     expect(afterCall).toHaveBeenCalledOnce();
+  });
+
+  it('reply-branch routes matched message to the request-reply manager and skips handlers', async () => {
+    const manager = new RequestReplyManager();
+    const { dispatch, handlers } = setup({ requestReplyManager: manager });
+    const handler = vi.fn(async () => {});
+    handlers.add('Foo', handler);
+
+    const { requestMessageId, promise } = manager.registerSingle<Foo>({ timeoutMs: 5000 });
+    const envelope = envelopeFor(
+      'Foo',
+      { correlationId: 'c', v: 7 },
+      { responseMessageId: requestMessageId },
+    );
+
+    const result = await dispatch(envelope, new AbortController().signal);
+    expect(result).toEqual({ success: true, notHandled: false, terminalFailure: false });
+    expect(handler).not.toHaveBeenCalled();
+    await expect(promise).resolves.toEqual({ correlationId: 'c', v: 7 });
+  });
+
+  it('reply-branch with no matching pending request falls through to handler dispatch', async () => {
+    const manager = new RequestReplyManager();
+    const { dispatch, handlers } = setup({ requestReplyManager: manager });
+    const handler = vi.fn(async () => {});
+    handlers.add('Foo', handler);
+
+    const envelope = envelopeFor(
+      'Foo',
+      { correlationId: 'c', v: 1 },
+      { responseMessageId: 'not-a-real-id' as never },
+    );
+
+    const result = await dispatch(envelope, new AbortController().signal);
+    expect(result.success).toBe(true);
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it('dispatch works with no request-reply manager (backward compatible)', async () => {
+    const { dispatch, handlers } = setup();
+    const handler = vi.fn(async () => {});
+    handlers.add('Foo', handler);
+    const result = await dispatch(
+      envelopeFor('Foo', { correlationId: 'c', v: 1 }),
+      new AbortController().signal,
+    );
+    expect(result.success).toBe(true);
+    expect(handler).toHaveBeenCalledOnce();
   });
 });
