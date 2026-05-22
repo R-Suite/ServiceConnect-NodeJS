@@ -55,3 +55,11 @@ export class ArgumentError extends ServiceConnectError {
 export class ArgumentOutOfRangeError extends ServiceConnectError {
   override readonly name = 'ArgumentOutOfRangeError';
 }
+
+export class ConcurrencyError extends ServiceConnectError {
+  override readonly name = 'ConcurrencyError';
+}
+
+export class DuplicateSagaError extends ServiceConnectError {
+  override readonly name = 'DuplicateSagaError';
+}
