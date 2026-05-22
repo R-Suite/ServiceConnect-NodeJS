@@ -16,8 +16,12 @@
     "test": "vitest run",
     "lint": "biome check ."
   },
-  "engines": { "node": ">=22" },
-  "publishConfig": { "access": "public" },
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -25,15 +29,16 @@
     "directory": "packages/telemetry"
   },
   "dependencies": {
-    "@serviceconnect/core": "workspace:*",
-    "@opentelemetry/semantic-conventions": "^1.27.0"
+    "@opentelemetry/semantic-conventions": "^1.27.0",
+    "@serviceconnect/core": "workspace:*"
   },
   "peerDependencies": {
     "@opentelemetry/api": "^1.7.0"
   },
   "devDependencies": {
     "@opentelemetry/api": "^1.7.0",
-    "@opentelemetry/sdk-trace-base": "^1.27.0",
-    "@opentelemetry/sdk-metrics": "^1.27.0"
+    "@opentelemetry/core": "^2.7.1",
+    "@opentelemetry/sdk-metrics": "^1.27.0",
+    "@opentelemetry/sdk-trace-base": "^1.27.0"
   }
 }
