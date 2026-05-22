@@ -376,13 +376,19 @@ class BusImpl implements Bus {
 
     const firstDestination = destinations[0] as string;
     const remaining = destinations.slice(1);
-    const optionHeaders = (options?.headers ?? {}) as Record<string, unknown>;
+    const body = this.serializer.serialize(message);
+    const envelope = this.buildOutgoingEnvelope(
+      typeName,
+      message,
+      body,
+      options?.headers,
+      firstDestination,
+    );
     const headers: Record<string, string> = {
-      ...stringifyHeaders(optionHeaders),
+      ...stringifyHeaders(envelope.headers as Record<string, unknown>),
       [ROUTING_SLIP_HEADER]: serialiseRoutingSlip(remaining),
     };
 
-    const body = this.serializer.serialize(message);
     await this.producer.send(firstDestination, typeName, body, { headers });
   }
 
