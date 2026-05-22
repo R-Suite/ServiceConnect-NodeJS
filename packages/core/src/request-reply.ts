@@ -311,16 +311,24 @@ export class RequestReplyManager {
     }
   }
 
-  /** Internal: settles the entry by calling the supplied finaliser, then removes from map. */
+  /**
+   * Internal: settles the entry. Order matters: latch first to make the operation idempotent,
+   * then run the finaliser (which resolves/rejects the caller's promise), then clean up the
+   * map + timer + listener. The finaliser runs BEFORE the map delete so that a throwing
+   * finaliser doesn't leave the promise permanently unresolved while the map cleanup runs.
+   */
   private settle(requestMessageId: MessageId, finalise: (entry: PendingEntry) => void): void {
     const entry = this.pending.get(requestMessageId);
     if (!entry || entry.settled) return;
     entry.settled = true;
-    clearTimeout(entry.timeoutHandle);
-    if (entry.abortListener && entry.signal) {
-      entry.signal.removeEventListener('abort', entry.abortListener);
+    try {
+      finalise(entry);
+    } finally {
+      clearTimeout(entry.timeoutHandle);
+      if (entry.abortListener && entry.signal) {
+        entry.signal.removeEventListener('abort', entry.abortListener);
+      }
+      this.pending.delete(requestMessageId);
     }
-    this.pending.delete(requestMessageId);
-    finalise(entry);
   }
 }
