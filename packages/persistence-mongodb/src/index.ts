@@ -1,4 +1,7 @@
+import { PACKAGE_NAME as CORE_NAME } from '@serviceconnect/core';
+
 export const PACKAGE_NAME = '@serviceconnect/persistence-mongodb' as const;
+export const CORE_DEPENDENCY = CORE_NAME;
 
 export { mongoSagaStore } from './saga-store.js';
 export type { MongoSagaStore, MongoStoreOptions } from './saga-store.js';
