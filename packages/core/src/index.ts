@@ -62,6 +62,7 @@ export {
   InvalidOperationError,
   MessageTypeNotRegisteredError,
   OutgoingFiltersBlockedError,
+  RequestTimeoutError,
   ServiceConnectError,
   TerminalDeserializationError,
   ValidationError,
