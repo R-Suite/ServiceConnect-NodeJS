@@ -16,6 +16,13 @@
     "test": "vitest run",
     "lint": "biome check ."
   },
+  "dependencies": {
+    "@serviceconnect/core": "workspace:*",
+    "mongodb": "^6.0.0"
+  },
+  "devDependencies": {
+    "@testcontainers/mongodb": "^12.0.0"
+  },
   "engines": { "node": ">=22" },
   "publishConfig": { "access": "public" },
   "license": "MIT",
