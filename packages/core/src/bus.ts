@@ -1,3 +1,5 @@
+import type { Aggregator } from './aggregator/aggregator.js';
+import { AggregatorRegistry } from './aggregator/registry.js';
 import type { Envelope } from './envelope.js';
 import {
   ArgumentError,
@@ -18,6 +20,7 @@ import type { PublishOptions } from './options/publish.js';
 import type { ReplyOptions } from './options/reply.js';
 import type { RequestOptions } from './options/request.js';
 import type { SendOptions } from './options/send.js';
+import type { IAggregatorStore } from './persistence/aggregator-store.js';
 import type { ProcessData } from './persistence/saga-store.js';
 import {
   FilterAction,
@@ -56,6 +59,7 @@ export interface Bus extends AsyncDisposable {
   readonly isStopped: boolean;
   readonly messageRegistry: IMessageTypeRegistry;
   readonly processRegistry: ProcessRegistry;
+  readonly aggregatorRegistry: AggregatorRegistry;
 
   registerMessage<T extends Message>(
     typeName: string,
@@ -71,6 +75,12 @@ export interface Bus extends AsyncDisposable {
     processName: string,
     options: ProcessRuntimeOptions & { dataType?: string },
   ): ProcessBuilder;
+
+  registerAggregator<T extends Message>(
+    messageType: string,
+    aggregator: Aggregator<T>,
+    options: { store: IAggregatorStore },
+  ): Bus;
 
   publish<T extends Message>(typeName: string, message: T, options?: PublishOptions): Promise<void>;
   send<T extends Message>(typeName: string, message: T, options: SendOptions): Promise<void>;
@@ -122,6 +132,7 @@ class BusImpl implements Bus {
     onSuccess: new FilterPipeline('onConsumedSuccessfully'),
   };
   private readonly _processRegistry = new ProcessRegistry();
+  private readonly _aggregatorRegistry = new AggregatorRegistry();
   private _activeProcessRuntime: ProcessRuntimeOptions | undefined;
   private timeoutPoller?: TimeoutPoller;
 
@@ -150,6 +161,10 @@ class BusImpl implements Bus {
 
   get processRegistry(): ProcessRegistry {
     return this._processRegistry;
+  }
+
+  get aggregatorRegistry(): AggregatorRegistry {
+    return this._aggregatorRegistry;
   }
 
   registerMessage<T extends Message>(
@@ -215,6 +230,16 @@ class BusImpl implements Bus {
     }
     this._activeProcessRuntime = { store: options.store, timeoutStore: options.timeoutStore };
     return createProcessBuilder(this, this._processRegistry, processName);
+  }
+
+  registerAggregator<T extends Message>(
+    messageType: string,
+    aggregator: Aggregator<T>,
+    options: { store: IAggregatorStore },
+  ): Bus {
+    this.registerMessage(messageType);
+    this._aggregatorRegistry.register(messageType, aggregator, options.store);
+    return this;
   }
 
   private pipelineForStage(stage: PipelineStage): FilterPipeline {
