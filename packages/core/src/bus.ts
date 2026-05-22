@@ -40,6 +40,7 @@ import { runSagaBranch } from './process/dispatch.js';
 import { ProcessRegistry } from './process/registry.js';
 import { TimeoutPoller } from './process/timeout-poller.js';
 import { RequestReplyManager } from './request-reply.js';
+import { forwardRoutingSlipIfPresent } from './routing/dispatch.js';
 import {
   ROUTING_SLIP_HEADER,
   assertValidDestination,
@@ -616,6 +617,15 @@ class BusImpl implements Bus {
             logger: this.logger,
           })
       : undefined;
+    const routingForward = async (envelope: Envelope, handlerSucceeded: boolean) => {
+      await forwardRoutingSlipIfPresent({
+        envelope,
+        handlerSucceeded,
+        producer: this.producer,
+        logger: this.logger,
+      });
+      return true;
+    };
     const dispatcher = createDispatcher({
       bus: this,
       logger: this.logger,
@@ -626,6 +636,7 @@ class BusImpl implements Bus {
       requestReplyManager: this.requestReplyManager,
       sagaBranch,
       aggregatorBranch,
+      routingForward,
     });
     if (runtime) {
       this.timeoutPoller = new TimeoutPoller({

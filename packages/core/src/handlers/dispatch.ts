@@ -36,6 +36,7 @@ export interface DispatcherDeps {
     message: object,
     signal: AbortSignal,
   ) => Promise<AggregatorBranchOutcome>;
+  routingForward?: (envelope: Envelope, handlerSucceeded: boolean) => Promise<boolean>;
 }
 
 export function createDispatcher(deps: DispatcherDeps): ConsumeCallback {
@@ -132,6 +133,18 @@ export function createDispatcher(deps: DispatcherDeps): ConsumeCallback {
         await deps.pipelines.onSuccess.execute(envelope, { signal, logger: deps.logger });
       } catch (error) {
         successPipelineError = error instanceof Error ? error : new Error(String(error));
+      }
+    }
+
+    // Phase E routing-slip forward hook (after success pipeline, before after-pipeline)
+    if (deps.routingForward) {
+      const handlerSucceeded = !handlerError && !successPipelineError;
+      try {
+        await deps.routingForward(envelope, handlerSucceeded);
+      } catch (err) {
+        deps.logger.warn('routing slip forward threw; result preserved', {
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
 
