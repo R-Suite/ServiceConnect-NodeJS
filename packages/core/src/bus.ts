@@ -290,6 +290,7 @@ class BusImpl implements Bus {
 
     const { requestMessageId, promise } = this.requestReplyManager.registerSingle<TRep>({
       timeoutMs: options.timeoutMs,
+      signal: options.signal,
     });
 
     const callerHeaders: Record<string, string> = {
@@ -350,6 +351,7 @@ class BusImpl implements Bus {
     const { requestMessageId, promise } = this.requestReplyManager.registerMulti<TRep>({
       timeoutMs: options.timeoutMs,
       expectedReplyCount: options.expectedReplyCount,
+      signal: options.signal,
     });
 
     const callerHeaders: Record<string, string> = {
@@ -413,6 +415,7 @@ class BusImpl implements Bus {
     const { requestMessageId, promise } = this.requestReplyManager.registerCallback<TRep>(onReply, {
       timeoutMs,
       expectedReplyCount: options.expectedReplyCount,
+      signal: options.signal,
     });
 
     const callerHeaders: Record<string, string> = {
