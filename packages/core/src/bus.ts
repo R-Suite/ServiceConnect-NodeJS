@@ -52,6 +52,7 @@ import type { IMessageSerializer } from './serialization/serializer.js';
 import type { StandardSchemaV1 } from './serialization/standard-schema.js';
 import { StreamRegistry, runStreamBranch } from './streaming/dispatch.js';
 import { type StreamSender, createStreamSender } from './streaming/sender.js';
+import { senderToWritableStream } from './streaming/web-streams.js';
 import type { ITransportConsumer, ITransportProducer } from './transport.js';
 
 export interface BusOptions {
@@ -127,6 +128,7 @@ export interface Bus extends AsyncDisposable {
   ): Promise<void>;
 
   openStream<T extends Message>(endpoint: string, typeName: string): Promise<StreamSender<T>>;
+  openWritableStream<T extends Message>(endpoint: string, typeName: string): WritableStream<T>;
   handleStream<T extends Message>(
     messageType: string,
     handler: (stream: AsyncIterable<T>) => Promise<void>,
@@ -619,6 +621,10 @@ class BusImpl implements Bus {
       producer: this.producer,
       serializer: this.serializer,
     });
+  }
+
+  openWritableStream<T extends Message>(endpoint: string, typeName: string): WritableStream<T> {
+    return senderToWritableStream<T>(this.openStream<T>(endpoint, typeName));
   }
 
   handleStream<T extends Message>(
