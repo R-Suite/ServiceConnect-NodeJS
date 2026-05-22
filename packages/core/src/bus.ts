@@ -275,7 +275,7 @@ class BusImpl implements Bus {
     options: RequestOptions,
   ): Promise<TRep> {
     if (this._stopped) {
-      throw new Error('bus is stopped');
+      throw new InvalidOperationError('bus is stopped');
     }
     if (!this.registry.resolve(typeName)) {
       throw new MessageTypeNotRegisteredError(
@@ -292,6 +292,12 @@ class BusImpl implements Bus {
       timeoutMs: options.timeoutMs,
       signal: options.signal,
     });
+    // The pending promise becomes the returned awaited value on the happy path. On the
+    // send-failure path below we throw the original transport error to the caller — the
+    // pending promise is abandoned, so swallow its rejection to keep Node's unhandled-
+    // rejection handler quiet. Without this, every send failure would also log an
+    // unhandled RequestSendCancelledError.
+    promise.catch(() => {});
 
     const callerHeaders: Record<string, string> = {
       ...(options.headers ?? {}),
@@ -310,6 +316,7 @@ class BusImpl implements Bus {
     try {
       await this.runOutgoing(envelope);
       const headers = stringifyHeaders(envelope.headers);
+      // No endpoint → broadcast publish (used by callers that target a fan-out exchange).
       if (options.endpoint) {
         await this.producer.send(options.endpoint, typeName, body, { headers });
       } else {
@@ -335,7 +342,7 @@ class BusImpl implements Bus {
     options: RequestOptions,
   ): Promise<TRep[]> {
     if (this._stopped) {
-      throw new Error('bus is stopped');
+      throw new InvalidOperationError('bus is stopped');
     }
     if (!this.registry.resolve(typeName)) {
       throw new MessageTypeNotRegisteredError(
@@ -353,6 +360,8 @@ class BusImpl implements Bus {
       expectedReplyCount: options.expectedReplyCount,
       signal: options.signal,
     });
+    // See sendRequest for the rationale behind the .catch() rejection-swallow.
+    promise.catch(() => {});
 
     const callerHeaders: Record<string, string> = {
       ...(options.headers ?? {}),
@@ -394,10 +403,10 @@ class BusImpl implements Bus {
     typeName: string,
     message: TReq,
     onReply: (reply: TRep) => void,
-    options: RequestOptions = { timeoutMs: 0 },
+    options: RequestOptions = {},
   ): Promise<void> {
     if (this._stopped) {
-      throw new Error('bus is stopped');
+      throw new InvalidOperationError('bus is stopped');
     }
     if (!this.registry.resolve(typeName)) {
       throw new MessageTypeNotRegisteredError(
@@ -409,6 +418,9 @@ class BusImpl implements Bus {
         'publishRequest does not accept options.endpoint; use sendRequest for single-destination requests',
       );
     }
+    // No caller-supplied (positive) timeoutMs → fall back to the documented default. Phase B
+    // exports DEFAULT_REQUEST_TIMEOUT_MS but we inline the literal here to keep this method
+    // self-contained.
     const timeoutMs =
       typeof options.timeoutMs === 'number' && options.timeoutMs > 0 ? options.timeoutMs : 10_000;
 
@@ -417,6 +429,8 @@ class BusImpl implements Bus {
       expectedReplyCount: options.expectedReplyCount,
       signal: options.signal,
     });
+    // See sendRequest for the rationale behind the .catch() rejection-swallow.
+    promise.catch(() => {});
 
     const callerHeaders: Record<string, string> = {
       ...(options.headers ?? {}),
@@ -465,9 +479,13 @@ class BusImpl implements Bus {
   async stop(_signal?: AbortSignal): Promise<void> {
     if (this._stopped) return;
     this._stopped = true;
-    this.requestReplyManager.shutdown(new Error('bus is stopped'));
+    // Order matters: drain the consumer FIRST so in-flight handlers can finish their reply
+    // paths through the still-live RequestReplyManager. Only after the consumer has stopped
+    // accepting new work do we tear down the manager (which rejects every remaining pending
+    // request — by then there shouldn't be any in-flight messages still expecting replies).
     await this.consumer.stop();
     await this.consumer[Symbol.asyncDispose]();
+    this.requestReplyManager.shutdown(new InvalidOperationError('bus is stopped'));
     await this.producer[Symbol.asyncDispose]();
   }
 
