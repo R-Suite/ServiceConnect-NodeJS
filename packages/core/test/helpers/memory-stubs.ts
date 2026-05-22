@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ConcurrencyError, DuplicateSagaError } from '../../src/errors.js';
+import type { Message } from '../../src/message.js';
+import type { AggregatorClaim, IAggregatorStore } from '../../src/persistence/aggregator-store.js';
 import type {
   ConcurrencyToken,
   FoundSaga,
@@ -51,6 +53,45 @@ export function memorySagaStore(): ISagaStore {
     },
     async delete(dataType: string, correlationId: string): Promise<void> {
       bucket(dataType).delete(correlationId);
+    },
+  };
+}
+
+export function memoryAggregatorStoreInline(): IAggregatorStore {
+  const buffers = new Map<
+    string,
+    { buffer: { msg: Message; at: Date }[]; lease?: { id: string } }
+  >();
+  const snapToType = new Map<string, string>();
+  const bucket = (t: string) => {
+    let b = buffers.get(t);
+    if (!b) {
+      b = { buffer: [] };
+      buffers.set(t, b);
+    }
+    return b;
+  };
+  return {
+    async appendAndClaim(t, msg, batchSize, _leaseMs) {
+      const b = bucket(t);
+      b.buffer.push({ msg, at: new Date() });
+      if (b.buffer.length < batchSize) return undefined;
+      const messages = b.buffer.splice(0, batchSize).map((e) => e.msg);
+      const snapshotId = randomUUID();
+      b.lease = { id: snapshotId };
+      snapToType.set(snapshotId, t);
+      return { snapshotId, messages, aggregatorType: t } as AggregatorClaim<Message>;
+    },
+    async releaseSnapshot(id) {
+      const t = snapToType.get(id);
+      if (t) {
+        snapToType.delete(id);
+        const b = buffers.get(t);
+        if (b?.lease?.id === id) b.lease = undefined;
+      }
+    },
+    async expireDueLeases() {
+      return [];
     },
   };
 }

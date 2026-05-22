@@ -1,3 +1,4 @@
+import type { AggregatorBranchOutcome } from '../aggregator/dispatch.js';
 import type { Bus } from '../bus.js';
 import { createConsumeContext } from '../consume-context.js';
 import type { Envelope } from '../envelope.js';
@@ -30,6 +31,11 @@ export interface DispatcherDeps {
     message: object,
     signal: AbortSignal,
   ) => Promise<SagaBranchOutcome>;
+  aggregatorBranch?: (
+    envelope: Envelope,
+    message: object,
+    signal: AbortSignal,
+  ) => Promise<AggregatorBranchOutcome>;
 }
 
 export function createDispatcher(deps: DispatcherDeps): ConsumeCallback {
@@ -89,6 +95,15 @@ export function createDispatcher(deps: DispatcherDeps): ConsumeCallback {
       if (sagaOutcome.ran && sagaOutcome.result) {
         await runAfterSafe(deps, envelope, signal);
         return sagaOutcome.result;
+      }
+    }
+
+    // Phase E aggregator-branch. Short-circuits if a registration matches.
+    if (deps.aggregatorBranch) {
+      const aggOutcome = await deps.aggregatorBranch(envelope, message, signal);
+      if (aggOutcome.ran && aggOutcome.result) {
+        await runAfterSafe(deps, envelope, signal);
+        return aggOutcome.result;
       }
     }
 

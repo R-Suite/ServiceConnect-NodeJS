@@ -1,4 +1,5 @@
 import type { Aggregator } from './aggregator/aggregator.js';
+import { runAggregatorBranch } from './aggregator/dispatch.js';
 import { AggregatorRegistry } from './aggregator/registry.js';
 import type { Envelope } from './envelope.js';
 import {
@@ -560,6 +561,13 @@ class BusImpl implements Bus {
             logger: this.logger,
           })
       : undefined;
+    const aggregatorBranch = this._aggregatorRegistry.hasAny()
+      ? (envelope: Envelope, message: object, signal: AbortSignal) =>
+          runAggregatorBranch(envelope, message as Message, signal, {
+            registry: this._aggregatorRegistry,
+            logger: this.logger,
+          })
+      : undefined;
     const dispatcher = createDispatcher({
       bus: this,
       logger: this.logger,
@@ -569,6 +577,7 @@ class BusImpl implements Bus {
       pipelines: this.pipelines,
       requestReplyManager: this.requestReplyManager,
       sagaBranch,
+      aggregatorBranch,
     });
     if (runtime) {
       this.timeoutPoller = new TimeoutPoller({
