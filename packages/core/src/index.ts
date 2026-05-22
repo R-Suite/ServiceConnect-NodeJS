@@ -59,18 +59,40 @@ export type { LogLevel, Logger } from './logger.js';
 // Errors
 export {
   AbortError,
+  AggregatorConfigurationError,
   ArgumentError,
   ArgumentOutOfRangeError,
+  ConcurrencyError,
+  DuplicateSagaError,
   HandlerNotRegisteredError,
   InvalidOperationError,
   MessageTypeNotRegisteredError,
   OutgoingFiltersBlockedError,
   RequestSendCancelledError,
   RequestTimeoutError,
+  RoutingSlipDestinationError,
   ServiceConnectError,
+  StreamFaultedError,
+  StreamSequenceError,
   TerminalDeserializationError,
   ValidationError,
 } from './errors.js';
+
+// Persistence
+export type {
+  ConcurrencyToken,
+  FoundSaga,
+  ISagaStore,
+  ProcessData,
+} from './persistence/saga-store.js';
+export type {
+  AggregatorClaim,
+  IAggregatorStore,
+} from './persistence/aggregator-store.js';
+export type {
+  ITimeoutStore,
+  TimeoutRecord,
+} from './persistence/timeout-store.js';
 
 // RequestReplyManager (Phase D)
 export { RequestReplyManager } from './request-reply.js';

@@ -7,5 +7,6 @@ export default defineConfig({
   clean: true,
   target: 'node22',
   sourcemap: true,
-  splitting: false,
+  splitting: true,
+  external: ['vitest'],
 });
