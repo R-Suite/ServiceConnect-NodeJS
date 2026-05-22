@@ -56,4 +56,48 @@ describe('createMessageTypeRegistry', () => {
     reg.register('C');
     expect([...snap].sort()).toEqual(['A', 'B']);
   });
+
+  it('register stores parents on the registration', () => {
+    const reg = createMessageTypeRegistry();
+    reg.register('OrderShipped', { parents: ['DomainEvent', 'OrderEvent'] });
+    const resolved = reg.resolve('OrderShipped');
+    expect(resolved?.parents).toEqual(['DomainEvent', 'OrderEvent']);
+  });
+
+  it('register without parents leaves parents undefined', () => {
+    const reg = createMessageTypeRegistry();
+    reg.register('Plain');
+    expect(reg.resolve('Plain')?.parents).toBeUndefined();
+  });
+
+  it('parentsOf returns the parents array', () => {
+    const reg = createMessageTypeRegistry();
+    reg.register('OrderShipped', { parents: ['DomainEvent'] });
+    expect(reg.parentsOf('OrderShipped')).toEqual(['DomainEvent']);
+  });
+
+  it('parentsOf returns empty array for an unknown type', () => {
+    const reg = createMessageTypeRegistry();
+    expect(reg.parentsOf('Unknown')).toEqual([]);
+  });
+
+  it('parentsOf returns empty array when no parents declared', () => {
+    const reg = createMessageTypeRegistry();
+    reg.register('Plain');
+    expect(reg.parentsOf('Plain')).toEqual([]);
+  });
+
+  it('re-registering with the same parents (by structural equality) is idempotent', () => {
+    const reg = createMessageTypeRegistry();
+    reg.register('OrderShipped', { parents: ['DomainEvent'] });
+    expect(() => reg.register('OrderShipped', { parents: ['DomainEvent'] })).not.toThrow();
+  });
+
+  it('re-registering with conflicting parents throws', () => {
+    const reg = createMessageTypeRegistry();
+    reg.register('OrderShipped', { parents: ['DomainEvent'] });
+    expect(() => reg.register('OrderShipped', { parents: ['OrderEvent'] })).toThrow(
+      /already registered with different parents/,
+    );
+  });
 });
