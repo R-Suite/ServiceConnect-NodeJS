@@ -90,7 +90,7 @@ class BusImpl implements Bus {
   private readonly registry: IMessageTypeRegistry;
   private readonly serializer: IMessageSerializer;
   private readonly logger: Logger;
-  private readonly handlers = new HandlerRegistry();
+  private readonly handlers: HandlerRegistry;
   private readonly pipelines = {
     outgoing: new FilterPipeline('outgoing'),
     before: new FilterPipeline('beforeConsuming'),
@@ -102,6 +102,7 @@ class BusImpl implements Bus {
     this.producer = opts.transport.producer;
     this.consumer = opts.transport.consumer;
     this.registry = opts.registry ?? createMessageTypeRegistry();
+    this.handlers = new HandlerRegistry(this.registry);
     this.serializer = opts.serializer ?? jsonSerializer(this.registry);
     this.logger = opts.logger ?? consoleLogger('info');
     this.queue = opts.queue.name;

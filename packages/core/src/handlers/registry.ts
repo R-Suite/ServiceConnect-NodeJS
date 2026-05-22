@@ -1,5 +1,6 @@
 import type { ConsumeContext } from '../consume-context.js';
 import type { Message } from '../message.js';
+import type { IMessageTypeRegistry } from '../serialization/registry.js';
 import type { Handler, HandlerClass, HandlerFn } from './index.js';
 
 type ResolvedHandler = (message: Message, context: ConsumeContext) => Promise<void>;
@@ -11,6 +12,8 @@ interface Registration {
 
 export class HandlerRegistry {
   private readonly byType = new Map<string, Registration[]>();
+
+  constructor(private readonly typeRegistry: IMessageTypeRegistry) {}
 
   add<T extends Message>(typeName: string, handler: Handler<T>): void {
     const list = this.byType.get(typeName) ?? [];
@@ -36,10 +39,34 @@ export class HandlerRegistry {
     return (this.byType.get(typeName)?.length ?? 0) > 0;
   }
 
+  /**
+   * Returns handlers for `typeName` and all registered ancestor types (via the message-type
+   * registry's parents links). Each handler instance is invoked at most once even when
+   * registered against multiple ancestors. Cycles in the parent graph are tolerated.
+   */
   handlersFor(typeName: string, context: ConsumeContext): ResolvedHandler[] {
-    const list = this.byType.get(typeName);
-    if (!list) return [];
-    return list.map((reg) => reg.resolve(context));
+    const resolved: ResolvedHandler[] = [];
+    const seen = new Set<unknown>();
+    const visited = new Set<string>();
+
+    const walk = (currentType: string): void => {
+      if (visited.has(currentType)) return;
+      visited.add(currentType);
+      const list = this.byType.get(currentType);
+      if (list) {
+        for (const reg of list) {
+          if (!seen.has(reg.raw)) {
+            seen.add(reg.raw);
+            resolved.push(reg.resolve(context));
+          }
+        }
+      }
+      for (const parent of this.typeRegistry.parentsOf(currentType)) {
+        walk(parent);
+      }
+    };
+    walk(typeName);
+    return resolved;
   }
 }
 

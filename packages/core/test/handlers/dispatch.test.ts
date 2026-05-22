@@ -18,7 +18,7 @@ function setup() {
   const registry = createMessageTypeRegistry();
   registry.register<Foo>('Foo');
   const serializer = jsonSerializer(registry);
-  const handlers = new HandlerRegistry();
+  const handlers = new HandlerRegistry(registry);
   const before = new FilterPipeline('beforeConsuming');
   const after = new FilterPipeline('afterConsuming');
   const success = new FilterPipeline('onConsumedSuccessfully');
