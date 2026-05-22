@@ -10,6 +10,7 @@ import {
   MessageTypeNotRegisteredError,
   OutgoingFiltersBlockedError,
   RequestSendCancelledError,
+  RoutingSlipDestinationError,
 } from './errors.js';
 import { FilterPipeline } from './filter-pipeline.js';
 import { createDispatcher } from './handlers/dispatch.js';
@@ -39,6 +40,11 @@ import { runSagaBranch } from './process/dispatch.js';
 import { ProcessRegistry } from './process/registry.js';
 import { TimeoutPoller } from './process/timeout-poller.js';
 import { RequestReplyManager } from './request-reply.js';
+import {
+  ROUTING_SLIP_HEADER,
+  assertValidDestination,
+  serialiseRoutingSlip,
+} from './routing/index.js';
 import { jsonSerializer } from './serialization/json.js';
 import { type IMessageTypeRegistry, createMessageTypeRegistry } from './serialization/registry.js';
 import type { IMessageSerializer } from './serialization/serializer.js';
@@ -92,6 +98,12 @@ export interface Bus extends AsyncDisposable {
     message: T,
     endpoints: readonly string[],
     options?: Omit<SendOptions, 'endpoint'>,
+  ): Promise<void>;
+  route<T extends Message>(
+    typeName: string,
+    message: T,
+    destinations: readonly string[],
+    options?: SendOptions,
   ): Promise<void>;
 
   sendRequest<TReq extends Message, TRep extends Message>(
@@ -327,6 +339,39 @@ class BusImpl implements Bus {
         `sendToMany: ${errors.length} of ${endpoints.length} endpoints failed`,
       );
     }
+  }
+
+  async route<T extends Message>(
+    typeName: string,
+    message: T,
+    destinations: readonly string[],
+    options?: SendOptions,
+  ): Promise<void> {
+    if (this._stopped) {
+      throw new InvalidOperationError('bus is stopped');
+    }
+    if (!this.registry.resolve(typeName)) {
+      throw new MessageTypeNotRegisteredError(
+        `type ${typeName} is not registered; call registerMessage() first`,
+      );
+    }
+    if (destinations.length === 0) {
+      throw new RoutingSlipDestinationError('route requires at least one destination');
+    }
+    for (const d of destinations) {
+      assertValidDestination(d);
+    }
+
+    const firstDestination = destinations[0] as string;
+    const remaining = destinations.slice(1);
+    const optionHeaders = (options?.headers ?? {}) as Record<string, unknown>;
+    const headers: Record<string, string> = {
+      ...stringifyHeaders(optionHeaders),
+      [ROUTING_SLIP_HEADER]: serialiseRoutingSlip(remaining),
+    };
+
+    const body = this.serializer.serialize(message);
+    await this.producer.send(firstDestination, typeName, body, { headers });
   }
 
   private buildOutgoingEnvelope<T extends Message>(
