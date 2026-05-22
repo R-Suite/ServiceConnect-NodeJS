@@ -64,7 +64,7 @@ describe('createProducer', () => {
       exchange: 'OrderCreated',
       routingKey: 'rk',
       contentType: 'application/json',
-      deliveryMode: 2,
+      durable: true,
       headers: { Custom: 'v' },
     });
   });
@@ -80,7 +80,7 @@ describe('createProducer', () => {
       exchange: '',
       routingKey: 'q-target',
       contentType: 'application/json',
-      deliveryMode: 2,
+      durable: true,
       headers: { MessageType: 'OrderCreated', Custom: 'v' },
     });
   });

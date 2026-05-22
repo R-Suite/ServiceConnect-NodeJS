@@ -9,3 +9,7 @@ export const CORE_DEPENDENCY = CORE_NAME;
  * downstream. Real RabbitMQ implementation lands in Phase C.
  */
 export type RabbitMQMessage = Message;
+
+export { buildConnectionOptions, createRabbitMQConnection } from './connection.js';
+export { createRabbitMQTransport } from './transport.js';
+export type { RabbitMQTransport } from './transport.js';

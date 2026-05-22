@@ -1,3 +1,4 @@
+import type EventEmitter from 'node:events';
 import type { ConsumeCallback, ConsumeResult, ITransportConsumer } from '@serviceconnect/core';
 import type { AsyncMessage, Connection, Consumer, Publisher } from 'rabbitmq-client';
 import { publishAudit } from './audit.js';
@@ -170,7 +171,7 @@ export function createConsumer(
       await declareTopology(name, messageTypes);
       dispatchPublisher = connection.createPublisher({ confirm: true });
       consumer = connection.createConsumer(
-        { queue: name, qos: { prefetch: opts.prefetch } },
+        { queue: name, qos: { prefetchCount: opts.prefetch } },
         async (msg) => {
           await handle(msg, callback);
         },
@@ -178,7 +179,7 @@ export function createConsumer(
       consumer.on('error', () => {
         // Errors are surfaced via isCancelledByBroker / isConnected; logging is the bus layer's job.
       });
-      consumer.on('cancel', () => {
+      (consumer as unknown as EventEmitter).on('cancel', () => {
         cancelledByBroker = true;
       });
     },

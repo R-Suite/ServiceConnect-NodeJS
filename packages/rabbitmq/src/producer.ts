@@ -90,7 +90,7 @@ export function createProducer(
           routingKey: options?.routingKey ?? '',
           headers: { ...(options?.headers ?? {}) },
           contentType: 'application/json',
-          deliveryMode: 2,
+          durable: true,
         },
         Buffer.from(body),
       );
@@ -113,7 +113,7 @@ export function createProducer(
           routingKey: endpoint,
           headers,
           contentType: 'application/json',
-          deliveryMode: 2,
+          durable: true,
         },
         Buffer.from(body),
       );
@@ -129,7 +129,7 @@ export function createProducer(
           routingKey: endpoint,
           headers: { MessageType: typeName, ...(options?.headers ?? {}) },
           contentType: 'application/octet-stream',
-          deliveryMode: 2,
+          durable: true,
         },
         Buffer.from(body),
       );

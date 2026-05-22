@@ -76,7 +76,7 @@ describe('createConsumer', () => {
     await consumer.start('q-self', [], async () => okResult);
     expect(connection.createConsumer).toHaveBeenCalled();
     const call = (connection.createConsumer as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(call?.[0]).toMatchObject({ queue: 'q-self', qos: { prefetch: 25 } });
+    expect(call?.[0]).toMatchObject({ queue: 'q-self', qos: { prefetchCount: 25 } });
   });
 
   it('start() throws if called twice', async () => {
