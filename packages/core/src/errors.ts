@@ -67,3 +67,15 @@ export class DuplicateSagaError extends ServiceConnectError {
 export class AggregatorConfigurationError extends ServiceConnectError {
   override readonly name = 'AggregatorConfigurationError';
 }
+
+export class RoutingSlipDestinationError extends ServiceConnectError {
+  override readonly name = 'RoutingSlipDestinationError';
+}
+
+export class StreamFaultedError extends ServiceConnectError {
+  override readonly name = 'StreamFaultedError';
+}
+
+export class StreamSequenceError extends ServiceConnectError {
+  override readonly name = 'StreamSequenceError';
+}

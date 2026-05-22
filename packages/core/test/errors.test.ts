@@ -8,7 +8,10 @@ import {
   OutgoingFiltersBlockedError,
   RequestSendCancelledError,
   RequestTimeoutError,
+  RoutingSlipDestinationError,
   ServiceConnectError,
+  StreamFaultedError,
+  StreamSequenceError,
   TerminalDeserializationError,
   ValidationError,
 } from '../src/errors.js';
@@ -73,5 +76,25 @@ describe('errors', () => {
     expect(b.name).toBe('ArgumentOutOfRangeError');
     expect(a).toBeInstanceOf(ServiceConnectError);
     expect(b).toBeInstanceOf(ServiceConnectError);
+  });
+});
+
+describe('Phase E errors', () => {
+  it('RoutingSlipDestinationError extends ServiceConnectError', () => {
+    const err = new RoutingSlipDestinationError('bad destination');
+    expect(err).toBeInstanceOf(ServiceConnectError);
+    expect(err.name).toBe('RoutingSlipDestinationError');
+  });
+
+  it('StreamFaultedError extends ServiceConnectError', () => {
+    const err = new StreamFaultedError('faulted');
+    expect(err).toBeInstanceOf(ServiceConnectError);
+    expect(err.name).toBe('StreamFaultedError');
+  });
+
+  it('StreamSequenceError extends ServiceConnectError', () => {
+    const err = new StreamSequenceError('gap detected');
+    expect(err).toBeInstanceOf(ServiceConnectError);
+    expect(err.name).toBe('StreamSequenceError');
   });
 });
