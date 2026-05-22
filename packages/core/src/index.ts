@@ -58,15 +58,29 @@ export type { LogLevel, Logger } from './logger.js';
 
 // Errors
 export {
+  AbortError,
+  ArgumentError,
+  ArgumentOutOfRangeError,
   HandlerNotRegisteredError,
   InvalidOperationError,
   MessageTypeNotRegisteredError,
   OutgoingFiltersBlockedError,
+  RequestSendCancelledError,
   RequestTimeoutError,
   ServiceConnectError,
   TerminalDeserializationError,
   ValidationError,
 } from './errors.js';
+
+// RequestReplyManager (Phase D)
+export { RequestReplyManager } from './request-reply.js';
+export type {
+  CallbackRequestRegistration,
+  MultiRequestRegistration,
+  RegisterMultiOptions,
+  RegisterSingleOptions,
+  SingleRequestRegistration,
+} from './request-reply.js';
 
 // Legacy probe constant — kept for the existing inter-package wiring test in @serviceconnect/rabbitmq
 export const PACKAGE_NAME = '@serviceconnect/core' as const;

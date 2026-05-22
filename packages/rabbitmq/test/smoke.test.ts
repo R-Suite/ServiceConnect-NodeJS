@@ -6,6 +6,7 @@ import {
   type RabbitMQTransport,
   type RabbitMQTransportOptions,
   createRabbitMQTransport,
+  rabbitMQWithRegistry,
 } from '../src/index.js';
 
 describe('@serviceconnect/rabbitmq public surface', () => {
@@ -27,5 +28,16 @@ describe('@serviceconnect/rabbitmq public surface', () => {
     // Close both connections so rabbitmq-client stops retrying in the background.
     await t.producer[Symbol.asyncDispose]();
     await t.consumer[Symbol.asyncDispose]();
+  });
+
+  it('rabbitMQWithRegistry threads parentsOf into the transport', async () => {
+    const { createMessageTypeRegistry } = await import('@serviceconnect/core');
+    const registry = createMessageTypeRegistry();
+    registry.register('OrderShipped', { parents: ['DomainEvent'] });
+    const transport = rabbitMQWithRegistry({ url: 'amqp://localhost' }, registry);
+    expect(typeof transport.producer.publish).toBe('function');
+    expect(typeof transport.consumer.start).toBe('function');
+    await transport.producer[Symbol.asyncDispose]();
+    await transport.consumer[Symbol.asyncDispose]();
   });
 });
