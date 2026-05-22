@@ -32,6 +32,7 @@ import {
 } from './process/builder.js';
 import { runSagaBranch } from './process/dispatch.js';
 import { ProcessRegistry } from './process/registry.js';
+import { TimeoutPoller } from './process/timeout-poller.js';
 import { RequestReplyManager } from './request-reply.js';
 import { jsonSerializer } from './serialization/json.js';
 import { type IMessageTypeRegistry, createMessageTypeRegistry } from './serialization/registry.js';
@@ -46,6 +47,7 @@ export interface BusOptions {
   queue: { name: string };
   logger?: Logger;
   defaultRequestTimeout?: number;
+  readonly timeoutPollIntervalMs?: number;
 }
 
 export interface Bus extends AsyncDisposable {
@@ -105,6 +107,7 @@ class BusImpl implements Bus {
   private _started = false;
   private _stopped = false;
 
+  private readonly opts: BusOptions;
   private readonly producer: ITransportProducer;
   private readonly consumer: ITransportConsumer;
   private readonly registry: IMessageTypeRegistry;
@@ -120,8 +123,10 @@ class BusImpl implements Bus {
   };
   private readonly _processRegistry = new ProcessRegistry();
   private _activeProcessRuntime: ProcessRuntimeOptions | undefined;
+  private timeoutPoller?: TimeoutPoller;
 
   constructor(opts: BusOptions) {
+    this.opts = opts;
     this.producer = opts.transport.producer;
     this.consumer = opts.transport.consumer;
     this.registry = opts.registry ?? createMessageTypeRegistry();
@@ -540,6 +545,20 @@ class BusImpl implements Bus {
       requestReplyManager: this.requestReplyManager,
       sagaBranch,
     });
+    if (runtime) {
+      this.timeoutPoller = new TimeoutPoller({
+        store: runtime.timeoutStore,
+        intervalMs: this.opts.timeoutPollIntervalMs ?? 1000,
+        logger: this.logger,
+        publish: async (messageType, body) => {
+          if (!this.registry.resolve(messageType)) {
+            this.registerMessage(messageType);
+          }
+          await this.publish(messageType, body as Message);
+        },
+      });
+      this.timeoutPoller.start();
+    }
     await this.consumer.start(this.queue, this.registry.allRegisteredNames(), dispatcher);
     this._started = true;
   }
@@ -553,6 +572,10 @@ class BusImpl implements Bus {
     // request — by then there shouldn't be any in-flight messages still expecting replies).
     await this.consumer.stop();
     await this.consumer[Symbol.asyncDispose]();
+    if (this.timeoutPoller) {
+      await this.timeoutPoller.stop();
+      this.timeoutPoller = undefined;
+    }
     this.requestReplyManager.shutdown(new InvalidOperationError('bus is stopped'));
     await this.producer[Symbol.asyncDispose]();
   }
