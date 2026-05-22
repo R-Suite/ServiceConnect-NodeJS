@@ -6,6 +6,7 @@ import type { FilterPipeline } from '../filter-pipeline.js';
 import type { Logger } from '../logger.js';
 import type { MessageHeaders } from '../message.js';
 import { FilterAction } from '../pipeline/index.js';
+import type { SagaBranchOutcome } from '../process/dispatch.js';
 import type { RequestReplyManager } from '../request-reply.js';
 import type { IMessageTypeRegistry } from '../serialization/registry.js';
 import type { IMessageSerializer } from '../serialization/serializer.js';
@@ -24,6 +25,11 @@ export interface DispatcherDeps {
     onSuccess: FilterPipeline;
   };
   requestReplyManager?: RequestReplyManager;
+  sagaBranch?: (
+    envelope: Envelope,
+    message: object,
+    signal: AbortSignal,
+  ) => Promise<SagaBranchOutcome>;
 }
 
 export function createDispatcher(deps: DispatcherDeps): ConsumeCallback {
@@ -74,6 +80,15 @@ export function createDispatcher(deps: DispatcherDeps): ConsumeCallback {
       if (matched) {
         await runAfterSafe(deps, envelope, signal);
         return { success: true, notHandled: false, terminalFailure: false };
+      }
+    }
+
+    // Phase E saga-branch. Runs only when a saga registration matches.
+    if (deps.sagaBranch) {
+      const sagaOutcome = await deps.sagaBranch(envelope, message, signal);
+      if (sagaOutcome.ran && sagaOutcome.result) {
+        await runAfterSafe(deps, envelope, signal);
+        return sagaOutcome.result;
       }
     }
 

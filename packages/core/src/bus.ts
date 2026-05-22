@@ -30,6 +30,7 @@ import {
   type ProcessRuntimeOptions,
   createProcessBuilder,
 } from './process/builder.js';
+import { runSagaBranch } from './process/dispatch.js';
 import { ProcessRegistry } from './process/registry.js';
 import { RequestReplyManager } from './request-reply.js';
 import { jsonSerializer } from './serialization/json.js';
@@ -518,6 +519,17 @@ class BusImpl implements Bus {
       throw new Error('bus is stopped; create a new instance to resume');
     }
     if (this._started) return;
+    const runtime = this._activeProcessRuntime;
+    const sagaBranch = runtime
+      ? (envelope: Envelope, message: object, signal: AbortSignal) =>
+          runSagaBranch(envelope, message, signal, {
+            processes: this._processRegistry,
+            store: runtime.store,
+            timeoutStore: runtime.timeoutStore,
+            bus: this,
+            logger: this.logger,
+          })
+      : undefined;
     const dispatcher = createDispatcher({
       bus: this,
       logger: this.logger,
@@ -526,6 +538,7 @@ class BusImpl implements Bus {
       handlers: this.handlers,
       pipelines: this.pipelines,
       requestReplyManager: this.requestReplyManager,
+      sagaBranch,
     });
     await this.consumer.start(this.queue, this.registry.allRegisteredNames(), dispatcher);
     this._started = true;
