@@ -1,5 +1,6 @@
 import type { Aggregator } from './aggregator/aggregator.js';
 import { runAggregatorBranch } from './aggregator/dispatch.js';
+import { AggregatorFlushTimer } from './aggregator/flush-timer.js';
 import { AggregatorRegistry } from './aggregator/registry.js';
 import type { Envelope } from './envelope.js';
 import {
@@ -52,6 +53,7 @@ export interface BusOptions {
   logger?: Logger;
   defaultRequestTimeout?: number;
   readonly timeoutPollIntervalMs?: number;
+  readonly aggregatorFlushIntervalMs?: number;
 }
 
 export interface Bus extends AsyncDisposable {
@@ -136,6 +138,7 @@ class BusImpl implements Bus {
   private readonly _aggregatorRegistry = new AggregatorRegistry();
   private _activeProcessRuntime: ProcessRuntimeOptions | undefined;
   private timeoutPoller?: TimeoutPoller;
+  private aggregatorFlushTimer?: AggregatorFlushTimer;
 
   constructor(opts: BusOptions) {
     this.opts = opts;
@@ -593,6 +596,15 @@ class BusImpl implements Bus {
       });
       this.timeoutPoller.start();
     }
+    if (this._aggregatorRegistry.hasAny()) {
+      this.aggregatorFlushTimer = new AggregatorFlushTimer({
+        registry: this._aggregatorRegistry,
+        intervalMs: this.opts.aggregatorFlushIntervalMs ?? 250,
+        leaseMs: 30_000,
+        logger: this.logger,
+      });
+      this.aggregatorFlushTimer.start();
+    }
     await this.consumer.start(this.queue, this.registry.allRegisteredNames(), dispatcher);
     this._started = true;
   }
@@ -609,6 +621,10 @@ class BusImpl implements Bus {
     if (this.timeoutPoller) {
       await this.timeoutPoller.stop();
       this.timeoutPoller = undefined;
+    }
+    if (this.aggregatorFlushTimer) {
+      await this.aggregatorFlushTimer.stop();
+      this.aggregatorFlushTimer = undefined;
     }
     this.requestReplyManager.shutdown(new InvalidOperationError('bus is stopped'));
     await this.producer[Symbol.asyncDispose]();
