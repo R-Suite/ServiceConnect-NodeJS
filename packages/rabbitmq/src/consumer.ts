@@ -60,7 +60,9 @@ export function createConsumer(
       await connection.queueBind({
         exchange: binding.exchange,
         queue: binding.queue,
-        routingKey: binding.routingKey,
+        // AMQP queue.bind requires a routing key field; fanout ignores it
+        // but topic/direct bindings (added later) require an explicit value.
+        routingKey: binding.routingKey ?? '',
       });
     }
   }
@@ -72,6 +74,10 @@ export function createConsumer(
     try {
       result = await callback(envelope, ac.signal);
     } catch (error) {
+      // Coerce thrown handler errors into a non-terminal failure result so that the
+      // dispatch-publisher retry-queue routing runs. If we re-threw here, rabbitmq-client
+      // would auto-nack and the broker's own redelivery would bypass our retry-count
+      // tracking and TTL'd retry queue. Keeping retries in-process is the design contract.
       const err = error instanceof Error ? error : new Error(String(error));
       result = { success: false, notHandled: false, terminalFailure: false, error: err };
     }
@@ -88,7 +94,12 @@ export function createConsumer(
     });
 
     const publisher = dispatchPublisher;
-    if (!publisher) return;
+    if (!publisher) {
+      // Unreachable in practice: dispatchPublisher is assigned synchronously before
+      // createConsumer registers this handler in start(). Throw rather than silent
+      // drop so the broker redelivers via standard nack rather than losing the message.
+      throw new Error('dispatch publisher not initialised; consumer not fully started');
+    }
 
     if (action.kind === 'ack') {
       if (opts.auditEnabled && result.success && !result.notHandled) {

@@ -59,14 +59,12 @@ describe('createConsumer', () => {
     expect(connection.exchangeDeclare).toHaveBeenCalledWith(
       expect.objectContaining({ exchange: 'OrderShipped', type: 'fanout' }),
     );
-    expect(connection.queueBind).toHaveBeenCalledWith({
-      exchange: 'OrderCreated',
-      queue: 'q-self',
-    });
-    expect(connection.queueBind).toHaveBeenCalledWith({
-      exchange: 'OrderShipped',
-      queue: 'q-self',
-    });
+    expect(connection.queueBind).toHaveBeenCalledWith(
+      expect.objectContaining({ exchange: 'OrderCreated', queue: 'q-self' }),
+    );
+    expect(connection.queueBind).toHaveBeenCalledWith(
+      expect.objectContaining({ exchange: 'OrderShipped', queue: 'q-self' }),
+    );
   });
 
   it('start() opens a rabbitmq-client Consumer with the configured prefetch', async () => {
