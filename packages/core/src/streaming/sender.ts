@@ -28,6 +28,7 @@ export function createStreamSender<T extends Message>(
 
   function baseHeaders(): Record<string, string> {
     return {
+      messageType: deps.typeName,
       [StreamHeaders.StreamId]: streamId,
       [StreamHeaders.SequenceNumber]: String(sequenceNumber),
       [StreamHeaders.IsStartOfStream]: sequenceNumber === 0 ? 'true' : 'false',
