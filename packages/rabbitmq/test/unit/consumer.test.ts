@@ -19,6 +19,11 @@ function fakeConnection() {
   const consumer = {
     close: vi.fn(async () => {}),
     on: vi.fn(),
+    // once('ready', cb) is called by start() to wait for broker subscription;
+    // in the unit test the fake consumer is immediately ready, so invoke cb synchronously.
+    once: vi.fn((event: string, cb: () => void) => {
+      if (event === 'ready') cb();
+    }),
   } as unknown as Consumer;
   const connection = {
     queueDeclare: vi.fn(async () => undefined),

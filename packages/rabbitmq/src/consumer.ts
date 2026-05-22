@@ -44,11 +44,23 @@ export function createConsumer(
   async function declareTopology(name: string, messageTypes: readonly string[]): Promise<void> {
     const topology = buildConsumerTopology(name, messageTypes, opts);
     for (const queue of topology.queues) {
-      await connection.queueDeclare({
-        queue: queue.queue,
-        durable: queue.durable,
-        arguments: queue.arguments,
-      });
+      try {
+        await connection.queueDeclare({
+          queue: queue.queue,
+          durable: queue.durable,
+          arguments: queue.arguments,
+        });
+      } catch (err) {
+        // PRECONDITION_FAILED means the queue already exists with different
+        // arguments (e.g. a plain error queue being re-declared with DLX args).
+        // Fall back to a passive declare which just asserts the queue exists.
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('PRECONDITION_FAILED') || msg.includes('inequivalent arg')) {
+          await connection.queueDeclare({ queue: queue.queue, passive: true });
+        } else {
+          throw err;
+        }
+      }
     }
     for (const exchange of topology.exchanges) {
       await connection.exchangeDeclare({
@@ -171,7 +183,15 @@ export function createConsumer(
       await declareTopology(name, messageTypes);
       dispatchPublisher = connection.createPublisher({ confirm: true });
       consumer = connection.createConsumer(
-        { queue: name, qos: { prefetchCount: opts.prefetch } },
+        {
+          queue: name,
+          // passive:true means "assert the queue exists without re-declaring it",
+          // which avoids a PRECONDITION_FAILED error when declareTopology has
+          // already created the queue as durable:true and rabbitmq-client's
+          // internal consumer setup would otherwise re-declare with durable:false.
+          queueOptions: { passive: true },
+          qos: { prefetchCount: opts.prefetch },
+        },
         async (msg) => {
           await handle(msg, callback);
         },
@@ -181,6 +201,14 @@ export function createConsumer(
       });
       (consumer as unknown as EventEmitter).on('cancel', () => {
         cancelledByBroker = true;
+      });
+      // Wait until the broker has acknowledged our basicConsume so that
+      // callers can immediately publish after start() resolves without
+      // hitting a race where messages arrive before the consumer is ready.
+      await new Promise<void>((resolve, reject) => {
+        const c = consumer as unknown as EventEmitter;
+        c.once('ready', resolve);
+        c.once('error', reject);
       });
     },
 
