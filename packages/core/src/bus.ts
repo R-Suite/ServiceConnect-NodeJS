@@ -18,12 +18,19 @@ import type { PublishOptions } from './options/publish.js';
 import type { ReplyOptions } from './options/reply.js';
 import type { RequestOptions } from './options/request.js';
 import type { SendOptions } from './options/send.js';
+import type { ProcessData } from './persistence/saga-store.js';
 import {
   FilterAction,
   type FilterRegistration,
   type MiddlewareRegistration,
   type PipelineStage,
 } from './pipeline/index.js';
+import {
+  type ProcessBuilder,
+  type ProcessRuntimeOptions,
+  createProcessBuilder,
+} from './process/builder.js';
+import { ProcessRegistry } from './process/registry.js';
 import { RequestReplyManager } from './request-reply.js';
 import { jsonSerializer } from './serialization/json.js';
 import { type IMessageTypeRegistry, createMessageTypeRegistry } from './serialization/registry.js';
@@ -44,6 +51,8 @@ export interface Bus extends AsyncDisposable {
   readonly queue: string;
   readonly isStarted: boolean;
   readonly isStopped: boolean;
+  readonly messageRegistry: IMessageTypeRegistry;
+  readonly processRegistry: ProcessRegistry;
 
   registerMessage<T extends Message>(
     typeName: string,
@@ -53,6 +62,12 @@ export interface Bus extends AsyncDisposable {
   unhandle<T extends Message>(typeName: string, handler: Handler<T>): this;
   isHandled(typeName: string): boolean;
   use(stage: PipelineStage, ...items: Array<FilterRegistration | MiddlewareRegistration>): this;
+
+  registerProcessData<_TData extends ProcessData>(dataType: string): Bus;
+  registerProcess(
+    processName: string,
+    options: ProcessRuntimeOptions & { dataType?: string },
+  ): ProcessBuilder;
 
   publish<T extends Message>(typeName: string, message: T, options?: PublishOptions): Promise<void>;
   send<T extends Message>(typeName: string, message: T, options: SendOptions): Promise<void>;
@@ -102,6 +117,8 @@ class BusImpl implements Bus {
     after: new FilterPipeline('afterConsuming'),
     onSuccess: new FilterPipeline('onConsumedSuccessfully'),
   };
+  private readonly _processRegistry = new ProcessRegistry();
+  private _activeProcessRuntime: ProcessRuntimeOptions | undefined;
 
   constructor(opts: BusOptions) {
     this.producer = opts.transport.producer;
@@ -119,6 +136,14 @@ class BusImpl implements Bus {
 
   get isStopped(): boolean {
     return this._stopped;
+  }
+
+  get messageRegistry(): IMessageTypeRegistry {
+    return this.registry;
+  }
+
+  get processRegistry(): ProcessRegistry {
+    return this._processRegistry;
   }
 
   registerMessage<T extends Message>(
@@ -154,6 +179,36 @@ class BusImpl implements Bus {
       pipe.add(item);
     }
     return this;
+  }
+
+  registerProcessData<_TData extends ProcessData>(dataType: string): Bus {
+    this._processRegistry.registerDataType(dataType);
+    return this;
+  }
+
+  registerProcess(
+    processName: string,
+    options: ProcessRuntimeOptions & { dataType?: string },
+  ): ProcessBuilder {
+    const explicitDataType = options.dataType;
+    if (explicitDataType !== undefined) {
+      if (!this._processRegistry.isDataTypeRegistered(explicitDataType)) {
+        throw new InvalidOperationError(
+          `process data type '${explicitDataType}' is not registered`,
+        );
+      }
+      this._processRegistry.registerProcess(processName, { dataType: explicitDataType });
+    } else {
+      const lastDataType = this._processRegistry.lastRegisteredDataType();
+      if (!lastDataType) {
+        throw new InvalidOperationError(
+          'call registerProcessData<TData>(typeName) before registerProcess',
+        );
+      }
+      this._processRegistry.registerProcess(processName, { dataType: lastDataType });
+    }
+    this._activeProcessRuntime = { store: options.store, timeoutStore: options.timeoutStore };
+    return createProcessBuilder(this, this._processRegistry, processName);
   }
 
   private pipelineForStage(stage: PipelineStage): FilterPipeline {
