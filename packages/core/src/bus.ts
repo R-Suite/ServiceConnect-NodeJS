@@ -53,7 +53,7 @@ import type { StandardSchemaV1 } from './serialization/standard-schema.js';
 import { StreamRegistry, runStreamBranch } from './streaming/dispatch.js';
 import { type StreamSender, createStreamSender } from './streaming/sender.js';
 import { senderToWritableStream } from './streaming/web-streams.js';
-import type { ITransportConsumer, ITransportProducer } from './transport.js';
+import type { ConsumeCallback, ITransportConsumer, ITransportProducer } from './transport.js';
 
 export interface BusOptions {
   transport: { producer: ITransportProducer; consumer: ITransportConsumer };
@@ -64,6 +64,7 @@ export interface BusOptions {
   defaultRequestTimeout?: number;
   readonly timeoutPollIntervalMs?: number;
   readonly aggregatorFlushIntervalMs?: number;
+  readonly consumeWrapper?: (cb: ConsumeCallback) => ConsumeCallback;
 }
 
 export interface Bus extends AsyncDisposable {
@@ -73,6 +74,9 @@ export interface Bus extends AsyncDisposable {
   readonly messageRegistry: IMessageTypeRegistry;
   readonly processRegistry: ProcessRegistry;
   readonly aggregatorRegistry: AggregatorRegistry;
+  readonly consumer: ITransportConsumer;
+  readonly producer: ITransportProducer;
+  readonly lastConsumedAt: Date | undefined;
 
   registerMessage<T extends Message>(
     typeName: string,
@@ -144,9 +148,10 @@ class BusImpl implements Bus {
   private _stopped = false;
 
   private readonly opts: BusOptions;
-  private readonly producer: ITransportProducer;
-  private readonly consumer: ITransportConsumer;
+  readonly producer: ITransportProducer;
+  readonly consumer: ITransportConsumer;
   private readonly registry: IMessageTypeRegistry;
+  private _lastConsumedAt: Date | undefined;
   private readonly serializer: IMessageSerializer;
   private readonly logger: Logger;
   private readonly handlers: HandlerRegistry;
@@ -181,6 +186,10 @@ class BusImpl implements Bus {
 
   get isStopped(): boolean {
     return this._stopped;
+  }
+
+  get lastConsumedAt(): Date | undefined {
+    return this._lastConsumedAt;
   }
 
   get messageRegistry(): IMessageTypeRegistry {
@@ -716,7 +725,14 @@ class BusImpl implements Bus {
       });
       this.aggregatorFlushTimer.start();
     }
-    await this.consumer.start(this.queue, this.registry.allRegisteredNames(), dispatcher);
+    const withHeartbeat: ConsumeCallback = async (env, signal) => {
+      const result = await dispatcher(env, signal);
+      this._lastConsumedAt = new Date();
+      return result;
+    };
+
+    const finalCallback = this.opts.consumeWrapper?.(withHeartbeat) ?? withHeartbeat;
+    await this.consumer.start(this.queue, this.registry.allRegisteredNames(), finalCallback);
     this._started = true;
   }
 
