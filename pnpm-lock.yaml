@@ -32,7 +32,11 @@ importers:
 
   packages/core: {}
 
-  packages/healthchecks: {}
+  packages/healthchecks:
+    dependencies:
+      '@serviceconnect/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/persistence-memory:
     dependencies:
