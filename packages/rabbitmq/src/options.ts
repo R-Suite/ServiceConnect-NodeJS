@@ -8,6 +8,11 @@ export interface RabbitMQTransportOptions {
   retryHigh?: number;
   /** Connection name shown in RabbitMQ management UI. */
   connectionName?: string;
+  /** Optional lookup of polymorphic parents for a given message type. The producer declares
+   *  exchange-to-exchange bindings derived → parent at publish time so subscribers bound
+   *  to the parent receive derived messages. Typically wired with `registry.parentsOf` from
+   *  `@serviceconnect/core`. */
+  parentsOf?: (typeName: string) => readonly string[];
   producer?: {
     publishConfirmTimeoutMs?: number;
     maxAttempts?: number;

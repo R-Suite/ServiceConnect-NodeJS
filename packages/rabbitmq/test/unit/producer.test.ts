@@ -13,6 +13,7 @@ function fakeConnection() {
   const connection = {
     createPublisher: vi.fn(() => publisher),
     exchangeDeclare: vi.fn(async () => undefined),
+    exchangeBind: vi.fn(async () => undefined),
     close: vi.fn(async () => undefined),
     get ready() {
       return true;
@@ -132,5 +133,42 @@ describe('createProducer', () => {
     await producer[Symbol.asyncDispose]();
     expect(publisher.close).toHaveBeenCalledOnce();
     expect(connection.close).toHaveBeenCalledOnce();
+  });
+
+  it('publish declares parent exchanges and exchange-to-exchange bindings on first publish per type', async () => {
+    const { connection, publisher } = fakeConnection();
+    const parentsOf = (n: string): readonly string[] =>
+      n === 'OrderShipped' ? ['DomainEvent'] : [];
+    const producer = createProducer(connection, resolveProducerOptions({ url: '' }), parentsOf);
+    await producer.publish('OrderShipped', new Uint8Array([1]));
+    await producer.publish('OrderShipped', new Uint8Array([2]));
+
+    // The derived exchange + the parent exchange both declared exactly once each.
+    expect(connection.exchangeDeclare).toHaveBeenCalledWith({
+      exchange: 'OrderShipped',
+      type: 'fanout',
+      durable: true,
+    });
+    expect(connection.exchangeDeclare).toHaveBeenCalledWith({
+      exchange: 'DomainEvent',
+      type: 'fanout',
+      durable: true,
+    });
+    // The e2e binding declared exactly once.
+    expect(connection.exchangeBind).toHaveBeenCalledWith({
+      source: 'OrderShipped',
+      destination: 'DomainEvent',
+      routingKey: '',
+    });
+    expect((connection.exchangeBind as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+    // Both publishes routed to the derived exchange.
+    expect(publisher.send).toHaveBeenCalledTimes(2);
+  });
+
+  it('publish with no parentsOf callback skips e2e binding declaration', async () => {
+    const { connection } = fakeConnection();
+    const producer = createProducer(connection, resolveProducerOptions({ url: '' }));
+    await producer.publish('OrderShipped', new Uint8Array([1]));
+    expect(connection.exchangeBind).not.toHaveBeenCalled();
   });
 });

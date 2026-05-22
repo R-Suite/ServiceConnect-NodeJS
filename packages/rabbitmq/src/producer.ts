@@ -27,6 +27,7 @@ function isConnectionReady(connection: Connection): boolean {
 export function createProducer(
   connection: Connection,
   opts: ResolvedProducerOptions,
+  parentsOf?: (typeName: string) => readonly string[],
 ): RabbitMQProducer {
   const publisher = connection.createPublisher({
     confirm: true,
@@ -34,6 +35,7 @@ export function createProducer(
     exchanges: [],
   }) as PublisherWithExchanges;
   const declaredExchanges = new Set<string>();
+  const declaredBindings = new Set<string>();
   let publishCount = 0;
   let lastPublishAt: string | null = null;
 
@@ -48,6 +50,24 @@ export function createProducer(
       publisher.exchanges.push(spec);
     }
     declaredExchanges.add(typeName);
+
+    const parents = parentsOf?.(typeName) ?? [];
+    for (const parent of parents) {
+      await ensureExchangeDeclared(parent);
+      const bindingKey = `${typeName}->${parent}`;
+      if (!declaredBindings.has(bindingKey)) {
+        await (
+          connection as unknown as {
+            exchangeBind: (args: {
+              source: string;
+              destination: string;
+              routingKey?: string;
+            }) => Promise<void>;
+          }
+        ).exchangeBind({ source: typeName, destination: parent, routingKey: '' });
+        declaredBindings.add(bindingKey);
+      }
+    }
   }
 
   function validateBodySize(body: Uint8Array): void {

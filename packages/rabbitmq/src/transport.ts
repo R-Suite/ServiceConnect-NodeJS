@@ -20,7 +20,7 @@ export function createRabbitMQTransport(opts: RabbitMQTransportOptions): RabbitM
   const producerConnection = createRabbitMQConnection(opts, 'producer');
   const consumerConnection = createRabbitMQConnection(opts, 'consumer');
 
-  const producer = createProducer(producerConnection, resolveProducerOptions(opts));
+  const producer = createProducer(producerConnection, resolveProducerOptions(opts), opts.parentsOf);
   const consumer = createConsumer(consumerConnection, resolveConsumerOptions(opts));
 
   return { producer, consumer };
