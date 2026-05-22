@@ -80,9 +80,28 @@ export {
 
 // Aggregator (Phase E)
 export { Aggregator } from './aggregator/aggregator.js';
+export { AggregatorRegistry } from './aggregator/registry.js';
 
 // Process Manager (Phase E)
 export type { ProcessContext, ProcessHandler } from './process/handler.js';
+export { ProcessRegistry } from './process/registry.js';
+export type { ProcessBuilder, ProcessRuntimeOptions } from './process/builder.js';
+
+// Routing slip (Phase E)
+export {
+  assertValidDestination,
+  destinationFailureReason,
+  isValidDestination,
+  ROUTING_SLIP_HEADER,
+  parseRoutingSlip,
+  serialiseRoutingSlip,
+} from './routing/index.js';
+
+// Streaming (Phase E)
+export { StreamHeaders } from './streaming/stream-headers.js';
+export type { StreamHeaderKey } from './streaming/stream-headers.js';
+export type { StreamSender } from './streaming/sender.js';
+export { StreamReceiver } from './streaming/receiver.js';
 
 // Persistence
 export type {
