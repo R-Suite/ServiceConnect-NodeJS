@@ -50,6 +50,7 @@ import { jsonSerializer } from './serialization/json.js';
 import { type IMessageTypeRegistry, createMessageTypeRegistry } from './serialization/registry.js';
 import type { IMessageSerializer } from './serialization/serializer.js';
 import type { StandardSchemaV1 } from './serialization/standard-schema.js';
+import { type StreamSender, createStreamSender } from './streaming/sender.js';
 import type { ITransportConsumer, ITransportProducer } from './transport.js';
 
 export interface BusOptions {
@@ -123,6 +124,8 @@ export interface Bus extends AsyncDisposable {
     onReply: (reply: TRep) => void,
     options?: RequestOptions,
   ): Promise<void>;
+
+  openStream<T extends Message>(endpoint: string, typeName: string): Promise<StreamSender<T>>;
 
   start(): Promise<void>;
   stop(signal?: AbortSignal): Promise<void>;
@@ -592,6 +595,24 @@ class BusImpl implements Bus {
     }
 
     return promise;
+  }
+
+  async openStream<T extends Message>(
+    endpoint: string,
+    typeName: string,
+  ): Promise<StreamSender<T>> {
+    if (this._stopped) {
+      throw new InvalidOperationError('bus is stopped');
+    }
+    if (!this.registry.resolve(typeName)) {
+      throw new MessageTypeNotRegisteredError(typeName);
+    }
+    return createStreamSender<T>({
+      endpoint,
+      typeName,
+      producer: this.producer,
+      serializer: this.serializer,
+    });
   }
 
   async start(): Promise<void> {
