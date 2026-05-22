@@ -16,25 +16,37 @@ export interface RabbitMQProducer extends ITransportProducer {
   snapshot(): ProducerSnapshot;
 }
 
+interface PublisherWithExchanges extends Publisher {
+  exchanges?: Array<{ exchange: string; type: string; durable?: boolean }>;
+}
+
+function isConnectionReady(connection: Connection): boolean {
+  return Boolean((connection as unknown as { ready?: boolean }).ready);
+}
+
 export function createProducer(
   connection: Connection,
   opts: ResolvedProducerOptions,
 ): RabbitMQProducer {
-  const publisher: Publisher = connection.createPublisher({
+  const publisher = connection.createPublisher({
     confirm: true,
     maxAttempts: opts.maxAttempts,
-  });
+    exchanges: [],
+  }) as PublisherWithExchanges;
   const declaredExchanges = new Set<string>();
   let publishCount = 0;
   let lastPublishAt: string | null = null;
 
   async function ensureExchangeDeclared(typeName: string): Promise<void> {
     if (declaredExchanges.has(typeName)) return;
-    await connection.exchangeDeclare({
-      exchange: typeName,
-      type: 'fanout',
-      durable: true,
-    });
+    const spec = { exchange: typeName, type: 'fanout' as const, durable: true };
+    await connection.exchangeDeclare(spec);
+    // Also push into the publisher's exchanges list so rabbitmq-client re-declares
+    // it on reconnect. Without this, a broker that loses exchange state across a
+    // restart would leave the publisher trying to publish to a missing exchange.
+    if (publisher.exchanges) {
+      publisher.exchanges.push(spec);
+    }
     declaredExchanges.add(typeName);
   }
 
@@ -51,16 +63,27 @@ export function createProducer(
     lastPublishAt = new Date().toISOString();
   }
 
+  // rabbitmq-client's Publisher.send doesn't accept an AbortSignal, so the
+  // caller-supplied signal can only be honoured by short-circuiting before the
+  // publish starts. In-flight publishes are not cancellable.
+  function throwIfAborted(signal?: AbortSignal): void {
+    if (signal?.aborted) {
+      throw signal.reason ?? new Error('publish aborted');
+    }
+  }
+
   return {
     get isHealthy(): boolean {
-      return Boolean((connection as unknown as { ready?: boolean }).ready);
+      return isConnectionReady(connection);
     },
     supportsRoutingKey: true,
     maxMessageSize: opts.maxMessageSize,
 
-    async publish(typeName, body, options) {
+    async publish(typeName, body, options, signal) {
+      throwIfAborted(signal);
       validateBodySize(body);
       await ensureExchangeDeclared(typeName);
+      throwIfAborted(signal);
       await publisher.send(
         {
           exchange: typeName,
@@ -74,7 +97,8 @@ export function createProducer(
       recordPublish();
     },
 
-    async send(endpoint, typeName, body, options) {
+    async send(endpoint, typeName, body, options, signal) {
+      throwIfAborted(signal);
       validateBodySize(body);
       const headers: Record<string, unknown> = {
         MessageType: typeName,
@@ -96,7 +120,8 @@ export function createProducer(
       recordPublish();
     },
 
-    async sendBytes(endpoint, typeName, body, options) {
+    async sendBytes(endpoint, typeName, body, options, signal) {
+      throwIfAborted(signal);
       validateBodySize(body);
       await publisher.send(
         {
@@ -112,7 +137,7 @@ export function createProducer(
     },
 
     snapshot() {
-      const connected = Boolean((connection as unknown as { ready?: boolean }).ready);
+      const connected = isConnectionReady(connection);
       return {
         isHealthy: connected,
         isConnected: connected,
