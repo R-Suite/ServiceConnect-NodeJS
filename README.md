@@ -1,13 +1,13 @@
 # ServiceConnect for Node.js
 
-[![ci](https://github.com/twatson83/ServiceConnect-NodeJS/actions/workflows/ci.yml/badge.svg?branch=v3)](https://github.com/twatson83/ServiceConnect-NodeJS/actions/workflows/ci.yml)
-[![docs](https://github.com/twatson83/ServiceConnect-NodeJS/actions/workflows/docs.yml/badge.svg?branch=v3)](https://github.com/twatson83/ServiceConnect-NodeJS/actions/workflows/docs.yml)
+[![ci](https://github.com/R-Suite/ServiceConnect-NodeJS/actions/workflows/ci.yml/badge.svg?branch=v3)](https://github.com/R-Suite/ServiceConnect-NodeJS/actions/workflows/ci.yml)
+[![docs](https://github.com/R-Suite/ServiceConnect-NodeJS/actions/workflows/docs.yml/badge.svg?branch=v3)](https://github.com/R-Suite/ServiceConnect-NodeJS/actions/workflows/docs.yml)
 
 Asynchronous messaging for Node.js. ServiceConnect gives you a typed, ergonomic bus on top of RabbitMQ with first-class support for pub/sub, point-to-point, request/reply, scatter-gather, polymorphic dispatch, process managers (sagas), aggregators, routing slips, streaming, and a pluggable pipeline.
 
 It is the Node.js sibling of [ServiceConnect for .NET](https://github.com/R-Suite/ServiceConnect-CSharp) and is wire-compatible with it.
 
-**Documentation:** <https://twatson83.github.io/ServiceConnect-NodeJS/>
+**Documentation:** <https://r-suite.github.io/ServiceConnect-NodeJS/>
 
 ## Why?
 
@@ -88,7 +88,7 @@ bash run-all.sh
 
 The legacy `service-connect` v1.x package (on the `master` branch) is preserved unchanged. v3 is a complete redesign with typed handlers, ESM-only, Node 22 LTS, and a pluggable transport.
 
-See the [migration guide](https://twatson83.github.io/ServiceConnect-NodeJS/migrating-v1-to-v3/) for a side-by-side mapping of every v1 concept to its v3 replacement.
+See the [migration guide](https://r-suite.github.io/ServiceConnect-NodeJS/migrating-v1-to-v3/) for a side-by-side mapping of every v1 concept to its v3 replacement.
 
 ## Engine support
 

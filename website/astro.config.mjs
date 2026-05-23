@@ -3,7 +3,7 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 
 export default defineConfig({
-  site: 'https://twatson83.github.io',
+  site: 'https://r-suite.github.io',
   base: '/ServiceConnect-NodeJS/',
   integrations: [
     starlight({
@@ -18,7 +18,7 @@ export default defineConfig({
       },
       customCss: ['./src/styles/brand.css'],
       social: {
-        github: 'https://github.com/twatson83/ServiceConnect-NodeJS',
+        github: 'https://github.com/R-Suite/ServiceConnect-NodeJS',
       },
       sidebar: [
         {
