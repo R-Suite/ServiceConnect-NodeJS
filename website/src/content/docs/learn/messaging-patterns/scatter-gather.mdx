@@ -1,0 +1,55 @@
+---
+title: Scatter-Gather
+description: Fan out a request to N endpoints — collect every reply that arrives before the timeout.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+Scatter-Gather fans a single request out to a list of named endpoints and gathers their replies into a single array. It is the natural multi-responder generalisation of [Request/Reply](/ServiceConnect-NodeJS/learn/messaging-patterns/request-reply/): one outgoing question, many possible answers, one `await` at the call site.
+
+## When to use
+
+Use Scatter-Gather when you have **multiple candidate responders for the same question** and you want to compare their answers — price quotes from competing providers, search across shards, health checks across a cluster. Each responder works independently; the caller composes the results.
+
+It is also useful for **best-effort polling**: a status query that should accept whatever replies arrive within a deadline and move on, rather than wait for every responder to be reachable. The timeout becomes a budget, not a failure threshold.
+
+## When not to use
+
+If you have **one logical responder**, use plain [Request/Reply](/ServiceConnect-NodeJS/learn/messaging-patterns/request-reply/) — Scatter-Gather over a single endpoint is just a slower request with worse error semantics.
+
+If you need **every** responder's reply or none at all, this pattern is the wrong choice. Scatter-Gather is partial-reply tolerant by design; consider a coordinator or a saga instead when you need all-or-nothing.
+
+## Example
+
+```ts
+const quotes = await bus.sendRequestMulti<PriceQuoteRequest, PriceQuoteReply>(
+  ['pricing-a', 'pricing-b', 'pricing-c'],
+  'PriceQuoteRequest',
+  { sku: 'SKU-1', qty: 3 },
+  { timeoutMs: 5_000 },
+);
+
+quotes.forEach((q, i) => console.log(`responder ${i}`, q.unitPrice));
+```
+
+The promise resolves with an array of replies. The array length is **at most** the number of endpoints — and may be smaller if any responders were silent or slow.
+
+<Aside type="caution">
+  Partial-reply semantics can hide silent responder failures. If `quotes.length < endpoints.length`, one or more responders dropped the request and the caller will never know unless it checks. Log the discrepancy at minimum; for critical flows, treat a short reply set as an error and surface it.
+</Aside>
+
+## Behind the scenes
+
+All outgoing copies share the **same `correlationId`**. That is the entire mechanism: the request-reply manager registers one pending entry against that id, configured to expect up to N replies and to resolve when the timeout elapses. Each outbound copy is delivered point-to-point to its endpoint queue; each responder treats it as a normal request and replies on the requester's reply queue.
+
+**Multiple responders, all replies collected up to the timeout.** Replies arriving with the matching `correlationId` are appended to the result set. When `timeoutMs` elapses (or every endpoint has replied), the promise resolves with whatever was collected.
+
+Crucially, **`RequestTimeoutError` is not raised if at least one reply arrives**. Scatter-Gather chooses progress over completeness — the function resolves with the partial set rather than rejecting. Only when zero replies arrive within the timeout does the caller see a timeout error. That is what makes `timeoutMs` a budget rather than a deadline: pick it carefully, because it directly bounds the worst-case wall-clock cost of the operation, and there is no built-in retry.
+
+## See also
+
+- Runnable example: [`examples/request-reply/`](https://github.com/twatson83/ServiceConnect-NodeJS/tree/v3/examples/request-reply)
+- [Request/Reply](/ServiceConnect-NodeJS/learn/messaging-patterns/request-reply/)
+- [`RequestOptions`](/ServiceConnect-NodeJS/reference/messages/options/)
