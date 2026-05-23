@@ -1,14 +1,44 @@
 ---
 title: ServiceConnect for Node.js
-description: Asynchronous messaging for Node.js — distributed systems, done cleanly.
+description: Asynchronous messaging for Node.js — pub/sub, request/reply, sagas, streaming.
 template: splash
 hero:
-  tagline: Asynchronous messaging for Node.js. Pub/sub, request/reply, sagas, streaming.
+  tagline: Asynchronous messaging for Node.js. Distributed systems, done cleanly.
+  image:
+    file: ../../assets/logo-light.png
   actions:
     - text: Get Started
       link: /ServiceConnect-NodeJS/learn/getting-started/
       icon: right-arrow
       variant: primary
+    - text: GitHub
+      link: https://github.com/twatson83/ServiceConnect-NodeJS
+      icon: external
 ---
 
-Placeholder — Task 2 rewrites this page.
+import { CardGrid, Card } from '@astrojs/starlight/components';
+
+## What you get
+
+<CardGrid stagger>
+  <Card title="Typed bus" icon="seti:typescript">
+    `bus.publish<OrderPlaced>('OrderPlaced', ...)` — message type carried in the type system, not just at runtime.
+  </Card>
+  <Card title="Every pattern" icon="rocket">
+    Pub/sub, point-to-point, request/reply, scatter-gather, polymorphic, sagas, aggregators, routing slips, streaming — all first class.
+  </Card>
+  <Card title="Pluggable transport" icon="setting">
+    Ship with `@serviceconnect/rabbitmq`. Bring your own transport via `ITransportProducer` + `ITransportConsumer`.
+  </Card>
+  <Card title="Wire-compatible with .NET" icon="approve-check">
+    Same envelope, same headers, same exchange topology. Mix Node.js and .NET services on the same bus.
+  </Card>
+</CardGrid>
+
+## Get started in three steps
+
+1. Install: `pnpm add @serviceconnect/core @serviceconnect/rabbitmq`
+2. Create a bus, register a message type, attach a handler.
+3. `await bus.start()` and publish.
+
+The [Getting Started](/ServiceConnect-NodeJS/learn/getting-started/) walkthrough takes you from zero to a running consumer in about ten minutes.
