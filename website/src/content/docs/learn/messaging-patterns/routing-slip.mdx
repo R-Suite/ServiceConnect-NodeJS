@@ -1,0 +1,80 @@
+---
+title: Routing Slip
+description: Route a single message through a defined sequence of queues — each hop forwards to the next on success.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+A **routing slip** is a list of destinations attached to a message that defines the path it should take through the system. The producer composes the itinerary up front — `['discounts', 'tax', 'shipping']` — and the framework dispatches the message to the first queue. After each successful handler the framework strips the current hop and forwards the same message to the next queue, until the list is empty. Topology decisions live with the caller; the consumers only need to do their own job.
+
+## When to use
+
+Use a routing slip when the workflow is a **linear pipeline** whose shape is decided by the **caller** rather than the consumer. A discount engine should not have to know that tax comes next and shipping after that — those are deployment-time concerns about how you happen to compose the order pipeline today. Hand the consumers a script and let them follow it.
+
+It is also handy when different callers want **different paths** through the same set of consumers. A premium-order flow can include a fraud-check hop that a standard flow skips, without either consumer growing a feature flag.
+
+## When not to use
+
+If the next hop depends on the **content** of the message or on a runtime decision a consumer has to make, you want a Content-Based Router or a small process manager — not a routing slip. Skips itineraries are fixed at send time. Likewise, parallel fan-out belongs in [Scatter/Gather](/ServiceConnect-NodeJS/learn/messaging-patterns/scatter-gather/) or [Pub/Sub](/ServiceConnect-NodeJS/learn/messaging-patterns/pub-sub/); the slip is strictly sequential.
+
+<Aside type="caution">
+  A handler that **throws** stops the slip at that hop. The message goes to the current queue's error queue; the remaining destinations are not visited. Plan compensation explicitly if a partial pipeline run is not safe.
+</Aside>
+
+## Example
+
+The starter side composes the itinerary and calls `bus.route(...)`:
+
+```ts
+import { type Message, createBus } from '@serviceconnect/core';
+import { createRabbitMQTransport } from '@serviceconnect/rabbitmq';
+
+interface ApplyDiscount extends Message {
+  orderId: string;
+}
+
+const starter = createBus({
+  transport: createRabbitMQTransport({ url: 'amqp://localhost' }),
+  queue: { name: 'starter' },
+}).registerMessage<ApplyDiscount>('ApplyDiscount');
+
+await starter.start();
+await starter.route<ApplyDiscount>(
+  'ApplyDiscount',
+  { correlationId: 'c-1', orderId: 'o-1' },
+  ['discounts', 'tax', 'shipping'],
+);
+```
+
+The message visits `discounts`, then `tax`, then `shipping`. Each consumer registers a normal handler for `ApplyDiscount`; none of them needs to know about the others.
+
+Any consumer (or middleware) can inspect the remaining slip — useful for logging, tracing, or conditional behaviour at the tail of the pipeline:
+
+```ts
+import { ROUTING_SLIP_HEADER, asMiddleware, parseRoutingSlip } from '@serviceconnect/core';
+
+bus.use(
+  'beforeConsuming',
+  asMiddleware(async (context, next) => {
+    const raw = context.envelope.headers[ROUTING_SLIP_HEADER];
+    const remaining = parseRoutingSlip(typeof raw === 'string' ? raw : undefined);
+    logger.info({ remaining }, 'hop visited');
+    await next();
+  }),
+);
+```
+
+## Behind the scenes
+
+- The slip is a JSON-encoded queue list carried in the `RoutingSlip` header.
+- Each consumer forwards to the next destination on successful processing; on throw, the message stops where it is and routes to that queue's error queue.
+- The framework removes the current destination after the handler returns successfully, so the header shrinks by one entry per hop.
+- `bus.route(...)` is preferred over manually setting the header; the helpers `serialiseRoutingSlip` and `parseRoutingSlip` exist for advanced inspection.
+
+## See also
+
+- Runnable example: [`examples/routing-slip/`](https://github.com/twatson83/ServiceConnect-NodeJS/tree/v3/examples/routing-slip)
+- [`bus.route`](/ServiceConnect-NodeJS/reference/bus/bus/)
+- [Filters](/ServiceConnect-NodeJS/learn/messaging-patterns/filters/)

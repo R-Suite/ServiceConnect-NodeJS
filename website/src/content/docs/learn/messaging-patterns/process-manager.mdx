@@ -1,0 +1,98 @@
+---
+title: Process Manager
+description: Long-running, stateful sagas — correlate incoming messages, mutate persistent state, schedule timeouts.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+A **process manager** (also called a **saga**) coordinates a multi-step workflow that spans several messages and an unknowable amount of wall-clock time. Where a plain handler is stateless and short-lived, a process manager owns a row of persistent state per correlation key — typically an order, a booking, or a customer journey — and advances that state as related messages arrive. The framework loads the row before the handler runs and writes it back afterwards, with optimistic concurrency protecting against parallel updates.
+
+## When to use
+
+Reach for a process manager when the business operation has a natural lifecycle that outlives a single message: "an order is **pending** until payment is received, then **paid** until it ships, then **complete**". The transitions belong together, the intermediate state has to survive process restarts, and you need timeouts to compensate for things that never happen (the customer never pays, the warehouse never confirms).
+
+It is also the right tool when a transaction needs to span services. A process manager can act as the coordinator in a [Saga](/ServiceConnect-NodeJS/learn/messaging-patterns/saga/) — issuing commands, waiting on replies or events, and emitting a compensating command when one of the steps fails.
+
+## When not to use
+
+Skip the saga machinery when a single handler can do the job. If your workflow is "receive message, do work, ack" with no state to carry forward and no timeout to schedule, a plain `bus.handle(...)` registration is cheaper and easier to reason about. Don't introduce a `ProcessHandler` just to have a row in a database.
+
+<Aside type="caution">
+  The `correlate(message)` function must be **deterministic** and **agree across all handlers in the same saga**. If two handlers correlate the same logical instance to different keys, you will end up with two saga rows and lost transitions.
+</Aside>
+
+## Example
+
+```ts
+import {
+  type Message,
+  type ProcessContext,
+  type ProcessData,
+  type ProcessHandler,
+  createBus,
+} from '@serviceconnect/core';
+import { memorySagaStore, memoryTimeoutStore } from '@serviceconnect/persistence-memory';
+import { createRabbitMQTransport } from '@serviceconnect/rabbitmq';
+
+interface OrderState extends ProcessData {
+  status: 'pending' | 'paid';
+}
+interface OrderCreated extends Message {
+  orderId: string;
+}
+interface PaymentReceived extends Message {
+  orderId: string;
+}
+
+class OnOrderCreated implements ProcessHandler<OrderState, OrderCreated> {
+  async handle(_msg: OrderCreated, data: OrderState): Promise<void> {
+    data.status = 'pending';
+  }
+  correlate(msg: OrderCreated): string {
+    return msg.orderId;
+  }
+}
+
+class OnPaymentReceived implements ProcessHandler<OrderState, PaymentReceived> {
+  async handle(_msg: PaymentReceived, data: OrderState, ctx: ProcessContext): Promise<void> {
+    data.status = 'paid';
+    ctx.markComplete();
+  }
+  correlate(msg: PaymentReceived): string {
+    return msg.orderId;
+  }
+}
+
+const bus = createBus({
+  transport: createRabbitMQTransport({ url: 'amqp://localhost' }),
+  queue: { name: 'orders-saga' },
+});
+
+bus
+  .registerProcessData<OrderState>('OrderState')
+  .registerProcess('OrderProcess', {
+    store: memorySagaStore(),
+    timeoutStore: memoryTimeoutStore(),
+  })
+  .startsWith<OrderCreated>('OrderCreated', new OnOrderCreated())
+  .handles<PaymentReceived>('PaymentReceived', new OnPaymentReceived());
+```
+
+`OnOrderCreated` is the **starter**: when an `OrderCreated` arrives and no existing saga row matches its correlation key, the framework creates a fresh `OrderState` row, runs the handler, and persists the result. `OnPaymentReceived` is a **continuation**: it requires an existing row, mutates `status`, and calls `ctx.markComplete()` to signal the saga is finished.
+
+## Behind the scenes
+
+- A `ProcessHandler` has a `correlate(message): string` that returns the saga's correlation key — typically a domain identifier like `orderId`.
+- The framework uses the key to look up existing state in the `ISagaStore`; `startsWith` creates a new instance if none exists, `handles` raises an error if no row matches.
+- The `data` parameter is mutable; its post-handler value is persisted with an optimistic concurrency check. If a concurrent write wins, the framework retries the message.
+- `ctx.markComplete()` signals the saga is finished — the row is deleted on the next persist, freeing the correlation key for reuse.
+- `ctx.requestTimeout(name, runAt, payload?)` schedules a future tick driven by `ITimeoutStore`. The bus polls at `BusOptions.timeoutPollIntervalMs` and delivers the timeout as a normal message back through the saga's correlation key.
+
+## See also
+
+- Runnable example: [`examples/saga/`](https://github.com/twatson83/ServiceConnect-NodeJS/tree/v3/examples/saga)
+- [`ProcessHandler`](/ServiceConnect-NodeJS/reference/process-managers/process-handler/)
+- [`ISagaStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/isagastore/)
+- [`ITimeoutStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/itimeoutstore/)
