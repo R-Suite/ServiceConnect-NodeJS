@@ -1,0 +1,57 @@
+---
+title: Samples
+description: Runnable examples covering every messaging pattern.
+---
+
+## Overview
+
+Every pattern documented under [Messaging Patterns](/ServiceConnect-NodeJS/learn/messaging-patterns/pub-sub/) has a runnable example under [`examples/`](https://github.com/twatson83/ServiceConnect-NodeJS/tree/v3/examples) in the repo. Each example is a standalone tsx-powered script that publishes some messages and exits.
+
+## Layout
+
+```bash
+examples/
+├── docker-compose.yml      # RabbitMQ + MongoDB for examples that need them
+├── run-all.sh              # runs every example in sequence
+├── lib/                    # shared helpers (logging, ids)
+├── publish-subscribe/
+├── send/
+├── request-reply/
+├── polymorphic/
+├── saga/
+├── aggregator/
+├── routing-slip/
+├── streaming/
+├── filters/
+└── telemetry/
+```
+
+## Running
+
+```bash
+cd examples
+docker compose up -d
+bash run-all.sh
+```
+
+Each example is also runnable individually:
+
+```bash
+cd examples/request-reply
+node --import tsx src/index.ts
+```
+
+## Catalogue
+
+| Example | Pattern page |
+|---|---|
+| `publish-subscribe` | [Pub/Sub](/ServiceConnect-NodeJS/learn/messaging-patterns/pub-sub/) |
+| `send` | [Point-to-Point](/ServiceConnect-NodeJS/learn/messaging-patterns/point-to-point/) |
+| `request-reply` | [Request/Reply](/ServiceConnect-NodeJS/learn/messaging-patterns/request-reply/) |
+| `polymorphic` | [Polymorphic Messages](/ServiceConnect-NodeJS/learn/messaging-patterns/polymorphic-messages/) |
+| `saga` | [Process Manager](/ServiceConnect-NodeJS/learn/messaging-patterns/process-manager/) |
+| `aggregator` | [Aggregator](/ServiceConnect-NodeJS/learn/messaging-patterns/aggregator/) |
+| `routing-slip` | [Routing Slip](/ServiceConnect-NodeJS/learn/messaging-patterns/routing-slip/) |
+| `streaming` | [Streaming](/ServiceConnect-NodeJS/learn/messaging-patterns/streaming/) |
+| `filters` | [Filters](/ServiceConnect-NodeJS/learn/messaging-patterns/filters/) |
+| `telemetry` | [Observability](/ServiceConnect-NodeJS/learn/operations/observability/) |
