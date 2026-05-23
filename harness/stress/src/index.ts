@@ -1,11 +1,16 @@
 import { CliError, type CliOptions, parseCli } from './cli.js';
 import { consoleLogger } from './lib/log.js';
 import { runSmoke } from './modes/smoke.js';
+import { runSoak } from './modes/soak.js';
 
 async function dispatch(opts: CliOptions): Promise<number> {
   const log = consoleLogger();
   if (opts.mode === 'smoke') {
     const report = await runSmoke(opts, log);
+    return report.exitCode;
+  }
+  if (opts.mode === 'soak') {
+    const report = await runSoak(opts, log);
     return report.exitCode;
   }
   log.warn(`mode ${opts.mode} not yet implemented; exiting 0 as a placeholder`);
