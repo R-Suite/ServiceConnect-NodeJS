@@ -1,0 +1,83 @@
+---
+title: Message
+description: The base message contract — every payload extends Message and carries a correlationId.
+---
+
+## Overview
+
+`Message` is the minimal contract every payload satisfies: a single `correlationId` string that ties together related messages across a conversation (request and reply, saga steps, scatter-gather replies). Alongside it, `MessageId` and `CorrelationId` are branded string types and `newMessageId` / `newCorrelationId` mint fresh values. `MessageHeaders` describes the metadata that travels alongside the body on the wire.
+
+## Import
+
+```ts
+import { newCorrelationId, newMessageId } from '@serviceconnect/core';
+import type { CorrelationId, Message, MessageHeaders, MessageId } from '@serviceconnect/core';
+```
+
+## Signature
+
+```ts
+export interface Message {
+  correlationId: string;
+}
+
+export type MessageId = string & { readonly __brand: 'MessageId' };
+export type CorrelationId = string & { readonly __brand: 'CorrelationId' };
+
+export function newCorrelationId(): CorrelationId;
+export function newMessageId(): MessageId;
+
+export interface MessageHeaders {
+  readonly messageId?: MessageId;
+  readonly correlationId: CorrelationId;
+  readonly messageType: string;
+  readonly fullTypeName?: string;
+  readonly destinationAddress?: string;
+  readonly sourceAddress?: string;
+  readonly timeSent?: string;
+  readonly timeReceived?: string;
+  readonly timeProcessed?: string;
+  readonly responseMessageId?: MessageId;
+  readonly requestMessageId?: MessageId;
+  readonly routingKey?: string;
+  readonly routingSlipHopsCompleted?: number;
+  readonly priority?: number;
+  readonly retryCount?: number;
+  readonly [key: string]: unknown;
+}
+```
+
+## Parameters
+
+- **`Message.correlationId`** — `string`. Required on every payload. Initialise it from `newCorrelationId()` for messages that start a new conversation, or copy it from an inbound message's correlation id when continuing one.
+- **`MessageId`** — branded `string`. Unique per individual envelope. Generated automatically by the bus if you don't supply one.
+- **`CorrelationId`** — branded `string`. Unique per conversation. Branding prevents accidentally passing a plain message id where a correlation id is expected.
+- **`newCorrelationId()`** — returns a fresh random UUID v4 typed as `CorrelationId`.
+- **`newMessageId()`** — returns a fresh random UUID v4 typed as `MessageId`.
+- **`MessageHeaders`** — the typed view over the envelope's `headers` map. All fields except `correlationId` and `messageType` are optional; arbitrary user-supplied headers are also allowed via the index signature.
+
+## Example
+
+```ts
+import { newCorrelationId } from '@serviceconnect/core';
+import type { Message } from '@serviceconnect/core';
+
+interface OrderPlaced extends Message {
+  orderId: string;
+  total: number;
+}
+
+const evt: OrderPlaced = {
+  correlationId: newCorrelationId(),
+  orderId: 'o-123',
+  total: 42.5,
+};
+
+await bus.publish<OrderPlaced>('OrderPlaced', evt);
+```
+
+## See also
+
+- [`Envelope`](/ServiceConnect-NodeJS/reference/messages/envelope/)
+- [Send / Publish / Request / Reply Options](/ServiceConnect-NodeJS/reference/messages/options/)
+- [Messages](/ServiceConnect-NodeJS/learn/core-concepts/messages/)

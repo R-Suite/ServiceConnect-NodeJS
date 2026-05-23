@@ -1,0 +1,20 @@
+---
+title: Reference
+description: Hand-written reference for every public type and function in @serviceconnect/*.
+---
+
+The reference covers every exported name in the published packages. Pages are grouped by area and named for the type or function they document.
+
+## Areas
+
+- **Bus** — `createBus`, `BusOptions`, the `Bus` interface.
+- **Messages** — message contracts, envelope, send/publish/request/reply options.
+- **Handlers** — handler shapes, `ConsumeContext`, stream handlers.
+- **Filters** — pipeline filter and middleware primitives.
+- **Process Managers** — sagas and aggregators.
+- **Health Checks** — producer / consumer probes.
+- **Telemetry** — OpenTelemetry wrappers.
+- **Configuration** — transport, persistence, queue, pipeline options.
+- **Extension Points** — interfaces you implement to plug in a new transport, store, serializer, or registry.
+
+Reference pages are hand-written: no auto-generation. If a type appears in the public surface and you can't find it here, please [open an issue](https://github.com/twatson83/ServiceConnect-NodeJS/issues).

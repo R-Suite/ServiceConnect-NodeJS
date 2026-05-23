@@ -1,0 +1,52 @@
+---
+title: Envelope
+description: The wire-format envelope — headers map plus serialised body bytes.
+---
+
+## Overview
+
+`Envelope` is the on-the-wire shape of every message. It has exactly two fields: a free-form `headers` map and a `body` byte array. The serializer produces the body bytes; the bus and pipeline stamp the headers. Filters in the outgoing and inbound pipelines see and can mutate the envelope before it goes to the transport or after it comes off.
+
+## Import
+
+```ts
+import type { Envelope } from '@serviceconnect/core';
+```
+
+## Signature
+
+```ts
+export interface Envelope {
+  headers: Record<string, unknown>;
+  body: Uint8Array;
+}
+```
+
+## Parameters
+
+- **`headers`** — `Record<string, unknown>`. The wire headers map. Carries every documented [`MessageHeaders`](/ServiceConnect-NodeJS/reference/messages/message/) key (`messageId`, `correlationId`, `messageType`, `sourceAddress`, `destinationAddress`, `timeSent`, …) plus any custom headers the caller passed via `SendOptions.headers` / `PublishOptions.headers`. Values are typed `unknown` because they survive a round-trip through the transport — assume `string` for anything you set yourself.
+- **`body`** — `Uint8Array`. The serialised payload bytes. With the default serializer this is UTF-8 JSON; with a custom serializer it can be anything.
+
+### C# wire-format compatibility
+
+ServiceConnect's .NET sibling uses PascalCase header names (`MessageType`, `CorrelationId`, `MessageId`, `SourceAddress`, `DestinationAddress`, `TimeSent`, …). The Node consumer reads both casings: PascalCase first for interop with .NET services, falling back to the internal camelCase (`messageType`, `correlationId`, …) when only the Node-stamped headers are present. Outgoing envelopes from `@serviceconnect/core` stamp the camelCase form; transport adapters can mirror PascalCase keys when targeting a heterogeneous estate.
+
+## Example
+
+```ts
+import type { Envelope } from '@serviceconnect/core';
+import { asFilter, FilterAction } from '@serviceconnect/core';
+
+const stampTenant = asFilter(async (envelope: Envelope) => {
+  envelope.headers.tenantId = process.env.TENANT_ID ?? 'default';
+  return FilterAction.Continue;
+});
+
+bus.use('outgoing', stampTenant);
+```
+
+## See also
+
+- [`Message`](/ServiceConnect-NodeJS/reference/messages/message/)
+- [Send / Publish / Request / Reply Options](/ServiceConnect-NodeJS/reference/messages/options/)
+- [Filters](/ServiceConnect-NodeJS/learn/messaging-patterns/filters/)

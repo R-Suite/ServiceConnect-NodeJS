@@ -1,0 +1,87 @@
+---
+title: Send / Publish / Request / Reply Options
+description: Per-call options for outgoing messages.
+---
+
+## Overview
+
+Every outgoing call on the [`Bus`](/ServiceConnect-NodeJS/reference/bus/bus/) takes a small, purpose-built options object. They share the same `headers` shape (an immutable record of string-to-string custom headers) but otherwise capture exactly what each call needs — an endpoint for `send`, a routing key for `publish`, a timeout and optional signal for requests, headers only for replies.
+
+## Import
+
+```ts
+import { DEFAULT_REQUEST_TIMEOUT_MS } from '@serviceconnect/core';
+import type {
+  PublishOptions,
+  ReplyOptions,
+  RequestOptions,
+  SendOptions,
+} from '@serviceconnect/core';
+```
+
+### SendOptions
+
+```ts
+export interface SendOptions {
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly endpoint: string;
+}
+```
+
+- **`endpoint`** (required) — the destination queue / endpoint name to send to. Stamped onto the outgoing envelope as `destinationAddress`.
+- **`headers`** (optional) — extra string-valued headers merged into the envelope before the outgoing pipeline runs. Bus-managed headers (`messageType`, `correlationId`, `messageId`, `sourceAddress`, `timeSent`) always win and cannot be overridden.
+
+### PublishOptions
+
+```ts
+export interface PublishOptions {
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly routingKey?: string;
+}
+```
+
+- **`routingKey`** (optional) — the broker-level routing key. With RabbitMQ this maps to AMQP's routing key on the type's exchange; with other transports it is interpreted by the adapter.
+- **`headers`** (optional) — same semantics as `SendOptions.headers`.
+
+### RequestOptions
+
+```ts
+export interface RequestOptions {
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly endpoint?: string;
+  readonly timeoutMs?: number;
+  readonly expectedReplyCount?: number;
+  readonly signal?: AbortSignal;
+}
+```
+
+- **`endpoint`** (optional) — point-to-point destination. If omitted the request is published; if set it is sent.
+- **`timeoutMs`** (optional, required for `sendRequest`) — milliseconds before the pending request rejects with `RequestTimeoutError` (or, for `sendRequestMulti`, resolves with however many replies arrived).
+- **`expectedReplyCount`** (optional) — used by `sendRequestMulti` to short-circuit once the expected number of replies has arrived without waiting for the full timeout.
+- **`signal`** (optional) — caller-supplied `AbortSignal`. When the signal aborts before a reply arrives the request rejects with `AbortError`. Added in Phase D.
+- **`headers`** (optional) — extra headers merged into the outgoing request envelope.
+
+### ReplyOptions
+
+```ts
+export interface ReplyOptions {
+  readonly headers?: Readonly<Record<string, string>>;
+}
+```
+
+- **`headers`** (optional) — extra headers merged into the reply envelope. The bus already stamps `responseMessageId`, `requestMessageId`, and `destinationAddress` from the inbound request, so you only need this for application-specific headers.
+
+### DEFAULT_REQUEST_TIMEOUT_MS
+
+```ts
+export const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
+```
+
+The default request timeout in milliseconds (`10_000`). Used as the fallback when neither `RequestOptions.timeoutMs` nor `BusOptions.defaultRequestTimeout` is supplied for code paths that accept a default. Note: `sendRequest` itself always requires a positive `timeoutMs` on the call site.
+
+## See also
+
+- [`Bus`](/ServiceConnect-NodeJS/reference/bus/bus/)
+- [`Message`](/ServiceConnect-NodeJS/reference/messages/message/)
+- [`Envelope`](/ServiceConnect-NodeJS/reference/messages/envelope/)
+- [Request/Reply](/ServiceConnect-NodeJS/learn/messaging-patterns/request-reply/)

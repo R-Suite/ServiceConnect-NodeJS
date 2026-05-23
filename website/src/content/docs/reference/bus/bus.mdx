@@ -1,0 +1,237 @@
+---
+title: Bus
+description: The runtime message bus — publish, send, request/reply, route, stream, lifecycle.
+---
+
+## Overview
+
+`Bus` is the runtime surface returned by [`createBus`](/ServiceConnect-NodeJS/reference/bus/create-bus/). It is everything your application code calls: register message types, attach handlers, configure the consume pipeline, publish events, send commands, issue requests, open streams, and drive lifecycle. The instance is `AsyncDisposable`, so `await using bus = createBus(...)` works in scripts and tests.
+
+## Import
+
+```ts
+import type { Bus } from '@serviceconnect/core';
+```
+
+## Lifecycle
+
+### `start`
+
+```ts
+start(): Promise<void>;
+```
+
+Connects the producer and consumer, attaches the inbound dispatcher, and starts any registered saga timeout poller / aggregator flush timer. Idempotent; safe to await once.
+
+### `stop`
+
+```ts
+stop(signal?: AbortSignal): Promise<void>;
+```
+
+Stops consuming, waits for in-flight handlers to drain, then closes the producer and consumer in order. Pass an `AbortSignal` to bound the drain window. Idempotent.
+
+## Registration
+
+### `registerMessage`
+
+```ts
+registerMessage<T extends Message>(
+  typeName: string,
+  options?: { schema?: StandardSchemaV1<T> },
+): this;
+```
+
+Registers a message type string with the bus's `IMessageTypeRegistry`. Optionally attaches a [Standard Schema](https://standardschema.dev/) validator (Zod, Valibot, ArkType, …) that runs on the inbound path before dispatch. Required before `handle`, `publish`, `send`, `sendRequest`, or any other outgoing call referencing `typeName`.
+
+### `handle`
+
+```ts
+handle<T extends Message>(typeName: string, handler: Handler<T>): this;
+```
+
+Attaches a typed handler for `typeName`. The handler runs for every inbound message of that type after the consume pipeline has accepted it. Multiple handlers per type are supported and dispatched in registration order. Throws `MessageTypeNotRegisteredError` if you call it before `registerMessage`.
+
+### `unhandle`
+
+```ts
+unhandle<T extends Message>(typeName: string, handler: Handler<T>): this;
+```
+
+Removes a previously registered handler. The handler reference must be the same function object passed to `handle`.
+
+### `isHandled`
+
+```ts
+isHandled(typeName: string): boolean;
+```
+
+Returns `true` if at least one handler is registered for the given type string. Useful in tests and in diagnostic endpoints.
+
+### `use`
+
+```ts
+use(stage: PipelineStage, ...items: Array<FilterRegistration | MiddlewareRegistration>): this;
+```
+
+Appends one or more filters or middlewares to the named pipeline stage. Stages: `'outgoing'`, `'beforeConsuming'`, `'afterConsuming'`, `'onConsumedSuccessfully'`. Items are executed in registration order.
+
+### `registerProcessData`
+
+```ts
+registerProcessData<TData extends ProcessData>(dataType: string): Bus;
+```
+
+Declares a saga data type. Must be called before `registerProcess` either with an explicit `dataType` option or as the most recent `registerProcessData` call (the implicit form binds to the last-registered data type).
+
+### `registerProcess`
+
+```ts
+registerProcess(
+  processName: string,
+  options: ProcessRuntimeOptions & { dataType?: string },
+): ProcessBuilder;
+```
+
+Registers a process manager (saga) and returns a builder used to attach `startedBy` / `whenReceived` / `whenTimeoutFires` handlers. `options.store` is the `ISagaStore`; `options.timeoutStore` is the optional `ITimeoutStore`. If `dataType` is omitted the saga binds to the last `registerProcessData` call.
+
+### `registerAggregator`
+
+```ts
+registerAggregator<T extends Message>(
+  messageType: string,
+  aggregator: Aggregator<T>,
+  options: { store: IAggregatorStore },
+): Bus;
+```
+
+Registers an aggregator for the given message type, backed by the supplied `IAggregatorStore`. The bus also calls `registerMessage(messageType)` for you. Aggregators receive every inbound message of that type and decide when to release the batch.
+
+## Outgoing
+
+### `publish`
+
+```ts
+publish<T extends Message>(typeName: string, message: T, options?: PublishOptions): Promise<void>;
+```
+
+Fan-out publish. Serialises the message, runs the outgoing pipeline, and hands the envelope to the producer's `publish`. Optional headers and routing key are taken from `PublishOptions`. Throws `MessageTypeNotRegisteredError` if `typeName` is unknown and `OutgoingFiltersBlockedError` if a filter returned `Stop`.
+
+### `send`
+
+```ts
+send<T extends Message>(typeName: string, message: T, options: SendOptions): Promise<void>;
+```
+
+Point-to-point send to a single endpoint (`options.endpoint`, required). Same envelope-build and outgoing-pipeline flow as `publish`, but uses the producer's `send`. The `destinationAddress` header is stamped from `options.endpoint`.
+
+### `sendToMany`
+
+```ts
+sendToMany<T extends Message>(
+  typeName: string,
+  message: T,
+  endpoints: readonly string[],
+  options?: Omit<SendOptions, 'endpoint'>,
+): Promise<void>;
+```
+
+Sends the same payload to each endpoint in turn, sharing one serialised body and one pass through the outgoing pipeline. Endpoint failures are collected and rethrown as an `AggregateError`; one bad endpoint does not stop the others. Throws `InvalidOperationError` if `endpoints` is empty.
+
+### `route`
+
+```ts
+route<T extends Message>(
+  typeName: string,
+  message: T,
+  destinations: readonly string[],
+  options?: SendOptions,
+): Promise<void>;
+```
+
+Sends the message to `destinations[0]` with a routing slip header containing `destinations.slice(1)`. Each consuming endpoint forwards the slip to the next destination. Throws `RoutingSlipDestinationError` if `destinations` is empty or any entry is malformed.
+
+### `sendRequest`
+
+```ts
+sendRequest<TReq extends Message, TRep extends Message>(
+  typeName: string,
+  message: TReq,
+  options: RequestOptions,
+): Promise<TRep>;
+```
+
+Sends a request and resolves with the first reply. `options.timeoutMs` is required and must be positive. If `options.endpoint` is set the request is point-to-point; otherwise it is published. Pass `options.signal` to cancel the outstanding request — the promise then rejects with `AbortError`.
+
+### `sendRequestMulti`
+
+```ts
+sendRequestMulti<TReq extends Message, TRep extends Message>(
+  typeName: string,
+  message: TReq,
+  options: RequestOptions,
+): Promise<TRep[]>;
+```
+
+Scatter-gather variant: resolves with an array of replies once `options.expectedReplyCount` have arrived or `options.timeoutMs` elapses, whichever comes first. Returns whatever replies were collected on timeout rather than throwing.
+
+### `publishRequest`
+
+```ts
+publishRequest<TReq extends Message, TRep extends Message>(
+  typeName: string,
+  message: TReq,
+  onReply: (reply: TRep) => void,
+  options?: RequestOptions,
+): Promise<void>;
+```
+
+Publishes a request and invokes `onReply` once per reply as they arrive. The returned promise resolves when the broker has accepted the publish; the callback continues to fire asynchronously until the registration is cancelled or the timeout fires.
+
+## Streaming
+
+### `openStream`
+
+```ts
+openStream<T extends Message>(endpoint: string, typeName: string): Promise<StreamSender<T>>;
+```
+
+Opens a typed outbound stream to `endpoint`. The returned `StreamSender<T>` has `send(message)` / `complete()` / `abort(reason)` methods and stamps sequence + stream headers automatically.
+
+### `openWritableStream`
+
+```ts
+openWritableStream<T extends Message>(endpoint: string, typeName: string): WritableStream<T>;
+```
+
+The same outbound stream exposed as a [WHATWG `WritableStream`](https://developer.mozilla.org/en-US/docs/Web/API/WritableStream), so you can pipe an upstream `ReadableStream` straight into it with `.pipeTo`.
+
+### `handleStream`
+
+```ts
+handleStream<T extends Message>(
+  messageType: string,
+  handler: (stream: AsyncIterable<T>) => Promise<void>,
+): Bus;
+```
+
+Registers an inbound stream handler. The handler receives an async iterable that yields each message in sequence order; closing the iterable (return / break / completion of the stream) acknowledges the stream end.
+
+## Properties
+
+- **`queue`** — `string`. The bus's logical service name, taken from `BusOptions.queue.name`.
+- **`isStarted`** — `boolean`. `true` after `start()` has resolved and before `stop()` begins.
+- **`isStopped`** — `boolean`. `true` once `stop()` has been called (whether or not it has finished).
+- **`lastConsumedAt`** — `Date | undefined`. Timestamp of the last successfully consumed message; used by health checks to detect a stalled consumer.
+- **`producer`** — `ITransportProducer`. The wire-level producer, exposed for advanced wiring (health checks, custom dispatch).
+- **`consumer`** — `ITransportConsumer`. The wire-level consumer, similarly exposed.
+- **`messageRegistry`** — `IMessageTypeRegistry`. The registry the bus is using, whether you passed one in or it created its own.
+- **`processRegistry`** — `ProcessRegistry`. The saga registry, populated by `registerProcessData` / `registerProcess`.
+- **`aggregatorRegistry`** — `AggregatorRegistry`. The aggregator registry, populated by `registerAggregator`.
+
+## See also
+
+- [`createBus`](/ServiceConnect-NodeJS/reference/bus/create-bus/)
+- [`BusOptions`](/ServiceConnect-NodeJS/reference/bus/bus-options/)
+- [The Bus](/ServiceConnect-NodeJS/learn/core-concepts/the-bus/)
+- [Send / Publish / Request / Reply Options](/ServiceConnect-NodeJS/reference/messages/options/)
