@@ -1,0 +1,101 @@
+---
+title: Error Handling
+description: How thrown errors flow through retry, error queue, and terminal failure paths.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+Handlers are async functions that return `Promise<void>`. To signal failure, you `throw`. The framework decides what happens next based on the error type and the retry policy configured on `transport.consumer` — there is no return-value convention to memorise.
+
+## The problem
+
+Distributed messaging amplifies bug blast radius. A handler that throws on a malformed payload, if left unconfigured, will loop forever: redelivery, throw, redelivery, throw. A handler that crashes on a transient network blip should retry a few times, not give up immediately. A handler that hits an unrecoverable schema problem should jump straight to a dead-letter queue so it doesn't waste retry budget. And every category should be observable, so on-call can see "fifty messages in the error queue overnight" without grep-ing logs.
+
+The defaults shipped with the transport handle the common case well; tuning them is a five-line job once you understand the model.
+
+## The solution
+
+The default consumer policy is:
+
+- **Retry up to `maxRetries`** times (`3` by default) with `retryDelay` ms (`3000`) in between. Each retry is a fresh broker delivery, so `ctx.deliveryAttempt` increments and the message goes back through your whole pipeline.
+- **After the final retry**, the framework publishes the message to the **error queue** (`'errors'` by default, configurable via `transport.consumer.errorQueue`) along with headers describing the failure (retry count, last error, original queue).
+- **Terminal errors short-circuit retries**: throwing `TerminalDeserializationError` routes directly to the error queue with zero retries. Use this when you've decided the message is unrecoverable without the rest of the world changing.
+- **Audit queue (opt-in)**: setting `auditEnabled: true` and an `auditQueue` mirrors every consumed message to a separate queue. Off by default because the disk cost is real.
+- **Unhandled message types**: if no handler is registered for a message type, the consumer either acks (default) or dead-letters depending on `deadLetterUnhandled`.
+
+Inside a handler, you mostly just `throw`. The interesting case is when you can locally classify the error as "retry might help" versus "no chance, send to errors now":
+
+```ts
+import { TerminalDeserializationError } from '@serviceconnect/core';
+
+bus.handle<ChargeCard>('ChargeCard', async (msg, ctx) => {
+  try {
+    await payments.charge(msg.orderId, msg.total);
+  } catch (e) {
+    if (isTransient(e)) {
+      throw e; // requeued up to maxRetries
+    }
+    throw new TerminalDeserializationError(`unrecoverable: ${(e as Error).message}`);
+  }
+});
+```
+
+The transport-side knob lives on `transport.consumer`:
+
+```ts
+const transport = rabbitMQWithRegistry(
+  {
+    url: process.env.AMQP_URL!,
+    consumer: {
+      maxRetries: 5,
+      retryDelay: 5_000,
+      errorQueue: 'orders.errors',
+      auditQueue: 'orders.audit',
+      auditEnabled: true,
+      deadLetterUnhandled: true,
+    },
+  },
+  registry,
+);
+```
+
+Setting `errorQueue: null` disables error-queue routing entirely — failures are logged and acked. This is occasionally useful in dev or for fire-and-forget telemetry pipelines, but in production it means you lose every record of a failed message. Don't do it without a replacement observability path.
+
+Redriving from the error queue (re-publishing a stuck message to its original queue) is intentionally outside this package — every team has their own approval/audit requirements for that workflow. Treat the error queue as an inbox and build whatever drainage tooling you need on top.
+
+### Headers on dead-lettered messages
+
+When the framework routes a message to the error queue, it adds headers that describe the failure. The most useful ones in a postmortem are:
+
+- `RetryCount` — how many attempts were made before giving up.
+- `OriginalQueue` — where the message came from, so a redrive tool can put it back.
+- `Exception` — the message of the last thrown error, plus its class name.
+
+These are plain AMQP headers, visible in the management UI and accessible from any consumer that subscribes to the error queue. Build alerting on top of the queue depth (`messages_ready` on the error queue itself) so a sudden spike pages you immediately rather than being discovered the next morning.
+
+### Audit vs error
+
+The audit queue is a tee on the **consume** path: every message the consumer accepts is copied to the audit queue with a `MessageProcessedAt` header. It is not a retry-tracker — failed messages still go to the error queue, audit just gives you a copy of every successful processing event. Use it for compliance ("did we ever process this order?") or replay scenarios; it is not a cheap dev tool, since it doubles your durable write volume on the broker.
+
+### When to set `deadLetterUnhandled`
+
+If your queue can receive message types you do not have handlers for (a published event where your service is one of many subscribers, but you only care about a subset), leave `deadLetterUnhandled: false` (the default) — the consumer acks unknowns and moves on. If your queue is point-to-point and a message of an unknown type indicates a real bug (the sender published the wrong type to the wrong endpoint), set `deadLetterUnhandled: true` so those messages land somewhere you can investigate.
+
+## Common pitfalls
+
+<Aside type="caution">
+  - Returning a string like `'retry'` from a handler does nothing. Throw to retry.
+  - Setting `maxRetries=0` does **not** mean "no error queue routing" — the first failure still goes to errors. To suppress error-queue routing, set `errorQueue: null` (and accept the loss of visibility).
+  - Treating `errorQueue: null` as production-safe. Combine with audit + alerting if you really want to go silent.
+  - Throwing `TerminalDeserializationError` for retryable problems. It means "do not retry", so use it only when retries are genuinely pointless.
+  - Forgetting to register a handler and assuming the message will retry forever — without `deadLetterUnhandled: true`, the default is to ack and drop.
+</Aside>
+
+## See also
+
+- [Idempotency](/ServiceConnect-NodeJS/learn/operations/idempotency/)
+- [Observability](/ServiceConnect-NodeJS/learn/operations/observability/)
+- [`ConsumeResult`](/ServiceConnect-NodeJS/reference/handlers/consume-result/)
+- [Transport configuration](/ServiceConnect-NodeJS/reference/configuration/transport/)
