@@ -1,0 +1,56 @@
+---
+title: Content-Based Routing
+description: Inspect headers or payload in a filter, then redirect or drop the message based on content.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+Content-based routing makes delivery decisions at **runtime** based on what is in the message. A filter on the `'beforeConsuming'` stage inspects the envelope — headers, payload, message type, whatever — and either lets it continue to the local handler, redirects it to a different queue via `bus.send(...)`, or drops it outright. The producer does not need to know the routing rules; the consumer side gets to evolve them without changing the wire contract.
+
+## When to use
+
+Use content-based routing when the **right destination depends on data the producer either does not know or should not have to think about**: regional sharding, tenant isolation, A/B partitioning, audit-only mirrors, or quarantining traffic from a deprecated client version. The producer publishes a single typed message; the routing layer decides where it actually goes.
+
+It is also useful for **graceful migrations** — temporarily steer a fraction of traffic to a new handler, or shadow production traffic to a staging queue, by toggling the routing filter rather than redeploying the publisher.
+
+## When not to use
+
+If the routing decision is **static and known by the caller**, a routing slip or a direct `bus.send` to the right endpoint is simpler and cheaper — no filter to maintain. If you find yourself encoding business logic in a routing filter, that logic probably belongs in a handler instead; filters should classify, not transform.
+
+<Aside type="caution">
+  A routing filter that calls `bus.send(...)` and then returns `FilterAction.Stop` is doing two things — re-publishing and dropping. If the second publish fails, the original message still gets dropped. Wrap the publish in a `try`/`catch` or fail loudly so messages do not vanish on broker hiccups.
+</Aside>
+
+## Example
+
+```ts
+import { FilterAction, asFilter } from '@serviceconnect/core';
+
+bus.use(
+  'beforeConsuming',
+  asFilter(async (envelope) => {
+    const region = envelope.headers.region;
+    if (region && region !== 'eu-west-1') {
+      await bus.send('AuditEvent', envelope.message, { endpoint: `audit-${region}` });
+      return FilterAction.Stop;
+    }
+    return FilterAction.Continue;
+  }),
+);
+```
+
+The filter inspects the `region` header. If the message is for this region (`'eu-west-1'`) it returns `Continue` and the handler runs normally. Otherwise the message is re-sent to a region-specific audit queue and the local pipeline stops — the local handler never sees it.
+
+## Behind the scenes
+
+- Filters receive the full `Envelope` — `headers`, `message`, `messageType` — so any field is fair game for routing decisions. There is no separate "router" object; it is just a filter that returns `Stop` after redirecting.
+- Combine `bus.send(...)` (or `bus.publish(...)`) inside the filter with `FilterAction.Stop` to re-route a message without ever processing it locally. The local handler is skipped; the rerouted copy goes through the destination queue's pipeline as a fresh delivery.
+- Routing slip is a different pattern: that's a pre-baked sequence of destinations attached to the message; content-based routing decides at delivery time and the message itself does not carry an itinerary.
+
+## See also
+
+- [Filters](/ServiceConnect-NodeJS/learn/messaging-patterns/filters/)
+- [`Envelope`](/ServiceConnect-NodeJS/reference/messages/envelope/)
+- [Routing Slip](/ServiceConnect-NodeJS/learn/messaging-patterns/routing-slip/)

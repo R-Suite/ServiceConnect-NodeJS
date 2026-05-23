@@ -1,0 +1,62 @@
+---
+title: Filters
+description: Short-circuit or wrap message processing with filters and middleware in a four-stage pipeline.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+Filters and middleware are the bus's extension points for cross-cutting behaviour — authentication, tenancy, metrics, tracing, logging, validation. A **filter** inspects an envelope and returns `Continue` or `Stop`; a **middleware** wraps the rest of the pipeline with `await next()` so you can run code before and after, including in `try`/`finally`. Both register against one of four named **stages** that mark distinct points in a message's life.
+
+## When to use
+
+Use a **filter** when the decision is binary: should this message proceed, or be discarded? Tenancy checks, allowlists, deduplication, and feature-flag gates are the natural shape. Filters are cheap and explicit — they say "no" loudly and stop the pipeline before any handler or expensive middleware runs.
+
+Use a **middleware** when you need to **observe or wrap** processing: time the handler, push a logging context, capture exceptions, increment a counter. Middleware never decides whether a message proceeds — it just instruments what happens around it.
+
+## When not to use
+
+Application logic does not belong in filters or middleware. If the code reads or writes domain state, write a handler. The pipeline is for cross-cutting concerns whose presence (or absence) should not change the meaning of a message — only its observability or admissibility.
+
+## Example
+
+```ts
+import { FilterAction, asFilter, asMiddleware } from '@serviceconnect/core';
+
+bus.use(
+  'beforeConsuming',
+  asFilter((envelope) => {
+    return envelope.headers.tenant ? FilterAction.Continue : FilterAction.Stop;
+  }),
+  asMiddleware(async (context, next) => {
+    const start = Date.now();
+    await next();
+    metrics.observe(Date.now() - start);
+  }),
+);
+```
+
+The filter rejects any message that arrives without a `tenant` header; the middleware times the handler and reports the duration. Both register against the `'beforeConsuming'` stage, which runs immediately before the handler is invoked.
+
+## Behind the scenes
+
+<Aside type="caution">
+  Within a stage, all filters run before all middleware regardless of the order you passed them to `bus.use(...)`. A `Stop` from any filter short-circuits the stage — middleware never runs for that message.
+</Aside>
+
+There are four stages, each catching a different moment in the message lifecycle:
+
+- `'outgoing'` — runs before a message leaves the producer. Stamp headers, redact payloads, refuse sends that violate policy.
+- `'beforeConsuming'` — runs before the handler. Reject unauthorised messages, set up logging context, time the handler.
+- `'afterConsuming'` — runs after the handler returns or throws. Use a `try`/`finally` in middleware to capture timing or errors regardless of outcome.
+- `'onConsumedSuccessfully'` — runs only after a successful handler. Emit "processed" metrics, commit downstream side-effects that should not happen on failure.
+
+Filters receive the `Envelope` directly (`(envelope, signal) => FilterAction`); middleware receives a `PipelineContext` (`(context, next) => Promise<void>`) carrying the envelope, the current stage, an `AbortSignal`, and a stage-scoped logger. Returning `FilterAction.Stop` ends pipeline processing for that message in that stage — subsequent filters in the stage are skipped and middleware never runs.
+
+## See also
+
+- Runnable example: [`examples/filters/`](https://github.com/twatson83/ServiceConnect-NodeJS/tree/v3/examples/filters)
+- [`Filter`](/ServiceConnect-NodeJS/reference/filters/filter/)
+- [`Middleware`](/ServiceConnect-NodeJS/reference/filters/middleware/)
+- [`PipelineStage`](/ServiceConnect-NodeJS/reference/filters/pipeline/)
