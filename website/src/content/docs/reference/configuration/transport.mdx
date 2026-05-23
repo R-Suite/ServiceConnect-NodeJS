@@ -1,0 +1,120 @@
+---
+title: Transport configuration
+description: RabbitMQ transport options and entry points.
+---
+
+## Overview
+
+The transport is the wire-level pair (`ITransportProducer` + `ITransportConsumer`) the bus uses to send and receive envelopes. It is pluggable: any object that satisfies those interfaces will work. The supported, batteries-included implementation lives in [`@serviceconnect/rabbitmq`](https://www.npmjs.com/package/@serviceconnect/rabbitmq) and is configured via `RabbitMQTransportOptions`.
+
+This page documents the RabbitMQ transport. Replacing the transport (in-memory test double, NATS, Kafka, etc.) is covered under [extension points](/ServiceConnect-NodeJS/reference/extension-points/transport/itransportproducer/).
+
+## Import
+
+```ts
+import { createRabbitMQTransport, rabbitMQWithRegistry } from '@serviceconnect/rabbitmq';
+```
+
+## Signatures
+
+```ts
+export function createRabbitMQTransport(opts: RabbitMQTransportOptions): RabbitMQTransport;
+
+export function rabbitMQWithRegistry(
+  opts: Omit<RabbitMQTransportOptions, 'parentsOf'>,
+  registry: IMessageTypeRegistry,
+): RabbitMQTransport;
+```
+
+`rabbitMQWithRegistry` is a convenience wrapper: it wires `parentsOf` from an `IMessageTypeRegistry` so polymorphic publishes fan out to every registered ancestor exchange. Reach for it whenever you have polymorphic messages registered on a registry; otherwise `createRabbitMQTransport` is enough.
+
+## `RabbitMQTransportOptions`
+
+```ts
+export interface RabbitMQTransportOptions {
+  url: string;
+  acquireTimeout?: number;
+  heartbeat?: number;
+  retryLow?: number;
+  retryHigh?: number;
+  connectionName?: string;
+  parentsOf?: (typeName: string) => readonly string[];
+  producer?: {
+    publishConfirmTimeoutMs?: number;
+    maxAttempts?: number;
+    maxMessageSize?: number;
+  };
+  consumer?: {
+    prefetch?: number;
+    retryDelay?: number;
+    maxRetries?: number;
+    errorQueue?: string | null;
+    auditQueue?: string;
+    auditEnabled?: boolean;
+    deadLetterUnhandled?: boolean;
+    queueArguments?: Record<string, unknown>;
+    retryQueueArguments?: Record<string, unknown>;
+  };
+}
+```
+
+### Connection
+
+- **`url`** (required) — `string`. AMQP connection string. Supports the standard `amqp://user:pass@host:port/vhost` form and the comma-separated cluster shorthand `amqp://user:pass@host-1,host-2,host-3:5672/vhost`.
+- **`acquireTimeout`** (optional) — `number` (ms). How long the underlying client will wait for a channel or connection before throwing.
+- **`heartbeat`** (optional) — `number` (s). AMQP heartbeat interval. Smaller values detect dead peers faster at the cost of more idle traffic.
+- **`retryLow`** (optional) — `number` (ms). Lower bound for connect-retry backoff.
+- **`retryHigh`** (optional) — `number` (ms). Upper bound for connect-retry backoff.
+- **`connectionName`** (optional) — `string`. The label shown in the RabbitMQ management UI for this connection. Set it to the service name so operators can tell connections apart.
+- **`parentsOf`** (optional) — `(typeName: string) => readonly string[]`. Returns the ancestor message-type names for a given type name. Used for polymorphic publishes. Set this manually only if you are not using `rabbitMQWithRegistry`.
+
+### `producer.*`
+
+- **`publishConfirmTimeoutMs`** (optional) — `number` (ms). How long to wait for a publisher-confirm acknowledgement before failing the publish. Default `30_000`.
+- **`maxAttempts`** (optional) — `number`. How many times the producer retries a publish on transient failures. Default `3`.
+- **`maxMessageSize`** (optional) — `number` (bytes). Hard cap on a single serialised envelope. Default `134_217_728` (128 MiB).
+
+### `consumer.*`
+
+- **`prefetch`** (optional) — `number`. Per-channel prefetch count — the maximum number of unacknowledged messages the broker will deliver to this consumer at once. Default `100`.
+- **`retryDelay`** (optional) — `number` (ms). Delay before a failed message is redelivered to the main queue. Default `3000`.
+- **`maxRetries`** (optional) — `number`. How many redelivery attempts the consumer makes before routing the message to the error queue. Default `3`.
+- **`errorQueue`** (optional) — `string | null`. Name of the error queue that exhausted messages are routed to. Default `'errors'`. Set to `null` to disable error-queue routing entirely (failed messages will be dead-lettered or dropped per `deadLetterUnhandled`).
+- **`auditQueue`** (optional) — `string`. Name of the audit queue that mirrors every consumed message when auditing is on. Default `'audit'`.
+- **`auditEnabled`** (optional) — `boolean`. Whether to mirror consumed messages to `auditQueue`. Default `false`.
+- **`deadLetterUnhandled`** (optional) — `boolean`. When `true`, messages with no registered handler are dead-lettered instead of acked-and-dropped. Default `false`.
+- **`queueArguments`** (optional) — `Record<string, unknown>`. Extra arguments passed when the consumer declares its main queue (e.g. `{ 'x-queue-type': 'quorum' }`, `{ 'x-message-ttl': 60_000 }`).
+- **`retryQueueArguments`** (optional) — `Record<string, unknown>`. Extra arguments passed when the consumer declares its retry queue.
+
+## Example
+
+```ts
+import { rabbitMQWithRegistry } from '@serviceconnect/rabbitmq';
+import { createMessageTypeRegistry } from '@serviceconnect/core';
+
+const registry = createMessageTypeRegistry();
+const transport = rabbitMQWithRegistry(
+  {
+    url: 'amqp://app:secret@rabbit-1,rabbit-2,rabbit-3:5672/%2F?heartbeat=10',
+    connectionName: 'orders-service',
+    consumer: {
+      prefetch: 32,
+      maxRetries: 5,
+      retryDelay: 2000,
+      auditEnabled: true,
+    },
+    producer: {
+      publishConfirmTimeoutMs: 10_000,
+    },
+  },
+  registry,
+);
+```
+
+## See also
+
+- [`createBus`](/ServiceConnect-NodeJS/reference/bus/create-bus/)
+- [Clustering](/ServiceConnect-NodeJS/learn/operations/clustering/)
+- [Error Handling](/ServiceConnect-NodeJS/learn/operations/error-handling/)
+- [`ITransportProducer`](/ServiceConnect-NodeJS/reference/extension-points/transport/itransportproducer/)
+- [`ITransportConsumer`](/ServiceConnect-NodeJS/reference/extension-points/transport/itransportconsumer/)

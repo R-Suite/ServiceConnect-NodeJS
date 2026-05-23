@@ -1,0 +1,65 @@
+---
+title: Pipeline configuration
+description: Stages, filters, middleware, and the use(...) builder.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+The bus's **pipeline** is where you compose cross-cutting behaviour — auth, logging, metrics, tenant routing, redaction — without touching individual handlers. Pipeline entries are either [`Filter`](/ServiceConnect-NodeJS/reference/filters/filter/)s (return `Continue` or `Stop`) or [`Middleware`](/ServiceConnect-NodeJS/reference/filters/middleware/)s (wrap the next step with `try`/`finally`-style logic), registered against one of four named stages via [`bus.use(stage, ...items)`](/ServiceConnect-NodeJS/reference/filters/pipeline/#use).
+
+## Signature
+
+```ts
+use(stage: PipelineStage, ...items: Array<FilterRegistration | MiddlewareRegistration>): this;
+```
+
+- **`stage`** — one of `'outgoing' | 'beforeConsuming' | 'afterConsuming' | 'onConsumedSuccessfully'`.
+- **`items`** — any mix of [`asFilter(...)`](/ServiceConnect-NodeJS/reference/filters/filter/) and [`asMiddleware(...)`](/ServiceConnect-NodeJS/reference/filters/middleware/) registrations. Returns the bus for chaining.
+
+## Stages
+
+| Stage | When it runs |
+|---|---|
+| `'outgoing'` | Before a message leaves the producer (`publish`, `send`, `sendRequest`, `route`). |
+| `'beforeConsuming'` | Before the handler runs. |
+| `'afterConsuming'` | After the handler returns OR throws. |
+| `'onConsumedSuccessfully'` | After a successful handler only. |
+
+## Ordering rule
+
+<Aside type="caution">
+  Within a stage, all filters run before all middleware regardless of the order you passed them to `bus.use(...)`. A `Stop` from any filter short-circuits the stage — middleware never runs for that message.
+</Aside>
+
+## Example
+
+```ts
+import { FilterAction, asFilter, asMiddleware } from '@serviceconnect/core';
+
+bus.use(
+  'beforeConsuming',
+  asFilter((envelope) => {
+    return envelope.headers.tenant ? FilterAction.Continue : FilterAction.Stop;
+  }),
+  asMiddleware(async (context, next) => {
+    const start = Date.now();
+    await next();
+    metrics.observe(Date.now() - start);
+  }),
+);
+```
+
+If the `tenant` header is missing, the filter returns `Stop` and the timing middleware is skipped entirely — even though both were registered in the same `use(...)` call.
+
+## Composing multiple middlewares
+
+Call `bus.use(stage, asMiddleware(a), asMiddleware(b))` to register more than one middleware on the same stage. They compose via `next()` like Express or Koa: `a` runs first, calls `await next()` to invoke `b`, which calls `await next()` to invoke the handler (or whatever follows the stage). Unwinding happens in reverse on the way back out.
+
+## See also
+
+- [`Filter`](/ServiceConnect-NodeJS/reference/filters/filter/)
+- [`Middleware`](/ServiceConnect-NodeJS/reference/filters/middleware/)
+- [`PipelineStage`](/ServiceConnect-NodeJS/reference/filters/pipeline/)
+- [Filters (pattern)](/ServiceConnect-NodeJS/learn/messaging-patterns/filters/)
