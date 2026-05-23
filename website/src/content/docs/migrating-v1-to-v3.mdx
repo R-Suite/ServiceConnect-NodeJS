@@ -162,16 +162,16 @@ const quote = await bus.sendRequest<GetQuote, Quote>(
 );
 console.log('quote', quote.amount);
 
-// v3 — fan-out request to many endpoints
+// v3 — gather N replies from competing consumers on one endpoint
 const quotes = await bus.sendRequestMulti<GetQuote, Quote>(
   'GetQuote',
   { correlationId: 'c-1', sku: 'abc' },
-  { endpoints: ['pricing-a', 'pricing-b', 'pricing-c'], timeoutMs: 5000 },
+  { endpoint: 'pricing', expectedReplyCount: 3, timeoutMs: 5000 },
 );
 console.log(quotes.length, 'quotes received');
 ```
 
-For the broadcast (publish-then-collect-replies) case, v3 still exposes `bus.publishRequest` for symmetry with v1, with a per-reply callback. Most callers should prefer the promise-returning forms — they compose with `await`, `Promise.all`, and `AbortController` in ways the callback form cannot.
+For the broadcast (publish-then-collect-replies) case, v3 exposes `bus.publishRequest` for symmetry with v1's broadcast request — it takes a per-reply callback and an optional `expectedReplyCount`. Use it when responders live on **different** queues (true scatter-gather across heterogeneous services); use `sendRequestMulti` when responders are competing consumers on the **same** queue. The promise-returning `sendRequest` / `sendRequestMulti` compose with `await`, `Promise.all`, and `AbortController` in ways the callback form cannot.
 
 ## 5. Transport
 

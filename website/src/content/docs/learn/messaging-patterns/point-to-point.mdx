@@ -26,18 +26,19 @@ If multiple unrelated services need to react to the event, you want [Pub/Sub](/S
 ## Example
 
 ```ts
-interface ChargeCard {
+interface ChargeCard extends Message {
   orderId: string;
   total: number;
 }
 
-await bus.send<ChargeCard>('payments', 'ChargeCard', {
-  orderId: 'o-1',
-  total: 49.99,
-});
+await bus.send<ChargeCard>(
+  'ChargeCard',
+  { correlationId: 'c-1', orderId: 'o-1', total: 49.99 },
+  { endpoint: 'payments' },
+);
 ```
 
-The first argument — `'payments'` — is the **endpoint**: the name of the queue you are sending to. The producer does not need to know whether one process or twenty are consuming that queue; RabbitMQ handles dispatch. The receiving service registers a handler for `ChargeCard` exactly the same way it would for any other typed message.
+The `endpoint` field on the options object — `'payments'` — is the queue you are sending to. The producer does not need to know whether one process or twenty are consuming that queue; RabbitMQ handles dispatch. The receiving service registers a handler for `ChargeCard` exactly the same way it would for any other typed message.
 
 ## Behind the scenes
 

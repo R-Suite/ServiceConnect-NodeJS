@@ -39,7 +39,7 @@ export function asMiddleware(fn: Middleware): MiddlewareRegistration;
 - **`PipelineContext.envelope`** — the [`Envelope`](/ServiceConnect-NodeJS/reference/messages/envelope/) flowing through the stage; its headers may have been stamped by earlier outgoing middleware or by the transport.
 - **`PipelineContext.stage`** — the current [`PipelineStage`](/ServiceConnect-NodeJS/reference/filters/pipeline/) (`'outgoing'`, `'beforeConsuming'`, `'afterConsuming'`, or `'onConsumedSuccessfully'`).
 - **`PipelineContext.signal`** — an `AbortSignal` that aborts when the bus is shutting down. Forward it into any awaited work to participate in graceful shutdown.
-- **`PipelineContext.logger`** — a stage-scoped child [`Logger`](/ServiceConnect-NodeJS/reference/configuration/options/#logger).
+- **`PipelineContext.logger`** — a stage-scoped child [`Logger`](/ServiceConnect-NodeJS/reference/bus/bus-options/#logger).
 - **`Middleware`** — the function signature. Always `async`; always returns `Promise<void>`. Call `await next()` exactly once unless you genuinely intend to skip the rest of the stage.
 - **`MiddlewareRegistration`** — the typed wrapper `bus.use(...)` accepts. `kind` is the discriminant against `FilterRegistration`; `run` is the wrapped middleware function.
 - **`asMiddleware(fn)`** — convenience factory that returns `{ kind: 'middleware', run: fn }`.

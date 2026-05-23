@@ -49,7 +49,7 @@ export function createConsumeContext(args: {
 - **`correlationId`** — `CorrelationId`. Convenience accessor over `headers.correlationId`. Always present.
 - **`messageType`** — `string`. Convenience accessor over `headers.messageType`. The type string the bus used to route to this handler.
 - **`signal`** — `AbortSignal`. Aborts when the bus is stopping or the consumer is being torn down. Pass it into long-running awaits to participate in graceful shutdown.
-- **`logger`** — a child [`Logger`](/ServiceConnect-NodeJS/reference/configuration/options/#logger) with `messageType`, `messageId`, and `correlationId` bound; every log line emitted through it inherits those fields.
+- **`logger`** — a child [`Logger`](/ServiceConnect-NodeJS/reference/bus/bus-options/#logger) with `messageType`, `messageId`, and `correlationId` bound; every log line emitted through it inherits those fields.
 - **`reply<TReply>(typeName, message, options?)`** — sends a typed reply back to the sender. Requires the incoming message to carry a `sourceAddress` header (request-reply senders stamp it for you); throws otherwise. The reply's `responseMessageId` is set from the incoming `requestMessageId` so the request/reply manager on the other side can correlate.
 
 ## What is *not* on ConsumeContext

@@ -17,7 +17,7 @@ By default, a handler is a black box: it ran, it acked, it returned. When someth
 
 ### Logs
 
-The `Logger` interface from `@serviceconnect/core` is intentionally minimal: `trace`, `debug`, `info`, `warn`, `error`, each taking a message string and an optional structured-fields object. Use the shipped `consoleLogger('info' | 'debug' | 'trace' | 'warn' | 'error')` for stdout, or write a thin adapter for Pino, Bunyan, or whatever the rest of the service uses:
+The `Logger` interface from `@serviceconnect/core` is intentionally minimal: `trace`, `debug`, `info`, `warn`, `error`, each taking a message string and an optional structured-fields object. The valid levels are exported as the `LogLevel` union (`'trace' | 'debug' | 'info' | 'warn' | 'error'`) for callers that want to thread the level through their own config without re-typing it. Use the shipped `consoleLogger(level: LogLevel)` for stdout, or write a thin adapter for Pino, Bunyan, or whatever the rest of the service uses:
 
 ```ts
 import type { Logger } from '@serviceconnect/core';

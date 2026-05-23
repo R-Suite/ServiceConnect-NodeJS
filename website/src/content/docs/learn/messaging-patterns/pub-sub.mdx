@@ -26,7 +26,7 @@ Reach for [Point-to-Point](/ServiceConnect-NodeJS/learn/messaging-patterns/point
 ## Example
 
 ```ts
-interface OrderPlaced {
+interface OrderPlaced extends Message {
   orderId: string;
   total: number;
 }
@@ -36,7 +36,7 @@ registry.register<OrderPlaced>('OrderPlaced');
 
 const bus = createBus({
   queue: { name: 'inventory' },
-  transport: rabbitMQWithRegistry({ connectionString }, registry),
+  transport: rabbitMQWithRegistry({ url }, registry),
   registry,
 });
 
@@ -45,7 +45,11 @@ bus.handle<OrderPlaced>('OrderPlaced', async (msg) => {
 });
 
 await bus.start();
-await bus.publish<OrderPlaced>('OrderPlaced', { orderId: 'o-1', total: 49.99 });
+await bus.publish<OrderPlaced>('OrderPlaced', {
+  correlationId: 'c-1',
+  orderId: 'o-1',
+  total: 49.99,
+});
 ```
 
 The `inventory` service registers a handler for `OrderPlaced` and starts the bus. Any process — including this one — that publishes `OrderPlaced` will see the handler fire. A second consumer, say `analytics`, declaring its own queue with its own handler, would receive its own copy of every message without touching the publisher.

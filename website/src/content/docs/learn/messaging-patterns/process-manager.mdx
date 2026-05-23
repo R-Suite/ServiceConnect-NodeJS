@@ -13,7 +13,7 @@ A **process manager** (also called a **saga**) coordinates a multi-step workflow
 
 Reach for a process manager when the business operation has a natural lifecycle that outlives a single message: "an order is **pending** until payment is received, then **paid** until it ships, then **complete**". The transitions belong together, the intermediate state has to survive process restarts, and you need timeouts to compensate for things that never happen (the customer never pays, the warehouse never confirms).
 
-It is also the right tool when a transaction needs to span services. A process manager can act as the coordinator in a [Saga](/ServiceConnect-NodeJS/learn/messaging-patterns/saga/) — issuing commands, waiting on replies or events, and emitting a compensating command when one of the steps fails.
+It is also the right tool when a transaction needs to span services. A process manager can act as the coordinator in a **saga** — issuing commands, waiting on replies or events, and emitting a compensating command when one of the steps fails.
 
 ## When not to use
 

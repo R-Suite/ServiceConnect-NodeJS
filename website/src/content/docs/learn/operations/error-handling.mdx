@@ -79,6 +79,24 @@ These are plain AMQP headers, visible in the management UI and accessible from a
 
 The audit queue is a tee on the **consume** path: every message the consumer accepts is copied to the audit queue with a `MessageProcessedAt` header. It is not a retry-tracker — failed messages still go to the error queue, audit just gives you a copy of every successful processing event. Use it for compliance ("did we ever process this order?") or replay scenarios; it is not a cheap dev tool, since it doubles your durable write volume on the broker.
 
+### Error classes the framework throws
+
+Most of these are caught and translated into queue routing by the consumer; a few surface to your code on the outbound side. They all extend the common base `ServiceConnectError`, so a single `catch (e: ServiceConnectError)` covers the family:
+
+- **`ServiceConnectError`** — the base class for every framework-thrown error. Use it as the catch-all when you want to distinguish "this came from the bus" from "this came from my handler".
+- **`ArgumentError`** / **`ArgumentOutOfRangeError`** — thrown at configuration time when an option is malformed (e.g. negative `timeoutMs`, missing endpoint on `send`). Always a bug in calling code; fail loud at startup.
+- **`InvalidOperationError`** — thrown when the bus is asked to do something inconsistent with its lifecycle (e.g. publishing after `stop`, or `sendToMany` with an empty endpoint list).
+- **`ValidationError`** — thrown when a Standard Schema validator attached via `registerMessage` rejects an inbound payload. The message goes straight to the error queue without a retry.
+- **`HandlerNotRegisteredError`** — thrown on shutdown / diagnostic paths when a code path expects a handler for a type and none was attached. In normal operation the consumer policy (`deadLetterUnhandled`) decides what happens to unhandled inbound traffic; this error is for cases where the absence is a programmer error.
+- **`MessageTypeNotRegisteredError`** — thrown on the outgoing side when `publish` / `send` / `sendRequest` references a type string that was never `registerMessage`'d. Always a wiring bug.
+- **`AggregatorConfigurationError`** — thrown by `registerAggregator` when an aggregator's options are inconsistent (e.g. no store, missing release predicate).
+- **`RoutingSlipDestinationError`** — thrown by `bus.route(...)` when the destinations list is empty or contains a malformed entry. The framework's destination helpers (`assertValidDestination`, `isValidDestination`, `destinationFailureReason`) are exported for callers that need to pre-validate a slip before handing it to the bus.
+- **`OutgoingFiltersBlockedError`** — thrown on the outbound path when an outgoing-pipeline filter returns `FilterAction.Stop`. The publish or send never reached the wire.
+- **`RequestTimeoutError`** / **`RequestSendCancelledError`** / **`AbortError`** — request/reply outcomes. See [Cancellation](/ServiceConnect-NodeJS/learn/operations/cancellation/) for the full failure taxonomy.
+- **`ConcurrencyError`** / **`DuplicateSagaError`** — saga persistence outcomes; see [Process Manager](/ServiceConnect-NodeJS/learn/messaging-patterns/process-manager/).
+- **`StreamFaultedError`** / **`StreamSequenceError`** — streaming outcomes; see [Streaming](/ServiceConnect-NodeJS/learn/messaging-patterns/streaming/).
+- **`TerminalDeserializationError`** — handler-side. Throw it from your handler to skip retries and send straight to the error queue.
+
 ### When to set `deadLetterUnhandled`
 
 If your queue can receive message types you do not have handlers for (a published event where your service is one of many subscribers, but you only care about a subset), leave `deadLetterUnhandled: false` (the default) — the consumer acks unknowns and moves on. If your queue is point-to-point and a message of an unknown type indicates a real bug (the sender published the wrong type to the wrong endpoint), set `deadLetterUnhandled: true` so those messages land somewhere you can investigate.

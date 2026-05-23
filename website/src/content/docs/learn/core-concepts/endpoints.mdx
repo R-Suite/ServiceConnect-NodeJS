@@ -5,7 +5,7 @@ description: An endpoint is a queue name — used by bus.send for point-to-point
 
 ## Overview
 
-In ServiceConnect, an **endpoint** is a queue name. Nothing more exotic than that. When you call `bus.send('payments', ...)`, `'payments'` is the endpoint: the name of the queue that the receiving service is consuming from. The framework writes directly to that queue, bypassing the type's exchange.
+In ServiceConnect, an **endpoint** is a queue name. Nothing more exotic than that. When you call `bus.send<ChargeCard>('ChargeCard', payload, { endpoint: 'payments' })`, `'payments'` is the endpoint: the name of the queue that the receiving service is consuming from. The framework writes directly to that queue, bypassing the type's exchange.
 
 Compare that to `bus.publish`, which fans out via the **exchange** named after the message type. Publish is for "anyone who cares should hear about this". Send is for "this specific service should do this specific thing".
 
@@ -16,7 +16,7 @@ The endpoint is therefore an out-of-band agreement: the sender and the receiver 
 The endpoint-vs-exchange split is the seam between **events** and **commands** in messaging design:
 
 - **Events** describe something that happened. They have multiple potential listeners, none of which the publisher needs to know about. `bus.publish<OrderPlaced>(...)` is for events.
-- **Commands** are imperative requests directed at a single owner. The sender knows which service is responsible. `bus.send<ChargeCard>('payments', ...)` is for commands.
+- **Commands** are imperative requests directed at a single owner. The sender knows which service is responsible. `bus.send<ChargeCard>('ChargeCard', payload, { endpoint: 'payments' })` is for commands.
 
 Getting the split right keeps coupling low and makes ownership obvious in the code. If you find yourself calling `bus.send` and you do not know the target queue's name, you probably want `bus.publish`. If you find yourself calling `bus.publish` and you only ever want one specific service to handle it, you probably want `bus.send`.
 
@@ -34,14 +34,22 @@ A few practical rules:
 ## API touch-point
 
 ```ts
-await bus.send<ChargeCard>('payments', 'ChargeCard', { orderId, total });
-await bus.publish<OrderPlaced>('OrderPlaced', { orderId, total });
+await bus.send<ChargeCard>(
+  'ChargeCard',
+  { correlationId: 'c-1', orderId, total },
+  { endpoint: 'payments' },
+);
+await bus.publish<OrderPlaced>('OrderPlaced', {
+  correlationId: 'c-1',
+  orderId,
+  total,
+});
 ```
 
 Two calls, two distinct shapes:
 
-- `send` takes an endpoint name first, then the type string. The endpoint says *where*; the type string says *what*.
-- `publish` takes only the type string. The exchange (derived from the type) decides who hears it.
+- `send` takes the type string, the payload, then a `SendOptions` object whose `endpoint` field is required. The endpoint says *where*; the type string says *what*.
+- `publish` takes only the type string and the payload. The exchange (derived from the type) decides who hears it.
 
 You can call `bus.send` to your own queue if you want to defer work to a later poll of the consumer — it is sometimes a useful pattern for breaking up long handlers — but most of the time `send` targets some other service. `bus.sendRequest` and `bus.sendRequestMulti` follow the same `send` convention: they target named endpoints and they expect those endpoints to reply.
 

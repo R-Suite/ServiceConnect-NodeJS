@@ -31,10 +31,10 @@ pnpm add @serviceconnect/healthchecks           # producer / consumer health pro
 ## Quickstart
 
 ```ts
-import { createBus, createMessageTypeRegistry } from '@serviceconnect/core';
+import { createBus, createMessageTypeRegistry, type Message } from '@serviceconnect/core';
 import { rabbitMQWithRegistry } from '@serviceconnect/rabbitmq';
 
-interface OrderPlaced {
+interface OrderPlaced extends Message {
   orderId: string;
   total: number;
 }
@@ -45,7 +45,7 @@ registry.register<OrderPlaced>('OrderPlaced');
 const bus = createBus({
   queue: { name: 'orders' },
   transport: rabbitMQWithRegistry(
-    { connectionString: 'amqp://localhost' },
+    { url: 'amqp://localhost' },
     registry,
   ),
   registry,
@@ -56,7 +56,11 @@ bus.handle<OrderPlaced>('OrderPlaced', async (msg, ctx) => {
 });
 
 await bus.start();
-await bus.publish<OrderPlaced>('OrderPlaced', { orderId: 'o-1', total: 49.99 });
+await bus.publish<OrderPlaced>('OrderPlaced', {
+  correlationId: 'c-1',
+  orderId: 'o-1',
+  total: 49.99,
+});
 ```
 
 ## Packages

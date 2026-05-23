@@ -111,6 +111,29 @@ const transport = rabbitMQWithRegistry(
 );
 ```
 
+## Runtime introspection
+
+The transport returns objects rather than raw plumbing, so health checks and dashboards can read live state without reaching into the AMQP client:
+
+- **`RabbitMQProducer`** — the wire-level producer the bus uses for `publish` / `send`. Exposes `isHealthy: boolean` (used by [`producerConnectivity`](/ServiceConnect-NodeJS/reference/healthchecks/) ) and `snapshot(): ProducerSnapshot` for diagnostics.
+- **`ProducerSnapshot`** — point-in-time view of producer state: connection status, last publish-confirm latency, in-flight publish count. Stable shape, safe to log on every health probe.
+- **`RabbitMQConsumer`** — the wire-level consumer. Exposes `isConnected`, `isCancelledByBroker`, `lastConsumedAt`, and `snapshot(): ConsumerSnapshot`.
+- **`ConsumerSnapshot`** — point-in-time view of consumer state: connection status, prefetch counters, last-consume timestamps. Same observability contract as the producer.
+
+Application code rarely names these types; they are useful when you are writing a transport-aware health check or custom telemetry adapter.
+
+## Transport-specific errors
+
+The RabbitMQ producer raises a small set of typed errors that callers can catch by class:
+
+- **`RabbitMQPayloadTooLargeError`** — thrown by `producer.publish` / `producer.send` when the serialised envelope exceeds `producer.maxMessageSize`. The error message includes both the actual byte count and the configured cap, so the caller can either chunk via streaming or raise the limit. This is a producer-side guard; the broker does not validate the size.
+- **`RabbitMQPublishConfirmTimeoutError`** — thrown when a publisher-confirm ack does not arrive within `producer.publishConfirmTimeoutMs`. Treat it as "the broker may or may not have accepted the message"; correlated with handler idempotency on the receiving side.
+- **`RabbitMQTopologyMismatchError`** — thrown at connection time when the broker refuses to declare an exchange / queue with arguments that disagree with an existing pre-declared topology. Almost always a config drift between deployments: align the arguments or delete the diverging entity.
+
+The inbound side exposes one transport-shaped type that user code occasionally needs:
+
+- **`RabbitMQMessage`** — the wire-level message envelope yielded by `RabbitMQConsumer`. Only handled directly when implementing a custom consumer wrapper or a transport-aware filter; ordinary handlers receive the framework's `Envelope`, not this.
+
 ## See also
 
 - [`createBus`](/ServiceConnect-NodeJS/reference/bus/create-bus/)

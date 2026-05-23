@@ -26,19 +26,18 @@ Long-running operations are another bad fit. If the responder takes minutes, the
 ## Example
 
 ```ts
-interface PriceQuoteRequest {
+interface PriceQuoteRequest extends Message {
   sku: string;
   qty: number;
 }
-interface PriceQuoteReply {
+interface PriceQuoteReply extends Message {
   unitPrice: number;
 }
 
 const reply = await bus.sendRequest<PriceQuoteRequest, PriceQuoteReply>(
-  'pricing',
   'PriceQuoteRequest',
-  { sku: 'SKU-1', qty: 3 },
-  { timeoutMs: 5_000 },
+  { correlationId: 'c-1', sku: 'SKU-1', qty: 3 },
+  { endpoint: 'pricing', timeoutMs: 5_000 },
 );
 
 console.log('unit price', reply.unitPrice);

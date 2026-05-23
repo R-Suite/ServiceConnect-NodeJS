@@ -31,7 +31,7 @@ export type ConsumeCallback = (envelope: Envelope, signal: AbortSignal) => Promi
 - **`success`** — `boolean`. `true` if the handler chain ran to completion without throwing.
 - **`notHandled`** — `boolean`. `true` if no handler was registered for the inbound message type. Transports typically log and ack `notHandled` envelopes (the message reached a queue we own, but nothing here cares about it).
 - **`error`** — `Error | undefined`. Set when a handler threw; carries the original exception so the transport can log it and decide its retry behaviour.
-- **`terminalFailure`** — `boolean`. `true` for unrecoverable errors (the canonical example is [`TerminalDeserializationError`](/ServiceConnect-NodeJS/reference/configuration/options/) — the body could not be deserialised, so retrying will not help). Transports must skip retry and route the envelope directly to the error queue.
+- **`terminalFailure`** — `boolean`. `true` for unrecoverable errors (the canonical example is [`TerminalDeserializationError`](/ServiceConnect-NodeJS/learn/operations/error-handling/) — the body could not be deserialised, so retrying will not help). Transports must skip retry and route the envelope directly to the error queue.
 
 ## How handler outcomes map to `ConsumeResult`
 
