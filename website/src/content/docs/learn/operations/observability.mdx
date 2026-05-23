@@ -1,0 +1,103 @@
+---
+title: Observability
+description: Logs, metrics, traces, and health checks — instrument the bus end-to-end.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+A bus that "feels fine" in dev frequently hides issues in production: a slow downstream dragging consumer latency, a producer that's silently retrying, a queue depth slowly climbing because of one bad partition. Observability turns those into signals you can alert on. ServiceConnect leans on the standard four pillars — logs, metrics, traces, health — and the framework either ships the integration or stays out of the way.
+
+## The problem
+
+By default, a handler is a black box: it ran, it acked, it returned. When something goes wrong — latency spikes, retries climb, a single message kicks off a chain of side effects across three services — you need to see across the whole flow, not just one node. The framework can't choose your telemetry stack, but it can give you the surfaces to plug one in without rewriting the bus.
+
+## The solution
+
+### Logs
+
+The `Logger` interface from `@serviceconnect/core` is intentionally minimal: `trace`, `debug`, `info`, `warn`, `error`, each taking a message string and an optional structured-fields object. Use the shipped `consoleLogger('info' | 'debug' | 'trace' | 'warn' | 'error')` for stdout, or write a thin adapter for Pino, Bunyan, or whatever the rest of the service uses:
+
+```ts
+import type { Logger } from '@serviceconnect/core';
+import pino from 'pino';
+
+const root = pino();
+const pinoLogger: Logger = {
+  trace: (msg, fields) => root.trace(fields, msg),
+  debug: (msg, fields) => root.debug(fields, msg),
+  info:  (msg, fields) => root.info(fields, msg),
+  warn:  (msg, fields) => root.warn(fields, msg),
+  error: (msg, fields) => root.error(fields, msg),
+};
+```
+
+Pass it via `BusOptions.logger`. Inside a handler, `ctx.logger` is a child logger pre-populated with `messageType`, `messageId`, and `correlationId`, so every line a handler emits is automatically traceable back to the originating message without manually copying ids around.
+
+### Metrics
+
+`@serviceconnect/telemetry` emits counters and histograms through the OpenTelemetry metrics SDK. The instruments cover the obvious shapes — publishes attempted/failed, consume durations, consume errors — and use the OTel `messaging.*` semantic conventions so dashboards built against any standard messaging system work without translation. Pass a custom `Meter` via `TelemetryOptions.meter` if you want a non-default namespace; otherwise the default global meter is used.
+
+### Traces
+
+`telemetryProducer(producer)` wraps the transport producer so each `publish` or `send` opens a `PRODUCER` span and injects W3C trace context into the outgoing headers. `telemetryConsumeWrapper()` extracts that context on the consumer side and opens a `CONSUMER` span around the handler. Spans are named `<destination> publish` and `<messageType> process` per OTel messaging conventions.
+
+For spans to flow correctly through `await`, set a global propagator and a context manager **once** at boot. Without `AsyncHooksContextManager`, the active span context is lost on the first `await` and every consume span becomes a root — the trace tree falls apart.
+
+### Health checks
+
+`@serviceconnect/healthchecks` ships three probes:
+
+- `producerConnectivity(bus)` — verifies the transport producer side is connected.
+- `consumerConnectivity(bus)` — verifies the consumer channel is established.
+- `consumerBusy(bus, { graceMs })` — reports `degraded` when no message has been processed within the grace window, `healthy` otherwise.
+
+Map them to your platform's liveness/readiness endpoints — see [Hosting](/ServiceConnect-NodeJS/learn/operations/hosting/) for the wiring shapes.
+
+### End-to-end wiring
+
+The full setup — propagator, context manager, tracer provider, producer wrap, consume wrapper, logger — is one block at boot:
+
+```ts
+import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import { AsyncHooksContextManager } from '@opentelemetry/context-async-hooks';
+import { context, propagation } from '@opentelemetry/api';
+import { W3CTraceContextPropagator } from '@opentelemetry/core';
+import { createBus, consoleLogger } from '@serviceconnect/core';
+import { createRabbitMQTransport } from '@serviceconnect/rabbitmq';
+import { telemetryProducer, telemetryConsumeWrapper } from '@serviceconnect/telemetry';
+
+context.setGlobalContextManager(new AsyncHooksContextManager().enable());
+propagation.setGlobalPropagator(new W3CTraceContextPropagator());
+
+const tracer = new NodeTracerProvider();
+tracer.register();
+
+const transport = createRabbitMQTransport({ url: 'amqp://localhost' });
+transport.producer = telemetryProducer(transport.producer);
+
+const bus = createBus({
+  queue: { name: 'orders' },
+  transport,
+  logger: consoleLogger('info'),
+  consumeWrapper: telemetryConsumeWrapper(),
+});
+```
+
+`@serviceconnect/telemetry` depends only on `@opentelemetry/api` as a peer; you bring the SDK (`@opentelemetry/sdk-trace-node`, exporters, etc.) so the framework doesn't pin the wider OTel surface.
+
+## Common pitfalls
+
+<Aside type="caution">
+  - Forgetting `AsyncHooksContextManager` — active span context doesn't propagate through `await`, every consume span looks like a root, and the trace tree falls apart.
+  - Wrapping `consumer` instead of `producer`: telemetry on the producer needs `transport.producer = telemetryProducer(transport.producer)`. The consumer side uses `BusOptions.consumeWrapper` with `telemetryConsumeWrapper()`, not direct wrapping.
+  - Treating logs as the only signal — at scale, full-text search across millions of lines doesn't scale and doesn't show causality. Combine structured logs with traces so you can pivot from one slow request to the chain of messages it kicked off.
+  - Letting `consumerBusy` drive restarts — `degraded` on an idle queue is correct behaviour, not a fault.
+</Aside>
+
+## See also
+
+- [`@serviceconnect/telemetry`](/ServiceConnect-NodeJS/reference/telemetry/)
+- [`@serviceconnect/healthchecks`](/ServiceConnect-NodeJS/reference/healthchecks/)
+- [Error Handling](/ServiceConnect-NodeJS/learn/operations/error-handling/)
