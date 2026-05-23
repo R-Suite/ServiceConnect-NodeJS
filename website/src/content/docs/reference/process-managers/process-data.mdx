@@ -1,0 +1,68 @@
+---
+title: ProcessData
+description: Base type for saga state plus the persistence-related types ConcurrencyToken and FoundSaga.
+---
+
+## Overview
+
+`ProcessData` is the base interface every saga state extends. It declares a single required field — `correlationId` — that the framework uses to key the row in the [`ISagaStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/isagastore/). Your own saga-state types add whatever extra fields the business logic needs.
+
+The companion types `ConcurrencyToken` and `FoundSaga<TData>` describe the values an `ISagaStore` returns: an opaque optimistic-concurrency token, and a `{ data, concurrencyToken }` pair handed back from `findByCorrelationId`.
+
+## Import
+
+```ts
+import type {
+  ConcurrencyToken,
+  FoundSaga,
+  ProcessData,
+} from '@serviceconnect/core';
+```
+
+## ProcessData
+
+```ts
+export interface ProcessData {
+  correlationId: string;
+}
+```
+
+- **`correlationId`** (required) — the saga's identity. Returned by each [`ProcessHandler.correlate(message)`](/ServiceConnect-NodeJS/reference/process-managers/process-handler/) call and used by the [`ISagaStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/isagastore/) as the row key. The framework sets it for you when a `startsWith` handler creates a new saga; you do not need to mutate it inside `handle`.
+
+Extend the interface with whatever state your saga needs:
+
+```ts
+interface OrderState extends ProcessData {
+  status: 'pending' | 'paid' | 'shipped';
+  itemCount: number;
+  totalCents: number;
+}
+```
+
+State is a plain mutable object — mutate it in `handle(message, data, context)` and the bus persists the result.
+
+## ConcurrencyToken
+
+```ts
+export type ConcurrencyToken = string;
+```
+
+The opaque optimistic-concurrency token returned by [`ISagaStore.insert`](/ServiceConnect-NodeJS/reference/extension-points/persistence/isagastore/) and [`ISagaStore.update`](/ServiceConnect-NodeJS/reference/extension-points/persistence/isagastore/). The bus holds onto the token across a `handle` call and passes it back as `expectedToken` on the next `update`; if the row was changed between load and save the store should throw `ConcurrencyError` and the bus retries with the fresh state. Applications never construct or inspect a `ConcurrencyToken` directly — it is an implementation detail of the store.
+
+## FoundSaga
+
+```ts
+export interface FoundSaga<TData extends ProcessData> {
+  readonly data: TData;
+  readonly concurrencyToken: ConcurrencyToken;
+}
+```
+
+The value returned by [`ISagaStore.findByCorrelationId`](/ServiceConnect-NodeJS/reference/extension-points/persistence/isagastore/) when a row exists. `data` is the deserialised saga state; `concurrencyToken` is the token to pass back into `update`. `findByCorrelationId` returns `undefined` instead of a `FoundSaga` when no row exists for the given `correlationId`.
+
+## See also
+
+- [`ProcessHandler`](/ServiceConnect-NodeJS/reference/process-managers/process-handler/)
+- [`ProcessContext`](/ServiceConnect-NodeJS/reference/process-managers/process-context/)
+- [`ISagaStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/isagastore/)
+- [Process Manager](/ServiceConnect-NodeJS/learn/messaging-patterns/process-manager/)

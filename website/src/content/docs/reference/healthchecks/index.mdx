@@ -1,0 +1,124 @@
+---
+title: Health checks
+description: Producer, consumer-connectivity, and consumer-busy probes from @serviceconnect/healthchecks.
+---
+
+## Overview
+
+`@serviceconnect/healthchecks` is a tiny package of `Bus`-aware health probes. It exports three factory functions — `producerConnectivity`, `consumerConnectivity`, `consumerBusy` — that each take a [`Bus`](/ServiceConnect-NodeJS/reference/bus/bus/) and return a zero-arg `HealthCheck` function you can call from your service's `/health` endpoint. The package has no other runtime dependencies and is framework-agnostic; wire it into Fastify, Express, raw `http`, Kubernetes probes, or anything else that polls.
+
+## Import
+
+```ts
+import {
+  consumerBusy,
+  consumerConnectivity,
+  producerConnectivity,
+} from '@serviceconnect/healthchecks';
+import type {
+  HealthCheck,
+  HealthCheckResult,
+  HealthCheckStatus,
+} from '@serviceconnect/healthchecks';
+```
+
+## Types
+
+```ts
+export type HealthCheckStatus = 'healthy' | 'unhealthy' | 'degraded';
+
+export interface HealthCheckResult {
+  readonly status: HealthCheckStatus;
+  readonly description?: string;
+  readonly data?: Readonly<Record<string, unknown>>;
+}
+
+export type HealthCheck = () => Promise<HealthCheckResult>;
+```
+
+- **`HealthCheckStatus`** — the three-state status. `'healthy'` and `'unhealthy'` are self-explanatory; `'degraded'` means the bus is connected and functioning but exhibits a soft warning (for example, no messages have been consumed within the grace window).
+- **`HealthCheckResult`** — the shape returned by every check. `description` is an optional human-readable string useful for surfacing in logs or `/health` JSON; `data` is an optional bag of diagnostics (`lastConsumedAt`, `ageMs`, etc.).
+- **`HealthCheck`** — a zero-arg async function. Each factory below returns one. Cache the returned function once at startup and call it on every probe — the factory does light setup; the returned function reads live state from the bus on every call.
+
+## producerConnectivity
+
+```ts
+export function producerConnectivity(bus: Bus): HealthCheck;
+```
+
+Healthy iff `bus.producer.isHealthy` is true; otherwise unhealthy with `description: 'producer is not connected'`. The probe never throws.
+
+```ts
+const producerHealth = producerConnectivity(bus);
+const result = await producerHealth();
+// result = { status: 'healthy' } when the producer is connected
+```
+
+## consumerConnectivity
+
+```ts
+export function consumerConnectivity(bus: Bus): HealthCheck;
+```
+
+Unhealthy when the consumer was cancelled by the broker (`bus.consumer.isCancelledByBroker`) — most often because the queue was deleted, the channel was closed by management, or the broker stopped delivering. Also unhealthy when the consumer is not connected (`!bus.consumer.isConnected`). Healthy in every other case. The probe never throws.
+
+```ts
+const consumerHealth = consumerConnectivity(bus);
+const result = await consumerHealth();
+// result = { status: 'unhealthy', description: 'consumer was cancelled by the broker' }
+// when the broker has cancelled the consumer
+```
+
+## consumerBusy
+
+```ts
+export function consumerBusy(bus: Bus, options?: { graceMs?: number }): HealthCheck;
+```
+
+A liveness probe for inbound traffic. Behaviour:
+
+- **Unhealthy** when the consumer is not connected (`!bus.consumer.isConnected`).
+- **Healthy** when `bus.lastConsumedAt` is `undefined` — the bus has consumed no messages yet, which is the normal state immediately after `start()`.
+- **Healthy** when the age of `bus.lastConsumedAt` is within `graceMs` (default `5000` ms). The result carries `data: { lastConsumedAt, ageMs }`.
+- **Degraded** when the age exceeds `graceMs`. The result carries `description` and the same `data` payload.
+
+The probe never throws.
+
+```ts
+const busy = consumerBusy(bus, { graceMs: 10_000 });
+const result = await busy();
+// result might be { status: 'degraded', description: 'no messages consumed in last 10000 ms',
+//   data: { lastConsumedAt: '2026-05-23T09:00:00.000Z', ageMs: 12345 } }
+```
+
+## Wiring into an HTTP endpoint
+
+The probes return plain results; aggregation, status codes, and serialisation are left to the host. The Fastify-style snippet below picks the worst status across the three checks and maps it to an HTTP status code.
+
+```ts
+import { producerConnectivity, consumerConnectivity, consumerBusy } from '@serviceconnect/healthchecks';
+
+const checks = {
+  producer: producerConnectivity(bus),
+  consumer: consumerConnectivity(bus),
+  busy: consumerBusy(bus, { graceMs: 10_000 }),
+};
+
+app.get('/health', async (_req, reply) => {
+  const results = Object.fromEntries(
+    await Promise.all(
+      Object.entries(checks).map(async ([name, check]) => [name, await check()]),
+    ),
+  );
+  const worst = Object.values(results).map((r) => r.status);
+  const overall =
+    worst.includes('unhealthy') ? 'unhealthy' :
+    worst.includes('degraded') ? 'degraded' : 'healthy';
+  reply.code(overall === 'unhealthy' ? 503 : 200).send({ status: overall, checks: results });
+});
+```
+
+## See also
+
+- [`Bus`](/ServiceConnect-NodeJS/reference/bus/bus/)
+- [Operating ServiceConnect](/ServiceConnect-NodeJS/learn/operating/healthchecks/)

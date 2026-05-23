@@ -1,0 +1,119 @@
+---
+title: ProcessHandler
+description: Saga handler interface — handle a message against typed state and correlate inbound messages to a saga instance.
+---
+
+## Overview
+
+`ProcessHandler<TData, TMessage>` is the contract for a single step in a process manager (saga). Each handler class implements two methods: `handle(message, data, context)` runs the business logic against the saga's typed state, and `correlate(message)` returns the `correlationId` the bus uses to locate the existing saga row (or to create a new one for `startsWith` handlers).
+
+A process is wired up via the bus DSL: [`registerProcessData`](#registerprocessdata) declares the state type, [`registerProcess`](#registerprocess) opens a builder, and the builder's `startsWith(...)` / `handles(...)` calls attach `ProcessHandler` instances to message types.
+
+## Import
+
+```ts
+import {
+  type Message,
+  type ProcessContext,
+  type ProcessData,
+  type ProcessHandler,
+} from '@serviceconnect/core';
+```
+
+## Signature
+
+```ts
+export interface ProcessHandler<TData extends ProcessData, TMessage extends Message> {
+  handle(message: TMessage, data: TData, context: ProcessContext): Promise<void>;
+  correlate(message: TMessage): string;
+}
+```
+
+## Parameters
+
+- **`handle(message, data, context)`** — runs once per inbound message. `message` is the deserialised typed message. `data` is the loaded saga state (a fresh blank instance for `startsWith` when no saga exists yet). Mutating `data` in place is the supported way to record state changes — the bus persists the mutated object back to the [`ISagaStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/isagastore/) after the handler returns. `context` is a [`ProcessContext`](/ServiceConnect-NodeJS/reference/process-managers/process-context/) — a [`ConsumeContext`](/ServiceConnect-NodeJS/reference/handlers/consume-context/) with `markComplete()` and `requestTimeout(...)` added.
+- **`correlate(message)`** — returns the `correlationId` string identifying which saga instance this message belongs to. For `startsWith` it is also the `correlationId` of the new row inserted into the saga store. The framework calls `correlate` before `handle` so it can load the right row.
+
+## Example — saga handler class
+
+```ts
+import {
+  type Message,
+  type ProcessContext,
+  type ProcessData,
+  type ProcessHandler,
+} from '@serviceconnect/core';
+
+interface OrderState extends ProcessData {
+  status: 'pending' | 'paid';
+}
+interface OrderCreated extends Message {
+  orderId: string;
+}
+
+class OnOrderCreated implements ProcessHandler<OrderState, OrderCreated> {
+  async handle(_msg: OrderCreated, data: OrderState): Promise<void> {
+    data.status = 'pending';
+  }
+  correlate(msg: OrderCreated): string {
+    return msg.orderId;
+  }
+}
+```
+
+## DSL — wiring handlers onto the bus
+
+A complete process is built with three methods on the [`Bus`](/ServiceConnect-NodeJS/reference/bus/bus/) plus the returned builder.
+
+### `registerProcessData<TData>(dataType)`
+
+```ts
+bus.registerProcessData<OrderState>('OrderState'): Bus;
+```
+
+Declares that `OrderState` is a saga-data type known under the type-name `'OrderState'`. Must be called before `registerProcess` so the bus knows which `ProcessData` type the upcoming process is keyed on.
+
+### `registerProcess(processName, options)`
+
+```ts
+bus.registerProcess(
+  processName: string,
+  options: { store: ISagaStore; timeoutStore: ITimeoutStore; dataType?: string },
+): ProcessBuilder;
+```
+
+Opens a `ProcessBuilder` for the named process. `store` is the [`ISagaStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/isagastore/) used to persist saga rows; `timeoutStore` is the [`ITimeoutStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/itimeoutstore/) that backs `requestTimeout(...)`. `dataType` defaults to the most recent `registerProcessData<...>(typeName)` call.
+
+### `ProcessBuilder.startsWith` / `.handles`
+
+```ts
+interface ProcessBuilder {
+  startsWith<TMessage extends Message>(
+    messageType: string,
+    handler: ProcessHandler<ProcessData, TMessage>,
+  ): ProcessBuilder;
+  handles<TMessage extends Message>(
+    messageType: string,
+    handler: ProcessHandler<ProcessData, TMessage>,
+  ): ProcessBuilder;
+}
+```
+
+`startsWith(typeName, handler)` attaches a starting handler — the bus inserts a new saga row using `handler.correlate(message)` as the `correlationId`. `handles(typeName, handler)` attaches a continuing handler that loads an existing row by the same `correlate` call. Both methods return the same builder so calls chain.
+
+## Example — wiring it all together
+
+```ts
+bus
+  .registerProcessData<OrderState>('OrderState')
+  .registerProcess('OrderProcess', { store: sagaStore, timeoutStore })
+  .startsWith<OrderCreated>('OrderCreated', new OnOrderCreated())
+  .handles<PaymentReceived>('PaymentReceived', new OnPaymentReceived());
+```
+
+## See also
+
+- [`ProcessData`](/ServiceConnect-NodeJS/reference/process-managers/process-data/)
+- [`ProcessContext`](/ServiceConnect-NodeJS/reference/process-managers/process-context/)
+- [`Bus`](/ServiceConnect-NodeJS/reference/bus/bus/)
+- [Process Manager](/ServiceConnect-NodeJS/learn/messaging-patterns/process-manager/)
