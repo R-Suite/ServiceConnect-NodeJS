@@ -1,0 +1,63 @@
+---
+title: Handlers
+description: Functions or classes that consume typed messages with a ConsumeContext.
+---
+
+## Overview
+
+A **handler** is the unit of work ServiceConnect runs when a message arrives. It is just a function — or a class with a `handle` method — that takes two arguments: the deserialised message and a `ConsumeContext`. You register handlers against type strings; the bus matches the incoming `MessageType` header and dispatches.
+
+Function handlers are the common case:
+
+```ts
+bus.handle<OrderPlaced>('OrderPlaced', async (msg, ctx) => { /* ... */ });
+```
+
+Class-based handlers (a `HandlerClass` with a `HandlerFactory`) exist for cases where you want per-message construction — useful when you are wiring through a DI container that builds a scope per consume, so that scoped services (database units of work, request loggers) are fresh for every message.
+
+## Why it matters
+
+A handler is the only place where messaging meets business logic. Everything else — exchanges, queues, retries, headers — is plumbing. ServiceConnect's contract is therefore narrow on purpose: take a typed payload, take a context, do work, signal the outcome. There is no `IConsumer<T>` ceremony, no required interface beyond the handler signature itself.
+
+The `ConsumeContext` is what makes a handler more than a function. It carries:
+
+- The full envelope — headers, message id, correlation id, source, sent time.
+- Reply primitives — `ctx.reply`, `ctx.publish`, `ctx.send` — so that handlers participate in conversations without ever importing the bus directly.
+- The active `AbortSignal` — so long-running work can be cancelled when the bus stops.
+
+How the handler ends matters too:
+
+- **Return normally** — the message is acked and removed from the queue. This is the success path.
+- **Return `'retry'`** — the transport requeues with its retry policy. Use this when you have hit a transient fault and want the framework to back off and try again.
+- **Throw** — the message is routed to the configured error queue. The error path is for poison messages and bugs, not for "please try again".
+
+That distinction (retry vs. throw) is the single most important thing to internalise about handlers. Retry is a controlled, expected outcome that says "try me again later". Throwing is for the cases where you have lost confidence that this message will ever succeed.
+
+The bus also guarantees ordering inside a single handler invocation: any awaits inside your handler complete before the message is acked. There is no fire-and-forget unless you explicitly write it.
+
+## API touch-point
+
+```ts
+bus.handle<OrderPlaced>('OrderPlaced', async (msg, ctx) => {
+  if (await alreadyProcessed(msg.orderId)) {
+    return;
+  }
+  await charge(msg.orderId, msg.total);
+  await ctx.publish<OrderCharged>('OrderCharged', { orderId: msg.orderId });
+});
+```
+
+Three things to note:
+
+- `bus.handle<T>(typeName, fn)` is fully typed — the `T` parameter ties the runtime string to the TypeScript shape. Mismatches surface as compile errors at the call site.
+- The early `return` short-circuits to ack without further work. That is the idempotency hook: check, return, done. (See the [Idempotency](/ServiceConnect-NodeJS/learn/operations/idempotency/) guide for the pattern in full.)
+- `ctx.publish` (rather than `bus.publish`) keeps the correlation id flowing. Anything you publish from inside a handler is part of the same conversation, which is what lets distributed tracing connect the dots.
+
+You can register more than one handler for a type — they run sequentially per message — but the common case is one handler per type per service.
+
+## See also
+
+- [`Handler`](/ServiceConnect-NodeJS/reference/handlers/handler/)
+- [`ConsumeContext`](/ServiceConnect-NodeJS/reference/handlers/consume-context/)
+- [`ConsumeResult`](/ServiceConnect-NodeJS/reference/handlers/consume-result/)
+- [Error Handling](/ServiceConnect-NodeJS/learn/operations/error-handling/)

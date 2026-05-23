@@ -1,0 +1,53 @@
+---
+title: Endpoints
+description: An endpoint is a queue name — used by bus.send for point-to-point delivery.
+---
+
+## Overview
+
+In ServiceConnect, an **endpoint** is a queue name. Nothing more exotic than that. When you call `bus.send('payments', ...)`, `'payments'` is the endpoint: the name of the queue that the receiving service is consuming from. The framework writes directly to that queue, bypassing the type's exchange.
+
+Compare that to `bus.publish`, which fans out via the **exchange** named after the message type. Publish is for "anyone who cares should hear about this". Send is for "this specific service should do this specific thing".
+
+The endpoint is therefore an out-of-band agreement: the sender and the receiver both know the queue name. It is not derived from the type, it is not discovered at runtime — it is a contract you write down (in code, in config, or both) and keep stable.
+
+## Why it matters
+
+The endpoint-vs-exchange split is the seam between **events** and **commands** in messaging design:
+
+- **Events** describe something that happened. They have multiple potential listeners, none of which the publisher needs to know about. `bus.publish<OrderPlaced>(...)` is for events.
+- **Commands** are imperative requests directed at a single owner. The sender knows which service is responsible. `bus.send<ChargeCard>('payments', ...)` is for commands.
+
+Getting the split right keeps coupling low and makes ownership obvious in the code. If you find yourself calling `bus.send` and you do not know the target queue's name, you probably want `bus.publish`. If you find yourself calling `bus.publish` and you only ever want one specific service to handle it, you probably want `bus.send`.
+
+Endpoints also unlock **competing consumers**: scale a single service horizontally by running multiple instances against the same queue name. RabbitMQ distributes work across them. Because publish goes through a fanout exchange and send goes straight to the queue, both patterns benefit — but for commands the model is especially clean: the queue is the work pool, every instance pulls from it, no instance sees a message another instance has already taken.
+
+A few practical rules:
+
+- Endpoint strings are queue names. They are not type strings, and they are not URLs.
+- The convention is one queue per service. If `payments` runs, it consumes from `payments`.
+- Wire-compatible with .NET ServiceConnect: a Node.js sender targeting `payments` reaches a .NET consumer bound to the same queue.
+- Endpoint names usually live in configuration. Hard-coding them in a single shared types package is also fine — pick whatever survives the next reorg.
+
+`bus.sendRequest` and `bus.sendRequestMulti` are also endpoint-based. The reply queue is set up by the bus on your behalf, so you do not name it — but the request queue you are targeting is just another endpoint.
+
+## API touch-point
+
+```ts
+await bus.send<ChargeCard>('payments', 'ChargeCard', { orderId, total });
+await bus.publish<OrderPlaced>('OrderPlaced', { orderId, total });
+```
+
+Two calls, two distinct shapes:
+
+- `send` takes an endpoint name first, then the type string. The endpoint says *where*; the type string says *what*.
+- `publish` takes only the type string. The exchange (derived from the type) decides who hears it.
+
+You can call `bus.send` to your own queue if you want to defer work to a later poll of the consumer — it is sometimes a useful pattern for breaking up long handlers — but most of the time `send` targets some other service. `bus.sendRequest` and `bus.sendRequestMulti` follow the same `send` convention: they target named endpoints and they expect those endpoints to reply.
+
+## See also
+
+- [Point-to-Point](/ServiceConnect-NodeJS/learn/messaging-patterns/point-to-point/)
+- [Competing Consumers](/ServiceConnect-NodeJS/learn/messaging-patterns/competing-consumers/)
+- [`SendOptions`](/ServiceConnect-NodeJS/reference/messages/options/)
+- [Clustering](/ServiceConnect-NodeJS/learn/operations/clustering/)
