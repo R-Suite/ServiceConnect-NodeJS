@@ -2,6 +2,7 @@ import { CliError, type CliOptions, parseCli } from './cli.js';
 import { consoleLogger } from './lib/log.js';
 import { runSmoke } from './modes/smoke.js';
 import { runSoak } from './modes/soak.js';
+import { runThroughput } from './modes/throughput.js';
 
 async function dispatch(opts: CliOptions): Promise<number> {
   const log = consoleLogger();
@@ -13,7 +14,10 @@ async function dispatch(opts: CliOptions): Promise<number> {
     const report = await runSoak(opts, log);
     return report.exitCode;
   }
-  log.warn(`mode ${opts.mode} not yet implemented; exiting 0 as a placeholder`);
+  if (opts.mode === 'throughput') {
+    const report = await runThroughput(opts, log);
+    return report.exitCode;
+  }
   return 0;
 }
 
