@@ -156,6 +156,22 @@ importers:
         specifier: ^4.19.0
         version: 4.22.3
 
+  examples/streaming:
+    dependencies:
+      '@serviceconnect/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@serviceconnect/example-lib':
+        specifier: workspace:*
+        version: link:../lib
+      '@serviceconnect/rabbitmq':
+        specifier: workspace:*
+        version: link:../../packages/rabbitmq
+    devDependencies:
+      tsx:
+        specifier: ^4.19.0
+        version: 4.22.3
+
   harness/stress:
     dependencies:
       '@serviceconnect/core':
