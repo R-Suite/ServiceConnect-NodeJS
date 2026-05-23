@@ -1,0 +1,107 @@
+---
+title: Stream Handler
+description: Types and runtime for consuming an ordered message stream.
+---
+
+## Overview
+
+A **stream handler** consumes an ordered sequence of messages addressed to a single endpoint. The bus exposes outbound streams through [`openStream(...)`](/ServiceConnect-NodeJS/reference/bus/bus/#openstream) (returns a `StreamSender<T>`) and inbound streams through [`handleStream(...)`](/ServiceConnect-NodeJS/reference/bus/bus/#handlestream) (your handler receives an `AsyncIterable<T>`). Behind the iterable is a [`StreamReceiver<T>`](#streamreceiver) that buffers and orders chunks by `SequenceNumber` before delivering them.
+
+## Import
+
+```ts
+import {
+  StreamHeaders,
+  StreamReceiver,
+  StreamFaultedError,
+  StreamSequenceError,
+} from '@serviceconnect/core';
+import type { StreamHeaderKey, StreamSender } from '@serviceconnect/core';
+```
+
+## `StreamHeaders`
+
+```ts
+export const StreamHeaders = {
+  StreamId: 'StreamId',
+  SequenceNumber: 'SequenceNumber',
+  IsStartOfStream: 'IsStartOfStream',
+  IsEndOfStream: 'IsEndOfStream',
+  StreamFault: 'StreamFault',
+} as const;
+
+export type StreamHeaderKey = (typeof StreamHeaders)[keyof typeof StreamHeaders];
+```
+
+Headers the sender stamps and the receiver inspects. `StreamId` is a UUID minted per stream; `SequenceNumber` increments per chunk; `IsStartOfStream` and `IsEndOfStream` mark the boundaries; `StreamFault`, when present on the terminal chunk, carries a reason string.
+
+## `StreamSender<T>`
+
+```ts
+export interface StreamSender<T extends Message> {
+  readonly streamId: string;
+  sendChunk(chunk: T): Promise<void>;
+  complete(): Promise<void>;
+  fault(reason: string): Promise<void>;
+}
+```
+
+- **`streamId`** — the UUID stamped on every chunk's `StreamId` header.
+- **`sendChunk(chunk)`** — serialises `chunk`, increments the sequence number, and sends it via the producer's `send`. Throws `InvalidOperationError` after `complete()` or `fault(...)` has been called.
+- **`complete()`** — sends a terminal empty body with `IsEndOfStream: 'true'`. Idempotent.
+- **`fault(reason)`** — sends a terminal empty body with both `IsEndOfStream: 'true'` and `StreamFault: <reason>`. Idempotent.
+
+## `StreamReceiver<T>`
+
+```ts
+export interface StreamReceiverOptions {
+  maxBufferedChunks?: number; // default 1000
+}
+
+export class StreamReceiver<T extends Message> implements AsyncIterable<T> {
+  constructor(streamId: string, options?: StreamReceiverOptions);
+  readonly streamId: string;
+  isFaulted(): boolean;
+  // ...used internally by the bus; exposed for advanced wiring + testing.
+}
+```
+
+`StreamReceiver` buffers out-of-order chunks and yields them in `SequenceNumber` order. It is an `AsyncIterable<T>`, so a `for await` loop iterates the stream. If the producer faults, the next `next()` rejects with [`StreamFaultedError`](#streamfaultederror). If the buffered out-of-order window exceeds `maxBufferedChunks` the receiver throws [`StreamSequenceError`](#streamsequenceerror) — the back-pressure signal that the sender is producing too far ahead of the receiver's drain.
+
+`maxBufferedChunks` defaults to **1000**.
+
+## Errors
+
+### `StreamFaultedError`
+
+Thrown when the receiver iterates a stream that the sender has marked as faulted (`StreamFault` header set on the terminal chunk). The error message carries the fault reason.
+
+### `StreamSequenceError`
+
+Thrown when the in-memory out-of-order buffer would exceed `maxBufferedChunks`. The stream cannot proceed because too many sequence numbers are missing — the gap may indicate a lost message or a misordered transport.
+
+## Example
+
+```ts
+import { type Message, createBus } from '@serviceconnect/core';
+
+interface Chunk extends Message {
+  index: number;
+}
+
+const receiver = createBus({ /* ... */ })
+  .registerMessage<Chunk>('Chunk')
+  .handleStream<Chunk>('Chunk', async (stream) => {
+    for await (const chunk of stream) {
+      console.log(chunk.index);
+    }
+  });
+```
+
+The async iterable yields chunks in order; closing the iterator (either by completing the `for await` loop after the stream end, or by `break`ing out early) acknowledges the stream.
+
+## See also
+
+- [`Bus.openStream`](/ServiceConnect-NodeJS/reference/bus/bus/#openstream) and [`Bus.handleStream`](/ServiceConnect-NodeJS/reference/bus/bus/#handlestream)
+- [Streaming](/ServiceConnect-NodeJS/learn/messaging-patterns/streaming/)
+- [`Message`](/ServiceConnect-NodeJS/reference/messages/message/)

@@ -1,0 +1,105 @@
+---
+title: Handler
+description: Function, class, or factory that consumes a typed message.
+---
+
+## Overview
+
+`Handler<T>` is the shape ServiceConnect accepts when you call [`bus.handle(typeName, handler)`](/ServiceConnect-NodeJS/reference/bus/bus/#handle). It is a union of three forms: a plain async function, an object with a `handle` method, or a `{ factory }` wrapper that builds a function or class per message (useful for per-consume DI scopes). All three receive the deserialised message and a [`ConsumeContext`](/ServiceConnect-NodeJS/reference/handlers/consume-context/), and all three return `Promise<void>`.
+
+## Import
+
+```ts
+import type { Handler, HandlerClass, HandlerFactory, HandlerFn } from '@serviceconnect/core';
+```
+
+## Signature
+
+```ts
+export type HandlerFn<T extends Message> = (message: T, context: ConsumeContext) => Promise<void>;
+
+export interface HandlerClass<T extends Message> {
+  handle(message: T, context: ConsumeContext): Promise<void>;
+}
+
+export type HandlerFactory<T extends Message> = (
+  context: ConsumeContext,
+) => HandlerClass<T> | HandlerFn<T>;
+
+export type Handler<T extends Message> =
+  | HandlerFn<T>
+  | HandlerClass<T>
+  | { factory: HandlerFactory<T> };
+```
+
+## Parameters
+
+- **`HandlerFn<T>`** — the function form. The common case: an async function that takes the message and a `ConsumeContext` and resolves when work is done.
+- **`HandlerClass<T>`** — the class form. Any object with an `async handle(message, context)` method satisfies the shape; no base class or decorator is required.
+- **`HandlerFactory<T>`** — a function that receives the `ConsumeContext` and returns either an `HandlerFn<T>` or a `HandlerClass<T>`. Use it when a DI container needs to build a fresh handler instance — and its scoped dependencies — per inbound message.
+- **`Handler<T>`** — the union accepted by `bus.handle(...)`. Pass any of the three forms above.
+
+## Return value and failure signalling
+
+Handlers return `Promise<void>`. There are no magic return values: a `Promise<void>` that resolves means success. To signal a transient failure, **throw** — the framework decides whether to retry based on the error type and the configured retry policy. Poison messages flow on to the configured error queue.
+
+## Example — function form
+
+```ts
+import type { Handler, Message } from '@serviceconnect/core';
+
+interface OrderPlaced extends Message {
+  orderId: string;
+}
+
+const onOrderPlaced: Handler<OrderPlaced> = async (msg, ctx) => {
+  ctx.logger.info({ orderId: msg.orderId }, 'processing');
+};
+
+bus.handle<OrderPlaced>('OrderPlaced', onOrderPlaced);
+```
+
+## Example — class form
+
+```ts
+import type { ConsumeContext, HandlerClass, Message } from '@serviceconnect/core';
+
+interface OrderPlaced extends Message {
+  orderId: string;
+}
+
+class OnOrderPlaced implements HandlerClass<OrderPlaced> {
+  async handle(msg: OrderPlaced, ctx: ConsumeContext): Promise<void> {
+    ctx.logger.info({ orderId: msg.orderId }, 'processing');
+  }
+}
+
+bus.handle<OrderPlaced>('OrderPlaced', new OnOrderPlaced());
+```
+
+## Example — factory form
+
+```ts
+import type { Handler, Message } from '@serviceconnect/core';
+
+interface OrderPlaced extends Message {
+  orderId: string;
+}
+
+const onOrderPlaced: Handler<OrderPlaced> = {
+  factory: (ctx) => async (msg) => {
+    const scope = container.createScope(ctx.correlationId);
+    const service = scope.resolve('OrderService');
+    await service.process(msg.orderId);
+  },
+};
+
+bus.handle<OrderPlaced>('OrderPlaced', onOrderPlaced);
+```
+
+## See also
+
+- [`ConsumeContext`](/ServiceConnect-NodeJS/reference/handlers/consume-context/)
+- [`ConsumeResult`](/ServiceConnect-NodeJS/reference/handlers/consume-result/)
+- [`Bus.handle`](/ServiceConnect-NodeJS/reference/bus/bus/#handle)
+- [Handlers](/ServiceConnect-NodeJS/learn/core-concepts/handlers/)

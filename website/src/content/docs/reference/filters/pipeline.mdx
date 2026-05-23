@@ -1,0 +1,73 @@
+---
+title: Pipeline
+description: Stages, registration, and the use(...) builder.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+The bus's **pipeline** is the four-stage chain that every message passes through on its way out (`outgoing`) and on its way back in (`beforeConsuming`, `afterConsuming`, `onConsumedSuccessfully`). You add [`Filter`](/ServiceConnect-NodeJS/reference/filters/filter/) and [`Middleware`](/ServiceConnect-NodeJS/reference/filters/middleware/) registrations to stages via [`bus.use(stage, ...items)`](#use); items run in the order described below.
+
+## Import
+
+```ts
+import type { PipelineStage } from '@serviceconnect/core';
+```
+
+## `PipelineStage`
+
+```ts
+export type PipelineStage =
+  | 'outgoing'
+  | 'beforeConsuming'
+  | 'afterConsuming'
+  | 'onConsumedSuccessfully';
+```
+
+- **`'outgoing'`** — runs before a message leaves the producer. Stamp headers, redact bodies, refuse sends that violate policy. A filter returning `Stop` here throws `OutgoingFiltersBlockedError` at the call site.
+- **`'beforeConsuming'`** — runs immediately before the handler. Reject unauthorised messages, set up logging context, time the handler. A filter returning `Stop` here ends inbound processing for that envelope without invoking the handler.
+- **`'afterConsuming'`** — runs after the handler returns or throws. Use a `try`/`finally` in middleware to capture timing or errors regardless of outcome.
+- **`'onConsumedSuccessfully'`** — runs only after a successful handler. Emit "processed" metrics, commit downstream side-effects that should not happen on failure.
+
+## `use`
+
+```ts
+use(stage: PipelineStage, ...items: Array<FilterRegistration | MiddlewareRegistration>): this;
+```
+
+`bus.use(...)` appends one or more `FilterRegistration` / `MiddlewareRegistration` entries to the named stage. The call returns the bus so registrations can be chained. Items wrapped by [`asFilter`](/ServiceConnect-NodeJS/reference/filters/filter/) and [`asMiddleware`](/ServiceConnect-NodeJS/reference/filters/middleware/) are accepted in any order.
+
+<Aside type="caution">
+  Within a stage, all filters run before all middleware regardless of the order you passed them to `bus.use(...)`. A `Stop` from any filter short-circuits the stage — middleware never runs for that message.
+</Aside>
+
+## Example
+
+```ts
+import { FilterAction, asFilter, asMiddleware } from '@serviceconnect/core';
+
+bus.use(
+  'beforeConsuming',
+  asMiddleware(async (context, next) => {
+    const start = Date.now();
+    try {
+      await next();
+    } finally {
+      metrics.observe(Date.now() - start);
+    }
+  }),
+  asFilter((envelope) => {
+    return envelope.headers.tenant ? FilterAction.Continue : FilterAction.Stop;
+  }),
+);
+```
+
+The order in the call is middleware first, filter second — but the filter still runs first. If the `tenant` header is missing, the filter returns `Stop` and the timing middleware is skipped entirely.
+
+## See also
+
+- [`Filter`](/ServiceConnect-NodeJS/reference/filters/filter/)
+- [`Middleware`](/ServiceConnect-NodeJS/reference/filters/middleware/)
+- [`Bus.use`](/ServiceConnect-NodeJS/reference/bus/bus/#use)
+- [Filters](/ServiceConnect-NodeJS/learn/messaging-patterns/filters/)

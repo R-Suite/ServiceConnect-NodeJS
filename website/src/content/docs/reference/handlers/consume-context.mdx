@@ -1,0 +1,90 @@
+---
+title: ConsumeContext
+description: 'Per-message context: headers, ids, signal, logger, reply.'
+---
+
+## Overview
+
+`ConsumeContext` is the second argument passed to every [`Handler`](/ServiceConnect-NodeJS/reference/handlers/handler/). It exposes the frozen inbound headers, the conversation identifiers, an `AbortSignal` that fires when the bus stops, a child logger scoped to the message, and a `reply(...)` method for the request/reply case. The bus itself is reachable as `ctx.bus`, which is how a handler issues follow-up `publish` or `send` calls without importing the bus directly.
+
+## Import
+
+```ts
+import type { ConsumeContext } from '@serviceconnect/core';
+import { createConsumeContext } from '@serviceconnect/core';
+```
+
+## Signature
+
+```ts
+export interface ConsumeContext {
+  readonly bus: Bus;
+  readonly headers: Readonly<MessageHeaders>;
+  readonly messageId: MessageId | undefined;
+  readonly correlationId: CorrelationId;
+  readonly messageType: string;
+  readonly signal: AbortSignal;
+  readonly logger: Logger;
+
+  reply<TReply extends Message>(
+    typeName: string,
+    message: TReply,
+    options?: ReplyOptions,
+  ): Promise<void>;
+}
+
+export function createConsumeContext(args: {
+  bus: Bus;
+  headers: MessageHeaders;
+  signal: AbortSignal;
+  logger: Logger;
+}): ConsumeContext;
+```
+
+## Parameters
+
+- **`bus`** — the [`Bus`](/ServiceConnect-NodeJS/reference/bus/bus/) instance that is dispatching the message. Use `ctx.bus.publish(...)` / `ctx.bus.send(...)` to emit follow-up messages from inside a handler.
+- **`headers`** — frozen [`MessageHeaders`](/ServiceConnect-NodeJS/reference/messages/message/). Mutations would be silently lost, so the object is `Object.freeze`d defensively.
+- **`messageId`** — `MessageId | undefined`. Convenience accessor over `headers.messageId`. May be `undefined` for foreign envelopes that did not stamp one.
+- **`correlationId`** — `CorrelationId`. Convenience accessor over `headers.correlationId`. Always present.
+- **`messageType`** — `string`. Convenience accessor over `headers.messageType`. The type string the bus used to route to this handler.
+- **`signal`** — `AbortSignal`. Aborts when the bus is stopping or the consumer is being torn down. Pass it into long-running awaits to participate in graceful shutdown.
+- **`logger`** — a child [`Logger`](/ServiceConnect-NodeJS/reference/configuration/options/#logger) with `messageType`, `messageId`, and `correlationId` bound; every log line emitted through it inherits those fields.
+- **`reply<TReply>(typeName, message, options?)`** — sends a typed reply back to the sender. Requires the incoming message to carry a `sourceAddress` header (request-reply senders stamp it for you); throws otherwise. The reply's `responseMessageId` is set from the incoming `requestMessageId` so the request/reply manager on the other side can correlate.
+
+## What is *not* on ConsumeContext
+
+`ConsumeContext` deliberately exposes a narrow surface. There is **no** `ctx.publish()`, `ctx.send()`, `ctx.sendToMany()`, `ctx.route()`, `ctx.forward()`, or `ctx.requestTimeout()` method. To emit follow-up messages, reach through to the bus: `await ctx.bus.publish(...)` or `await ctx.bus.send(...)`. Timeout scheduling (`requestTimeout`) is a saga concern and lives on `ProcessContext`, the process-manager extension of `ConsumeContext` — see the [Process Manager](/ServiceConnect-NodeJS/learn/messaging-patterns/process-manager/) reference.
+
+## `createConsumeContext(args)`
+
+`createConsumeContext` is the factory the bus and tests use to build a `ConsumeContext`. It freezes the supplied headers, derives a child logger, and wires the `reply` closure. Most application code never calls it directly; it is exported for in-process testing of handlers without a transport.
+
+## Example
+
+```ts
+import type { ConsumeContext, Message } from '@serviceconnect/core';
+
+interface PingReceived extends Message {
+  payload: string;
+}
+
+interface PongReply extends Message {
+  echo: string;
+}
+
+async function onPing(msg: PingReceived, ctx: ConsumeContext): Promise<void> {
+  ctx.logger.info({ messageId: ctx.messageId }, 'ping received');
+  await ctx.reply<PongReply>('PongReply', {
+    correlationId: ctx.correlationId,
+    echo: msg.payload,
+  });
+}
+```
+
+## See also
+
+- [`Handler`](/ServiceConnect-NodeJS/reference/handlers/handler/)
+- [`ConsumeResult`](/ServiceConnect-NodeJS/reference/handlers/consume-result/)
+- [`MessageHeaders`](/ServiceConnect-NodeJS/reference/messages/message/)
+- [Handlers](/ServiceConnect-NodeJS/learn/core-concepts/handlers/)

@@ -1,0 +1,62 @@
+---
+title: ConsumeResult
+description: Transport-facing outcome of consuming a message.
+---
+
+## Overview
+
+`ConsumeResult` is the value the inbound dispatcher resolves with for each consumed envelope. It is the **transport-facing** outcome — what the bus reports back to the transport's `ConsumeCallback` so the transport knows whether to ack, retry, or route to the error queue. Application handlers do not return `ConsumeResult` themselves; they return `Promise<void>` and the framework synthesises the result from how the handler resolved or threw.
+
+## Import
+
+```ts
+import type { ConsumeCallback, ConsumeResult } from '@serviceconnect/core';
+```
+
+## Signature
+
+```ts
+export interface ConsumeResult {
+  readonly success: boolean;
+  readonly notHandled: boolean;
+  readonly error?: Error;
+  readonly terminalFailure: boolean;
+}
+
+export type ConsumeCallback = (envelope: Envelope, signal: AbortSignal) => Promise<ConsumeResult>;
+```
+
+## Parameters
+
+- **`success`** — `boolean`. `true` if the handler chain ran to completion without throwing.
+- **`notHandled`** — `boolean`. `true` if no handler was registered for the inbound message type. Transports typically log and ack `notHandled` envelopes (the message reached a queue we own, but nothing here cares about it).
+- **`error`** — `Error | undefined`. Set when a handler threw; carries the original exception so the transport can log it and decide its retry behaviour.
+- **`terminalFailure`** — `boolean`. `true` for unrecoverable errors (the canonical example is [`TerminalDeserializationError`](/ServiceConnect-NodeJS/reference/configuration/options/) — the body could not be deserialised, so retrying will not help). Transports must skip retry and route the envelope directly to the error queue.
+
+## How handler outcomes map to `ConsumeResult`
+
+| Handler outcome | `success` | `notHandled` | `error` | `terminalFailure` |
+|---|---|---|---|---|
+| Resolves normally | `true` | `false` | `undefined` | `false` |
+| Throws a generic error | `false` | `false` | the thrown error | `false` |
+| Throws `TerminalDeserializationError` | `false` | `false` | the thrown error | `true` |
+| No handler registered for type | `false` | `true` | `undefined` | `false` |
+
+A `false` `success` with `terminalFailure: false` is the retry path: the transport may requeue with its retry policy. With `terminalFailure: true`, the transport bypasses retry entirely.
+
+## `ConsumeCallback`
+
+`ConsumeCallback` is the function signature the bus hands to a transport consumer's `start(...)` method. The transport invokes it once per inbound envelope and decides what to do based on the resolved `ConsumeResult`.
+
+```ts
+export type ConsumeCallback = (envelope: Envelope, signal: AbortSignal) => Promise<ConsumeResult>;
+```
+
+The `signal` lets the transport cancel an in-flight consume during shutdown; the bus's inbound dispatcher propagates it down through the handler chain via `ConsumeContext.signal`.
+
+## See also
+
+- [`Handler`](/ServiceConnect-NodeJS/reference/handlers/handler/)
+- [`ConsumeContext`](/ServiceConnect-NodeJS/reference/handlers/consume-context/)
+- [`Envelope`](/ServiceConnect-NodeJS/reference/messages/envelope/)
+- [Error Handling](/ServiceConnect-NodeJS/learn/operations/error-handling/)
