@@ -1,0 +1,78 @@
+---
+title: IMessageTypeRegistry
+description: Type-name to schema/parents binding.
+---
+
+## Overview
+
+`IMessageTypeRegistry` maps message-type names (`'OrderPlaced'`, `'urn:orders:placed:v1'`, …) to their optional schema and their list of parent types. The bus uses it to validate inbound payloads, to drive polymorphic dispatch, and — for transports that fan out to ancestor exchanges — to know which extra topics a publish should reach.
+
+You usually don't construct one directly: `createBus(...)` builds a default registry for you, and the [`registerMessage`](/ServiceConnect-NodeJS/reference/bus/bus/) method on the bus forwards into it. Build your own only when you need to share a registry across multiple buses, or when you're plugging in a non-default storage strategy.
+
+## Import
+
+```ts
+import type {
+  IMessageTypeRegistry,
+  MessageRegistration,
+  RegisterOptions,
+} from '@serviceconnect/core';
+import { createMessageTypeRegistry } from '@serviceconnect/core';
+```
+
+## Signature
+
+```ts
+export interface MessageRegistration {
+  readonly typeName: string;
+  readonly schema?: StandardSchemaV1;
+  readonly parents?: readonly string[];
+}
+
+export interface RegisterOptions<T extends Message = Message> {
+  readonly schema?: StandardSchemaV1<T>;
+  readonly parents?: readonly string[];
+}
+
+export interface IMessageTypeRegistry {
+  register<T extends Message>(typeName: string, options?: RegisterOptions<T>): void;
+  resolve(typeName: string): MessageRegistration | undefined;
+  allRegisteredNames(): readonly string[];
+  parentsOf(typeName: string): readonly string[];
+}
+
+export function createMessageTypeRegistry(): IMessageTypeRegistry;
+```
+
+## Members
+
+- **`register(typeName, options?)`** — register `typeName`, optionally attaching a `StandardSchemaV1<T>` for validation and a list of parent type names for polymorphic dispatch. Idempotent: calling `register` twice with the same arguments is a no-op. Calling it twice with a different schema or different parents throws — the bus refuses to silently rebind a type.
+- **`resolve(typeName)`** — return the full `MessageRegistration` for `typeName`, or `undefined` if it isn't registered.
+- **`allRegisteredNames()`** — return the full list of registered type names. Used by the bus to declare consumer-side subscriptions for every type it knows about.
+- **`parentsOf(typeName)`** — return the parent type names registered against `typeName`, or `[]` if none. The handler dispatch walks this graph (with cycle protection) to find handlers registered against ancestor types.
+
+## `createMessageTypeRegistry`
+
+`createMessageTypeRegistry()` returns the default in-memory implementation. It's a tiny `Map`-backed object; you should reach for it unless you have a specific reason to ship your own.
+
+## Standard Schema
+
+The `schema` field uses [Standard Schema](https://standardschema.dev/) — a vendor-neutral schema standard implemented by Zod, Valibot, ArkType, and others. Any one of them works directly:
+
+```ts
+import { z } from 'zod';
+
+const orderPlaced = z.object({
+  orderId: z.string(),
+  totalCents: z.number().int().nonnegative(),
+});
+
+bus.registerMessage('OrderPlaced', { schema: orderPlaced });
+```
+
+## See also
+
+- [`IMessageSerializer`](/ServiceConnect-NodeJS/reference/extension-points/serialization/imessageserializer/)
+- [`Bus.registerMessage`](/ServiceConnect-NodeJS/reference/bus/bus/)
+- [Polymorphic Messages](/ServiceConnect-NodeJS/learn/messaging-patterns/polymorphic-messages/)
+- [Messages](/ServiceConnect-NodeJS/learn/core-concepts/messages/)

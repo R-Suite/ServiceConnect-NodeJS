@@ -1,0 +1,30 @@
+---
+title: Extension Points
+description: Interfaces you implement to plug in a custom transport, store, serializer, or registry.
+---
+
+ServiceConnect is built around small, well-defined interfaces. Implementing any of these lets you swap one piece of the runtime without touching the rest.
+
+## Transport
+
+- [`ITransportProducer`](/ServiceConnect-NodeJS/reference/extension-points/transport/itransportproducer/) — outbound publish/send/sendBytes.
+- [`ITransportConsumer`](/ServiceConnect-NodeJS/reference/extension-points/transport/itransportconsumer/) — inbound consumer lifecycle and delivery loop.
+
+## Persistence
+
+- [`ISagaStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/isagastore/) — saga state with optimistic concurrency.
+- [`IAggregatorStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/iaggregatorstore/) — buffered messages, lease-based flush.
+- [`ITimeoutStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/itimeoutstore/) — scheduled saga timeouts.
+
+## Serialization
+
+- [`IMessageSerializer`](/ServiceConnect-NodeJS/reference/extension-points/serialization/imessageserializer/) — bytes to and from a typed message.
+- [`IMessageTypeRegistry`](/ServiceConnect-NodeJS/reference/extension-points/serialization/imessagetyperegistry/) — type-name to schema/parents.
+
+## Registries
+
+- [`HandlerRegistry`](/ServiceConnect-NodeJS/reference/extension-points/registry/handler-registry/) — handler dispatch with polymorphic ancestor walk.
+- [`ProcessRegistry`](/ServiceConnect-NodeJS/reference/extension-points/registry/process-registry/) — saga handler registry.
+- [`AggregatorRegistry`](/ServiceConnect-NodeJS/reference/extension-points/registry/aggregator-registry/) — aggregator handler registry.
+
+The implementations shipped in this monorepo (`@serviceconnect/rabbitmq`, `@serviceconnect/persistence-memory`, `@serviceconnect/persistence-mongodb`) are themselves the best reference for what a real implementation looks like.

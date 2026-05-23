@@ -1,0 +1,52 @@
+---
+title: ITimeoutStore
+description: Scheduled saga timeouts.
+---
+
+## Overview
+
+`ITimeoutStore` is the persistence interface backing scheduled saga timeouts. When a process handler calls `ctx.requestTimeout(...)`, the bus persists a `TimeoutRecord` here. A background poller calls `claimDue` on a fixed interval, claims any timeouts whose `runAt` has elapsed, dispatches them back into the saga, and deletes them.
+
+Implementations must claim atomically: two pollers (or two hosts running the same bus) must never fire the same timeout twice.
+
+## Import
+
+```ts
+import type {
+  ITimeoutStore,
+  TimeoutRecord,
+} from '@serviceconnect/core';
+```
+
+## Signature
+
+```ts
+export interface TimeoutRecord {
+  readonly id: string;
+  readonly name: string;
+  readonly sagaCorrelationId: string;
+  readonly sagaDataType: string;
+  readonly runAt: Date;
+  readonly payload?: Readonly<Record<string, unknown>>;
+}
+
+export interface ITimeoutStore {
+  schedule(record: Omit<TimeoutRecord, 'id'>): Promise<TimeoutRecord>;
+  claimDue(now: Date, limit: number): Promise<readonly TimeoutRecord[]>;
+  delete(id: string): Promise<void>;
+}
+```
+
+## Members
+
+- **`schedule(record)`** — persist a new timeout. The caller passes everything except the id; the store assigns one and returns the full `TimeoutRecord`. The `payload` field is opaque — implementations should round-trip it unchanged so the saga handler sees whatever was passed to `requestTimeout`.
+- **`claimDue(now, limit)`** — return up to `limit` timeouts whose `runAt <= now`. Implementations must atomically claim the rows they return (e.g. via `findAndUpdate` with a `claimedAt` column, a SELECT FOR UPDATE SKIP LOCKED in SQL, or an equivalent guard) so two pollers do not both fire the same timeout. Returning rows in `runAt` order is recommended but not required.
+- **`delete(id)`** — remove a timeout. Called after the bus has fired the timeout into the saga successfully, or when a saga marks itself complete. Safe to no-op if the row no longer exists.
+
+## See also
+
+- [`ISagaStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/isagastore/)
+- [`ProcessHandler`](/ServiceConnect-NodeJS/reference/process-managers/process-handler/)
+- [`ProcessContext`](/ServiceConnect-NodeJS/reference/process-managers/process-context/)
+- [Persistence configuration](/ServiceConnect-NodeJS/reference/configuration/persistence/)
+- [Process Manager](/ServiceConnect-NodeJS/learn/messaging-patterns/process-manager/)

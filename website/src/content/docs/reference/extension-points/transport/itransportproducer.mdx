@@ -1,0 +1,71 @@
+---
+title: ITransportProducer
+description: Outbound transport interface — publish, send, sendBytes, plus health.
+---
+
+## Overview
+
+`ITransportProducer` is the outbound half of the wire-level transport. The bus owns one and calls into it whenever your application code publishes an event, sends a command, or initiates a request. Implementations are responsible for serialised-byte framing, broker connection management, and any retry/confirm semantics the underlying protocol requires — the bus passes already-serialised bodies and headers and expects the producer to put them on the wire.
+
+`ITransportProducer` extends `AsyncDisposable`, so `await using` patterns Just Work — the bus disposes its producer as part of `bus.stop()`, and standalone scripts can use the producer directly with the disposable idiom.
+
+## Import
+
+```ts
+import type { ITransportProducer } from '@serviceconnect/core';
+```
+
+## Signature
+
+```ts
+export interface ITransportProducer extends AsyncDisposable {
+  readonly isHealthy: boolean;
+  readonly supportsRoutingKey: boolean;
+  readonly maxMessageSize: number;
+
+  publish(
+    typeName: string,
+    body: Uint8Array,
+    options?: { headers?: Readonly<Record<string, string>>; routingKey?: string },
+    signal?: AbortSignal,
+  ): Promise<void>;
+
+  send(
+    endpoint: string,
+    typeName: string,
+    body: Uint8Array,
+    options?: {
+      headers?: Readonly<Record<string, string>>;
+      routingSlipHopsCompleted?: number;
+    },
+    signal?: AbortSignal,
+  ): Promise<void>;
+
+  sendBytes(
+    endpoint: string,
+    typeName: string,
+    body: Uint8Array,
+    options?: { headers?: Readonly<Record<string, string>> },
+    signal?: AbortSignal,
+  ): Promise<void>;
+}
+```
+
+## Members
+
+- **`isHealthy`** — `boolean` getter. `true` when the producer is connected to the broker and ready to accept publishes. Health checks read this to detect a wedged connection.
+- **`supportsRoutingKey`** — `boolean` getter. `true` if the transport can route by `routingKey` (e.g. RabbitMQ topic exchanges). Bus features that depend on routing-key dispatch consult this before stamping the header.
+- **`maxMessageSize`** — `number` (bytes). Hard upper bound on a single serialised envelope body. The bus rejects oversize messages before reaching the wire.
+- **`publish(typeName, body, options?, signal?)`** — fan-out publish. Implementations route the envelope to every interested consumer; for RabbitMQ this means publishing to the type's topic exchange. `options.routingKey` is honoured when `supportsRoutingKey` is `true`. The promise resolves once the broker has confirmed acceptance (or, for transports without publisher confirms, once the local send buffer has drained).
+- **`send(endpoint, typeName, body, options?, signal?)`** — point-to-point send to a specific endpoint queue. `options.routingSlipHopsCompleted` (when present) is stamped into the envelope so downstream consumers know which routing-slip position they occupy.
+- **`sendBytes(endpoint, typeName, body, options?, signal?)`** — same wire shape as `send` but bypasses framework-managed routing-slip hop counting. Used by the bus for internal hops (request/reply replies, stream control frames) that shouldn't advance the slip.
+
+## Implementing your own
+
+Any object satisfying the interface will work — the bus does not require a specific base class. The supported implementation is [`@serviceconnect/rabbitmq`](https://www.npmjs.com/package/@serviceconnect/rabbitmq); read its source for a worked example covering connection retry, publisher confirms, polymorphic fan-out, and graceful disposal.
+
+## See also
+
+- [`ITransportConsumer`](/ServiceConnect-NodeJS/reference/extension-points/transport/itransportconsumer/)
+- [Transport configuration](/ServiceConnect-NodeJS/reference/configuration/transport/)
+- [`Bus.producer`](/ServiceConnect-NodeJS/reference/bus/bus/)

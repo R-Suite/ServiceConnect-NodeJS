@@ -1,0 +1,44 @@
+---
+title: HandlerRegistry
+description: Handler storage with polymorphic ancestor walk on dispatch.
+---
+
+## Overview
+
+`HandlerRegistry` is the internal data structure the bus uses to store registered handlers and to resolve them on dispatch. Most users do not construct one directly — `createBus(...)` owns one and routes `bus.handle(...)` / `bus.unhandle(...)` through to it. This page documents the methods for users reading the source or building bespoke tooling on top of the bus.
+
+The registry's distinguishing behaviour is the polymorphic ancestor walk on dispatch: `handlersFor(typeName, context)` walks every parent type recorded in the supplied [`IMessageTypeRegistry`](/ServiceConnect-NodeJS/reference/extension-points/serialization/imessagetyperegistry/) and returns the union of all handlers along that chain, deduplicating each handler instance and tolerating cycles in the parent graph.
+
+## Import
+
+`HandlerRegistry` is exposed by the source tree but is not part of the published `@serviceconnect/core` surface. The class is reachable for testing and inspection at the source path `packages/core/src/handlers/registry.ts`.
+
+## Signature
+
+```ts
+export class HandlerRegistry {
+  constructor(typeRegistry: IMessageTypeRegistry);
+  add<T extends Message>(typeName: string, handler: Handler<T>): void;
+  remove<T extends Message>(typeName: string, handler: Handler<T>): void;
+  isHandled(typeName: string): boolean;
+  handlersFor(
+    typeName: string,
+    context: ConsumeContext,
+  ): Array<(message: Message, context: ConsumeContext) => Promise<void>>;
+}
+```
+
+## Members
+
+- **`constructor(typeRegistry)`** — bind the registry to an `IMessageTypeRegistry`. The two are coupled: `handlersFor` walks the parent graph the type registry returns, so handlers registered against an ancestor type only fire if that ancestor is also registered there.
+- **`add(typeName, handler)`** — append a handler to the list for `typeName`. Multiple handlers per type are supported and dispatched in registration order. Accepts all three [`Handler`](/ServiceConnect-NodeJS/reference/handlers/handler/) forms (function, class, factory).
+- **`remove(typeName, handler)`** — remove a previously registered handler. The handler reference must be the same function or class instance passed to `add`; the factory form is matched on the wrapper object.
+- **`isHandled(typeName)`** — `true` if at least one handler is registered against `typeName`. Note this does not walk parents — it asks whether a direct handler exists.
+- **`handlersFor(typeName, context)`** — return the resolved callables (one per registered handler) to invoke for an inbound message of type `typeName`. Starts at `typeName` and walks every parent returned by the underlying `IMessageTypeRegistry.parentsOf`, including each handler instance at most once even when it's registered against multiple ancestors. Cycles in the parent graph are tolerated via a visited-set. Factory-form handlers are constructed lazily with the supplied `ConsumeContext`.
+
+## See also
+
+- [`Handler`](/ServiceConnect-NodeJS/reference/handlers/handler/)
+- [`IMessageTypeRegistry`](/ServiceConnect-NodeJS/reference/extension-points/serialization/imessagetyperegistry/)
+- [`Bus.handle`](/ServiceConnect-NodeJS/reference/bus/bus/)
+- [Polymorphic Messages](/ServiceConnect-NodeJS/learn/messaging-patterns/polymorphic-messages/)

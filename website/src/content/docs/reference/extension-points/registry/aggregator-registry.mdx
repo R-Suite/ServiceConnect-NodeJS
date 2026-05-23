@@ -1,0 +1,56 @@
+---
+title: AggregatorRegistry
+description: Aggregator handler registry — batchSize, timeoutMs, store binding.
+---
+
+## Overview
+
+`AggregatorRegistry` is the index the bus uses to look up the aggregator (and the backing [`IAggregatorStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/iaggregatorstore/)) for an inbound message type. It records one entry per message type, capturing the aggregator implementation, the `batchSize()` and `timeout()` values it reported at registration time, and the store it was bound to.
+
+Most users do not construct one directly. The bus owns one and routes [`bus.registerAggregator(...)`](/ServiceConnect-NodeJS/reference/bus/bus/) through to it. The registry is exposed via [`bus.aggregatorRegistry`](/ServiceConnect-NodeJS/reference/bus/bus/) for inspection.
+
+## Import
+
+```ts
+import { AggregatorRegistry } from '@serviceconnect/core';
+import type { AggregatorEntry } from '@serviceconnect/core';
+```
+
+## Signature
+
+```ts
+export interface AggregatorEntry {
+  readonly aggregator: Aggregator<Message>;
+  readonly batchSize: number;
+  readonly timeoutMs: number;
+  readonly store: IAggregatorStore;
+}
+
+export class AggregatorRegistry {
+  register<T extends Message>(
+    messageType: string,
+    aggregator: Aggregator<T>,
+    store?: IAggregatorStore,
+  ): void;
+
+  entryFor(messageType: string): AggregatorEntry | undefined;
+  hasAny(): boolean;
+  timeouts(): ReadonlyMap<string, number>;
+  stores(): readonly IAggregatorStore[];
+}
+```
+
+## Members
+
+- **`register(messageType, aggregator, store?)`** — bind `aggregator` to `messageType` against `store`. The registry calls `aggregator.batchSize()` and `aggregator.timeout()` once at registration time and caches the values on the entry. Throws `AggregatorConfigurationError` if `batchSize()` is not a positive integer, if `timeout()` is not a positive finite number of milliseconds, or if `store` is not supplied. (The `store` parameter is declared optional for ergonomic reasons but is required in practice.)
+- **`entryFor(messageType)`** — return the `AggregatorEntry` registered against `messageType`, or `undefined` if none. Holds the aggregator, the cached batch size and timeout, and the bound store.
+- **`hasAny()`** — `true` if at least one aggregator is registered. The bus consults this when deciding whether to start the flush timer at `start`.
+- **`timeouts()`** — a read-only map from message type to `timeoutMs`. The flush timer passes this to [`IAggregatorStore.expireDueLeases`](/ServiceConnect-NodeJS/reference/extension-points/persistence/iaggregatorstore/) so the store can fire partial batches whose timeout has elapsed.
+- **`stores()`** — the unique set of `IAggregatorStore` instances bound to the registry. Used to fan timer ticks out to each distinct store exactly once even when several aggregators share one store.
+
+## See also
+
+- [`Bus.registerAggregator`](/ServiceConnect-NodeJS/reference/bus/bus/)
+- [`Aggregator`](/ServiceConnect-NodeJS/reference/process-managers/aggregator/)
+- [`IAggregatorStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/iaggregatorstore/)
+- [Aggregator](/ServiceConnect-NodeJS/learn/messaging-patterns/aggregator/)
