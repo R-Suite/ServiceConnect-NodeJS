@@ -4,8 +4,10 @@ import { aggregator } from './aggregator.js';
 import { polymorphic } from './polymorphic.js';
 import { pubsub } from './pubsub.js';
 import { requestReply } from './request-reply.js';
+import { routingSlip } from './routing-slip.js';
 import { saga } from './saga.js';
 import { send } from './send.js';
+import { streaming } from './streaming.js';
 
 export interface PatternsContext {
   readonly alphaQueue: string;
@@ -26,5 +28,7 @@ export function corePatterns(ctx: PatternsContext): readonly PatternFlow[] {
     polymorphic(),
     saga(ctx.alphaSagaStore, ctx.alphaTimeoutStore, ctx.betaSagaStore, ctx.betaTimeoutStore),
     aggregator(ctx.alphaAggregatorStore, ctx.betaAggregatorStore),
+    routingSlip(ctx.alphaQueue, ctx.betaQueue),
+    streaming(ctx.alphaQueue, ctx.betaQueue),
   ];
 }
