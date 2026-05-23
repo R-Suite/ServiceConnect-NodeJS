@@ -1,4 +1,7 @@
 import { RabbitMQContainer, type StartedRabbitMQContainer } from '@testcontainers/rabbitmq';
+import type { BrokerChaos } from '../chaos/index.js';
+import { noopChaos } from '../chaos/noop.js';
+import { testcontainersChaos } from '../chaos/testcontainers.js';
 import type { CliOptions } from '../cli.js';
 import { type BusPair, createBusPair } from '../lib/bus-pair.js';
 import type { FlowResult, PatternFlow } from '../lib/flow.js';
@@ -51,7 +54,17 @@ export async function runSoak(opts: CliOptions, log: Logger): Promise<ReportShap
     | { baseline: number; final: number; deltaMb: number; budgetMb: number; ok: boolean }
     | undefined;
 
+  const chaos: BrokerChaos =
+    opts.chaos === 'testcontainers'
+      ? testcontainersChaos({
+          intervalMs: opts.chaosIntervalSec * 1000,
+          downtimeMs: opts.chaosDowntimeSec * 1000,
+          logger: log,
+        })
+      : noopChaos();
+
   try {
+    await chaos.start();
     pair = await createBusPair({ brokerUrl, persistence: alphaPersistence });
     const patterns: readonly PatternFlow[] = corePatterns({
       alphaQueue: pair.alphaQueue,
@@ -120,10 +133,25 @@ export async function runSoak(opts: CliOptions, log: Logger): Promise<ReportShap
     exitCode = 1;
     log.error(`soak: fatal: ${fatal}`);
   } finally {
+    await chaos.stop();
     if (pair) await pair.dispose();
     await betaPersistence.dispose();
     if (container) await container.stop();
   }
+
+  const chaosEvents = chaos.events();
+  const chaosReport =
+    opts.chaos === 'testcontainers'
+      ? {
+          enabled: true,
+          events: chaosEvents.map((e) => ({
+            stoppedAt: e.stoppedAt.toISOString(),
+            startedAt: e.startedAt.toISOString(),
+            downtimeMs: e.downtimeMs,
+            recoveryMs: {} as Record<string, number>,
+          })),
+        }
+      : undefined;
 
   const report: ReportShape = {
     reportVersion: 1,
@@ -131,6 +159,7 @@ export async function runSoak(opts: CliOptions, log: Logger): Promise<ReportShap
     startedAt: startedAt.toISOString(),
     durationSec: Math.round((Date.now() - startedAt.getTime()) / 1000),
     persistence: opts.persistence,
+    chaos: chaosReport,
     patterns: patternStats,
     memory: memoryReport,
     fatalError: fatal,
