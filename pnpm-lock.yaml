@@ -30,6 +30,25 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.19.19)
 
+  examples/aggregator:
+    dependencies:
+      '@serviceconnect/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@serviceconnect/example-lib':
+        specifier: workspace:*
+        version: link:../lib
+      '@serviceconnect/persistence-memory':
+        specifier: workspace:*
+        version: link:../../packages/persistence-memory
+      '@serviceconnect/rabbitmq':
+        specifier: workspace:*
+        version: link:../../packages/rabbitmq
+    devDependencies:
+      tsx:
+        specifier: ^4.19.0
+        version: 4.22.3
+
   examples/lib: {}
 
   examples/polymorphic:
