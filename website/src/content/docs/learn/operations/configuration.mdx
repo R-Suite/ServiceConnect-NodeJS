@@ -51,6 +51,7 @@ const bus = createBus({
       url: process.env.AMQP_URL ?? 'amqp://localhost',
       connectionName: process.env.SERVICE_NAME ?? 'orders',
       consumer: {
+        // 32 here is a chosen fallback, not the framework default (which is 100).
         prefetch: Number.parseInt(process.env.PREFETCH ?? '32', 10),
         maxRetries: 5,
       },
@@ -91,6 +92,7 @@ const pinoLogger: Logger = {
   info:  (msg, fields) => pino.info(fields, msg),
   warn:  (msg, fields) => pino.warn(fields, msg),
   error: (msg, fields) => pino.error(fields, msg),
+  fatal: (msg, fields) => pino.fatal(fields, msg),
 };
 
 const bus = createBus({
@@ -99,7 +101,7 @@ const bus = createBus({
 });
 ```
 
-The `Logger` interface is small on purpose. Anything that implements those five methods works — Pino, Bunyan, Winston, or a hand-rolled wrapper that adds a correlation-id field.
+The `Logger` interface is small on purpose. Anything that implements those six methods (`trace`, `debug`, `info`, `warn`, `error`, `fatal`) works — Pino, Bunyan, Winston, or a hand-rolled wrapper that adds a correlation-id field. Only `child` is optional.
 
 ## Common pitfalls
 

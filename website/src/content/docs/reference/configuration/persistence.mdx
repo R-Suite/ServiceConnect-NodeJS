@@ -25,7 +25,7 @@ import { memorySagaStore } from '@serviceconnect/persistence-memory';
 export function memorySagaStore(): ISagaStore;
 ```
 
-Volatile saga-state store keyed by `(processName, correlationId)`. Suitable for unit and integration tests against `fakeTransport`.
+Volatile saga-state store keyed by `(dataType, correlationId)`. Suitable for unit and integration tests against `fakeTransport`.
 
 ```ts
 const sagaStore = memorySagaStore();

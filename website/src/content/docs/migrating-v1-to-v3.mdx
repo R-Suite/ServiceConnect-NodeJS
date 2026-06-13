@@ -284,8 +284,8 @@ The table maps every v1 default in `lib/settings.js` to its v3 equivalent. Anyth
 | `amqpSettings.queue.noAck` | Not exposed; v3 always uses explicit ack. |
 | `amqpSettings.queue.maxPriority` | Set `'x-max-priority'` in `transport.consumer.queueArguments`. |
 | `amqpSettings.host` | `transport: createRabbitMQTransport({ url: 'amqp://...' })`. |
-| `amqpSettings.ssl.enabled` | Use `amqps://` (or `?ssl=true`) in the transport `url`. |
-| `amqpSettings.ssl.key` / `cert` / `ca` / `pfx` | Configure at the AMQP URL or via your TLS termination layer; v3 does not pass certificate files through `RabbitMQTransportOptions`. |
+| `amqpSettings.ssl.enabled` | Set `tls: true` on `RabbitMQTransportOptions` (equivalent to using an `amqps://` URL). |
+| `amqpSettings.ssl.key` / `cert` / `ca` / `pfx` | Pass them via `RabbitMQTransportOptions.tls` as a `node:tls` `ConnectionOptions` object (`{ ca, cert, key, pfx }`); the transport forwards it to `rabbitmq-client`. `tls` accepts `boolean | node:tls.ConnectionOptions`. |
 | `amqpSettings.retryDelay` | `transport.consumer.retryDelay` (default `3000`). |
 | `amqpSettings.maxRetries` | `transport.consumer.maxRetries` (default `3`). |
 | `amqpSettings.errorQueue` | `transport.consumer.errorQueue` (default `'errors'`; set `null` to disable). |
@@ -297,7 +297,7 @@ The table maps every v1 default in `lib/settings.js` to its v3 equivalent. Anyth
 | `filters.after` | `bus.use('afterConsuming', asFilter(fn))`. |
 | `handlers` (registered up-front in config) | `bus.handle<T>(typeName, fn)` per type. Polymorphic parents declared via the registry. |
 | `client` (custom transport class) | Pass any `{ producer, consumer }` pair conforming to `ITransportProducer` + `ITransportConsumer`. |
-| `logger` | `BusOptions.logger`. Interface unchanged: `{ info, warn, error, debug }`. |
+| `logger` | `BusOptions.logger`. The v3 `Logger` has six methods — `trace`, `debug`, `info`, `warn`, `error`, `fatal` — each `(msg: string, meta?: object)`; only `child` is optional. |
 
 v3-only configuration without a v1 equivalent:
 

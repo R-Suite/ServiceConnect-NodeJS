@@ -5,7 +5,7 @@ description: Plain TypeScript types, mapped to type strings via the message type
 
 ## Overview
 
-In ServiceConnect a **message** is a plain TypeScript value. An interface, a `type` alias, or a class — whichever you prefer. There is no `Message` base class to extend, no required decorator, no marker interface. If it serialises to JSON, it can travel on the bus.
+In ServiceConnect a **message** is a plain TypeScript value. An interface, a `type` alias, or a class — whichever you prefer. There is no required decorator and no runtime base class to extend; if it serialises to JSON, it can travel on the bus. The one contract is the `Message` interface exported from `@serviceconnect/core`: every message carries a `correlationId`, and the bus generics (`register<T>`, `publish<T>`, `send<T>`, `handle<T>`) all constrain `T extends Message`. So your message types should `extends Message` to satisfy that bound.
 
 What the framework needs from you is a **type string** to put on the wire. The mapping from your TypeScript type to that string lives in the **message type registry** — an `IMessageTypeRegistry` built by `createMessageTypeRegistry()`. The registry is the single source of truth for "what does this type call itself when it leaves the process", and it is shared between the bus and the transport so that the transport can declare exchanges and bind queues for every type you care about.
 
@@ -27,9 +27,9 @@ A few practical consequences:
 ## API touch-point
 
 ```ts
-import { createMessageTypeRegistry } from '@serviceconnect/core';
+import { createMessageTypeRegistry, type Message } from '@serviceconnect/core';
 
-interface DomainEvent {
+interface DomainEvent extends Message {
   occurredAt: string;
 }
 

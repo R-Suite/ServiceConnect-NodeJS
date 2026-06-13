@@ -31,7 +31,7 @@ export type ConsumeCallback = (envelope: Envelope, signal: AbortSignal) => Promi
 - **`success`** — `boolean`. `true` if the handler chain ran to completion without throwing.
 - **`notHandled`** — `boolean`. `true` if no handler was registered for the inbound message type. Transports typically log and ack `notHandled` envelopes (the message reached a queue we own, but nothing here cares about it).
 - **`error`** — `Error | undefined`. Set when a handler threw; carries the original exception so the transport can log it and decide its retry behaviour.
-- **`terminalFailure`** — `boolean`. `true` for unrecoverable errors (the canonical example is [`TerminalDeserializationError`](/ServiceConnect-NodeJS/learn/operations/error-handling/) — the body could not be deserialised, so retrying will not help). Transports must skip retry and route the envelope directly to the error queue.
+- **`terminalFailure`** — `boolean`. `true` for unrecoverable errors raised during the deserialize step. Both [`TerminalDeserializationError`](/ServiceConnect-NodeJS/learn/operations/error-handling/) (the body could not be deserialised) and schema `ValidationError` (the payload failed its registered schema) are classified terminal — retrying will not help. Transports must skip retry and route the envelope directly to the error queue.
 
 ## How handler outcomes map to `ConsumeResult`
 
@@ -40,9 +40,10 @@ export type ConsumeCallback = (envelope: Envelope, signal: AbortSignal) => Promi
 | Resolves normally | `true` | `false` | `undefined` | `false` |
 | Throws a generic error | `false` | `false` | the thrown error | `false` |
 | Throws `TerminalDeserializationError` | `false` | `false` | the thrown error | `true` |
-| No handler registered for type | `false` | `true` | `undefined` | `false` |
+| Throws schema `ValidationError` | `false` | `false` | the thrown error | `true` |
+| No handler registered for type | `true` | `true` | `undefined` | `false` |
 
-A `false` `success` with `terminalFailure: false` is the retry path: the transport may requeue with its retry policy. With `terminalFailure: true`, the transport bypasses retry entirely.
+A `false` `success` with `terminalFailure: false` is the retry path: the transport may requeue with its retry policy. With `terminalFailure: true`, the transport bypasses retry entirely. A `true` `notHandled` always implies `success: true` — the envelope is acked, never retried (the message reached a queue we own, but nothing here handles its type).
 
 ## `ConsumeCallback`
 

@@ -5,7 +5,24 @@ description: Release notes and changelog for @serviceconnect/* and the legacy se
 
 ## v3 (current)
 
-v3 packages are published as `@serviceconnect/*`. Per-package changelogs are managed by [Changesets](https://github.com/changesets/changesets); each release surfaces on the [GitHub Releases page](https://github.com/R-Suite/ServiceConnect-NodeJS/releases).
+v3 packages are published as `@serviceconnect/*`. Install the core packages with:
+
+```bash
+npm install @serviceconnect/core @serviceconnect/rabbitmq
+```
+
+Each release surfaces on the [GitHub Releases page](https://github.com/R-Suite/ServiceConnect-NodeJS/releases).
+
+### How releases work
+
+Releases are **tag-driven** — there is no Changesets setup and no version to bump in the source tree. Pushing a `v*` git tag to `master` triggers the [release workflow](https://github.com/R-Suite/ServiceConnect-NodeJS/blob/master/.github/workflows/release.yml), which stamps the tag's version onto every package and publishes them to npm:
+
+- A plain version tag (e.g. `v1.0.0`) publishes to the npm **`latest`** dist-tag — what a normal `npm install @serviceconnect/core` picks up.
+- A pre-release tag (any hyphenated SemVer, e.g. `v1.0.0-rc.1`) publishes to the **`next`** dist-tag instead, so `npm install` never picks it up by accident. Consumers opt into pre-releases explicitly:
+
+  ```bash
+  npm install @serviceconnect/core@next
+  ```
 
 Highlights of the v3 rewrite:
 

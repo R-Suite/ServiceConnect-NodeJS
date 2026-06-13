@@ -58,11 +58,17 @@ Wraps an [`ITransportProducer`](/ServiceConnect-NodeJS/reference/extension-point
 
 The returned producer transparently forwards `isHealthy`, `supportsRoutingKey`, `maxMessageSize`, and `Symbol.asyncDispose` to the underlying producer.
 
-Replace the producer on the transport object before constructing the bus:
+Wrap the producer at bus construction (the transport's `producer` / `consumer` are readonly, so wrap them in the `transport` you pass to `createBus` rather than mutating the transport object):
 
 ```ts
 const transport = createRabbitMQTransport({ url: 'amqp://localhost' });
-transport.producer = telemetryProducer(transport.producer);
+const bus = createBus({
+  transport: {
+    producer: telemetryProducer(transport.producer),
+    consumer: transport.consumer,
+  },
+  // ...rest of your bus options
+});
 ```
 
 ## telemetryConsumeWrapper
@@ -103,10 +109,12 @@ const tracer = new NodeTracerProvider();
 tracer.register();
 
 const transport = createRabbitMQTransport({ url: 'amqp://localhost' });
-transport.producer = telemetryProducer(transport.producer);
 
 const bus = createBus({
-  transport,
+  transport: {
+    producer: telemetryProducer(transport.producer),
+    consumer: transport.consumer,
+  },
   queue: { name: 'orders' },
   consumeWrapper: telemetryConsumeWrapper(),
 });

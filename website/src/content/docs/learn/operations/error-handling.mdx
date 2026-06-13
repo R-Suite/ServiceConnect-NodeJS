@@ -19,26 +19,18 @@ The defaults shipped with the transport handle the common case well; tuning them
 
 The default consumer policy is:
 
-- **Retry up to `maxRetries`** times (`3` by default) with `retryDelay` ms (`3000`) in between. Each retry is a fresh broker delivery, so `ctx.deliveryAttempt` increments and the message goes back through your whole pipeline.
-- **After the final retry**, the framework publishes the message to the **error queue** (`'errors'` by default, configurable via `transport.consumer.errorQueue`) along with headers describing the failure (retry count, last error, original queue).
-- **Terminal errors short-circuit retries**: throwing `TerminalDeserializationError` routes directly to the error queue with zero retries. Use this when you've decided the message is unrecoverable without the rest of the world changing.
-- **Audit queue (opt-in)**: setting `auditEnabled: true` and an `auditQueue` mirrors every consumed message to a separate queue. Off by default because the disk cost is real.
+- **`maxRetries` is the total number of deliveries** before error-queue routing (`3` by default), with `retryDelay` ms (`3000`) in between. So `maxRetries=3` means the initial delivery plus 2 redeliveries — 3 attempts in total — before the message is routed to the error queue. Each retry is a fresh broker delivery, so the `RetryCount` AMQP header (surfaced as `ctx.headers.retryCount`) increments and the message goes back through your whole pipeline.
+- **After the final delivery fails**, the framework publishes the message to the **error queue** (`'errors'` by default, configurable via `transport.consumer.errorQueue`) along with headers describing the failure (retry count, last error, original queue).
+- **Terminal classification happens only in the deserialize step**: a `TerminalDeserializationError` thrown by the serializer, or a Standard Schema `ValidationError`, routes the message directly to the error queue with zero retries. A handler that throws is *always* treated as a retryable failure — there is no way to short-circuit retries from inside a handler.
+- **Audit queue (opt-in)**: setting `auditEnabled: true` and an `auditQueue` mirrors every consumed message to a separate queue (default `'audit'`). Off by default (`auditEnabled` defaults to `false`) because the disk cost is real.
 - **Unhandled message types**: if no handler is registered for a message type, the consumer either acks (default) or dead-letters depending on `deadLetterUnhandled`.
 
-Inside a handler, you mostly just `throw`. The interesting case is when you can locally classify the error as "retry might help" versus "no chance, send to errors now":
+Inside a handler, you just `throw` to signal failure. Every handler throw is treated the same way — as a retryable failure — regardless of the error type, so the message is redelivered until `maxRetries` is reached and then routed to the error queue. There is no way to skip retries from inside a handler; zero-retry routing only happens for deserialization and schema-validation failures (see below).
 
 ```ts
-import { TerminalDeserializationError } from '@serviceconnect/core';
-
 bus.handle<ChargeCard>('ChargeCard', async (msg, ctx) => {
-  try {
-    await payments.charge(msg.orderId, msg.total);
-  } catch (e) {
-    if (isTransient(e)) {
-      throw e; // requeued up to maxRetries
-    }
-    throw new TerminalDeserializationError(`unrecoverable: ${(e as Error).message}`);
-  }
+  // Any throw here is retried up to maxRetries, then routed to the error queue.
+  await payments.charge(msg.orderId, msg.total);
 });
 ```
 
@@ -77,7 +69,7 @@ These are plain AMQP headers, visible in the management UI and accessible from a
 
 ### Audit vs error
 
-The audit queue is a tee on the **consume** path: every message the consumer accepts is copied to the audit queue with a `MessageProcessedAt` header. It is not a retry-tracker — failed messages still go to the error queue, audit just gives you a copy of every successful processing event. Use it for compliance ("did we ever process this order?") or replay scenarios; it is not a cheap dev tool, since it doubles your durable write volume on the broker.
+The audit queue is a tee on the **consume** path: every message the consumer accepts is copied to the audit queue with a `TimeProcessed` header (an ISO timestamp) and a `Success: 'true'` header. Auditing is off by default (`auditEnabled` defaults to `false`); when enabled without an explicit `auditQueue`, the default queue name is `'audit'`. It is not a retry-tracker — failed messages still go to the error queue, audit just gives you a copy of every successful processing event. Use it for compliance ("did we ever process this order?") or replay scenarios; it is not a cheap dev tool, since it doubles your durable write volume on the broker.
 
 ### Error classes the framework throws
 
@@ -95,7 +87,7 @@ Most of these are caught and translated into queue routing by the consumer; a fe
 - **`RequestTimeoutError`** / **`RequestSendCancelledError`** / **`AbortError`** — request/reply outcomes. See [Cancellation](/ServiceConnect-NodeJS/learn/operations/cancellation/) for the full failure taxonomy.
 - **`ConcurrencyError`** / **`DuplicateSagaError`** — saga persistence outcomes; see [Process Manager](/ServiceConnect-NodeJS/learn/messaging-patterns/process-manager/).
 - **`StreamFaultedError`** / **`StreamSequenceError`** — streaming outcomes; see [Streaming](/ServiceConnect-NodeJS/learn/messaging-patterns/streaming/).
-- **`TerminalDeserializationError`** — handler-side. Throw it from your handler to skip retries and send straight to the error queue.
+- **`TerminalDeserializationError`** — serializer-side. Thrown by a serializer during the deserialize step to mark a payload as unrecoverable; the framework routes it straight to the error queue with zero retries. It is *not* a handler signal — throwing it from a handler behaves like any other handler throw (a normal retryable failure).
 
 ### When to set `deadLetterUnhandled`
 
@@ -107,7 +99,7 @@ If your queue can receive message types you do not have handlers for (a publishe
   - Returning a string like `'retry'` from a handler does nothing. Throw to retry.
   - Setting `maxRetries=0` does **not** mean "no error queue routing" — the first failure still goes to errors. To suppress error-queue routing, set `errorQueue: null` (and accept the loss of visibility).
   - Treating `errorQueue: null` as production-safe. Combine with audit + alerting if you really want to go silent.
-  - Throwing `TerminalDeserializationError` for retryable problems. It means "do not retry", so use it only when retries are genuinely pointless.
+  - Expecting a thrown error type to skip retries. A handler throw is always retried up to `maxRetries`; zero-retry routing only happens for deserialization/validation failures, not handler throws.
   - Forgetting to register a handler and assuming the message will retry forever — without `deadLetterUnhandled: true`, the default is to ack and drop.
 </Aside>
 

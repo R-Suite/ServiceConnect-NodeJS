@@ -13,19 +13,23 @@ Most users do not construct one directly. The bus owns one and routes [`bus.regi
 
 ```ts
 import { AggregatorRegistry } from '@serviceconnect/core';
-import type { AggregatorEntry } from '@serviceconnect/core';
 ```
 
-## Signature
+`AggregatorEntry` is not exported from the package barrel. Its shape, for
+reference:
 
 ```ts
-export interface AggregatorEntry {
+interface AggregatorEntry {
   readonly aggregator: Aggregator<Message>;
   readonly batchSize: number;
   readonly timeoutMs: number;
   readonly store: IAggregatorStore;
 }
+```
 
+## Signature
+
+```ts
 export class AggregatorRegistry {
   register<T extends Message>(
     messageType: string,

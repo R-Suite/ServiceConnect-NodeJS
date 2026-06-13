@@ -20,7 +20,7 @@ It is also the right shape when a downstream context truly only needs the **base
 Avoid polymorphism when each subtype carries materially different semantics that demand bespoke handling. If your `DomainEvent` handler has to `switch` on `messageType` and branch into wildly different logic, you have lost the win — register concrete handlers via [Pub/Sub](/ServiceConnect-NodeJS/learn/messaging-patterns/pub-sub/) instead.
 
 <Aside type="caution">
-  The parents-of map is **registry-scoped**. A consumer that only registers `OrderPlaced` (without declaring its `DomainEvent` parent) will not be bound to the `DomainEvent` exchange, and will silently miss messages published as the base type. Keep the registry definitions consistent across services.
+  Base-type fanout depends on the **producing** side. A producer that is **not** built with `rabbitMQWithRegistry` (or whose registry lacks the `parents` declaration) never creates the `OrderPlaced → DomainEvent` exchange binding, so a publish of `OrderPlaced` never reaches `DomainEvent` subscribers — even when those consumers are correctly bound to the `DomainEvent` exchange. Wire the producer with `rabbitMQWithRegistry` and keep the registry's `parents` definitions consistent across services.
 </Aside>
 
 ## Example
@@ -55,9 +55,10 @@ The `audit` queue handles `DomainEvent`. When a producer somewhere else in the t
 ## Behind the scenes
 
 - The parents-of mapping is captured at registration time on the registry: `registry.register<OrderPlaced>('OrderPlaced', { parents: ['DomainEvent'] })` records that `OrderPlaced` is-a `DomainEvent`.
-- At startup the transport walks each handler registration and binds the consumer queue to BOTH the concrete-type exchange AND every parent-type exchange returned by `registry.parentsOf(typeName)`.
-- One publish of an `OrderPlaced` reaches every queue bound to `OrderPlaced` and every queue bound to `DomainEvent` — the broker does the fanout, the framework just declares the bindings.
-- This is why we use `rabbitMQWithRegistry` here: it threads the registry's `parentsOf` lookup into the transport. The plain `createRabbitMQTransport` factory has no view of inheritance.
+- A consumer binds its queue only to the type exchanges it actually registers — register `DomainEvent` and the queue binds to the `DomainEvent` exchange. Consumers do **not** use `parentsOf` to add parent-exchange bindings.
+- The inheritance link is wired on the **producing** side. When a producer built with `rabbitMQWithRegistry` first publishes `OrderPlaced`, it declares the `OrderPlaced` exchange and, for every parent returned by `registry.parentsOf('OrderPlaced')`, declares the parent exchange and creates an exchange-to-exchange binding `OrderPlaced → DomainEvent`.
+- One publish of an `OrderPlaced` reaches every queue bound to `OrderPlaced` and — thanks to that producer-side `OrderPlaced → DomainEvent` binding — every queue bound to `DomainEvent`. The broker does the fanout; the framework just declares the exchanges and bindings.
+- This is why the producer uses `rabbitMQWithRegistry`: it threads the registry's `parentsOf` lookup into the transport so those concrete→parent exchange bindings get created. The plain `createRabbitMQTransport` factory has no view of inheritance, so it never creates them.
 
 ## See also
 

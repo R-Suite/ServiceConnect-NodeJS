@@ -7,7 +7,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 ## Overview
 
-Content-based routing makes delivery decisions at **runtime** based on what is in the message. A filter on the `'beforeConsuming'` stage inspects the envelope — headers, payload, message type, whatever — and either lets it continue to the local handler, redirects it to a different queue via `bus.send(...)`, or drops it outright. The producer does not need to know the routing rules; the consumer side gets to evolve them without changing the wire contract.
+Content-based routing makes delivery decisions at **runtime** based on what is in the message. A filter on the `'beforeConsuming'` stage inspects the envelope — its `headers` and raw `body` — and either lets it continue to the local handler, redirects it to a different queue via `bus.send(...)`, or drops it outright. The producer does not need to know the routing rules; the consumer side gets to evolve them without changing the wire contract.
 
 ## When to use
 
@@ -25,15 +25,22 @@ If the routing decision is **static and known by the caller**, a routing slip or
 
 ## Example
 
+The destination type must be registered before the filter can re-send it — `bus.send` throws `MessageTypeNotRegisteredError` for an unregistered type:
+
 ```ts
 import { FilterAction, asFilter } from '@serviceconnect/core';
+
+bus.registerMessage<AuditEvent>('AuditEvent');
 
 bus.use(
   'beforeConsuming',
   asFilter(async (envelope) => {
     const region = envelope.headers.region;
     if (region && region !== 'eu-west-1') {
-      await bus.send('AuditEvent', envelope.message, { endpoint: `audit-${region}` });
+      // The filter runs BEFORE deserialization, so the envelope carries only `headers`
+      // and the raw `body` (Uint8Array). Decode the body explicitly to forward it.
+      const payload = JSON.parse(new TextDecoder().decode(envelope.body)) as AuditEvent;
+      await bus.send('AuditEvent', payload, { endpoint: `audit-${region}` });
       return FilterAction.Stop;
     }
     return FilterAction.Continue;
@@ -41,11 +48,11 @@ bus.use(
 );
 ```
 
-The filter inspects the `region` header. If the message is for this region (`'eu-west-1'`) it returns `Continue` and the handler runs normally. Otherwise the message is re-sent to a region-specific audit queue and the local pipeline stops — the local handler never sees it.
+The filter inspects the `region` header. If the message is for this region (`'eu-west-1'`) it returns `Continue` and the handler runs normally. Otherwise the body is decoded, re-sent to a region-specific audit queue as a registered `AuditEvent`, and the local pipeline stops — the local handler never sees it.
 
 ## Behind the scenes
 
-- Filters receive the full `Envelope` — `headers`, `message`, `messageType` — so any field is fair game for routing decisions. There is no separate "router" object; it is just a filter that returns `Stop` after redirecting.
+- Filters receive the `Envelope` — `headers` and the raw `body` (Uint8Array). The `beforeConsuming` stage runs **before** deserialization, so there is no `message` object yet; route on a header (the concrete type is available as the `messageType` header) or decode `body` yourself. There is no separate "router" object; it is just a filter that returns `Stop` after redirecting.
 - Combine `bus.send(...)` (or `bus.publish(...)`) inside the filter with `FilterAction.Stop` to re-route a message without ever processing it locally. The local handler is skipped; the rerouted copy goes through the destination queue's pipeline as a fresh delivery.
 - Routing slip is a different pattern: that's a pre-baked sequence of destinations attached to the message; content-based routing decides at delivery time and the message itself does not carry an itinerary.
 

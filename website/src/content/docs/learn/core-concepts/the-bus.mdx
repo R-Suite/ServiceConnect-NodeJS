@@ -49,6 +49,7 @@ await bus.stop();
 
 `createBus` returns a `Bus`. Its surface is small on purpose:
 
+- `bus.registerMessage<T>(typeName, options?)` — register a message type (the bus also exposes `route`, `use`, and the underlying `registry`). Registration is a prerequisite: `handle`, `publish`, and `send` all throw `MessageTypeNotRegisteredError` unless the type has been registered first, via `bus.registerMessage(...)` or directly on the shared `registry.register(...)`.
 - `bus.handle<T>(typeName, fn)` — register a typed handler for the given message type string.
 - `bus.publish<T>(typeName, payload, options?)` — fan out via the type's exchange.
 - `bus.send<T>(typeName, payload, { endpoint, headers? })` — point-to-point to a named queue.

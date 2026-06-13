@@ -15,9 +15,18 @@ You usually don't construct one directly: `createBus(...)` builds a default regi
 import type {
   IMessageTypeRegistry,
   MessageRegistration,
-  RegisterOptions,
 } from '@serviceconnect/core';
 import { createMessageTypeRegistry } from '@serviceconnect/core';
+```
+
+`RegisterOptions` is not exported from the package barrel. Its shape is the
+`options?` parameter of `register()`, documented inline below:
+
+```ts
+interface RegisterOptions<T extends Message = Message> {
+  readonly schema?: StandardSchemaV1<T>;   // optional Standard Schema validator for this type
+  readonly parents?: readonly string[];    // parent type names for polymorphic routing
+}
 ```
 
 ## Signature
@@ -26,11 +35,6 @@ import { createMessageTypeRegistry } from '@serviceconnect/core';
 export interface MessageRegistration {
   readonly typeName: string;
   readonly schema?: StandardSchemaV1;
-  readonly parents?: readonly string[];
-}
-
-export interface RegisterOptions<T extends Message = Message> {
-  readonly schema?: StandardSchemaV1<T>;
   readonly parents?: readonly string[];
 }
 

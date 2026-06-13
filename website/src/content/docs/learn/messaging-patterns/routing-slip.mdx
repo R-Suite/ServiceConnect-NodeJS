@@ -69,8 +69,9 @@ bus.use(
 ## Behind the scenes
 
 - The slip is a JSON-encoded queue list carried in the `RoutingSlip` header.
-- Each consumer forwards to the next destination on successful processing; on throw, the message stops where it is and routes to that queue's error queue.
-- The framework removes the current destination after the handler returns successfully, so the header shrinks by one entry per hop.
+- Each consumer forwards to the next destination on any **success-classified** exit; on throw, the message stops where it is and routes to that queue's error queue.
+- Forwarding is not limited to registered message handlers. The slip also advances past a **passive hop** — a queue where the type is registered but nothing handles it — and on the success branch of a **saga** or **aggregator**. Any hop that consumes the message successfully strips the current entry and forwards the remainder, so a routed message is never acked with its itinerary silently dropped.
+- The framework removes the current destination after a successful exit, so the header shrinks by one entry per hop.
 - `bus.route(...)` is preferred over manually setting the header; the helpers `serialiseRoutingSlip` and `parseRoutingSlip` exist for advanced inspection.
 
 ## See also

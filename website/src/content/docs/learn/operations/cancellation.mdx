@@ -7,7 +7,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 ## Overview
 
-Cancellation in v3 is built on the platform's `AbortSignal`. Every handler gets `ctx.signal`, every outbound request accepts `{ signal }`, and `bus.stop()` aborts the signals it owns so in-flight work can unwind without being killed mid-byte.
+Cancellation in v3 is built on the platform's `AbortSignal`. Every handler gets `ctx.signal`, every outbound request accepts `{ signal }`, and `bus.stop()` aborts the handler signals it owns so in-flight work can unwind without being killed mid-byte. (Note: any `AbortSignal` you pass to `bus.stop()` itself is currently ignored — see below.)
 
 ## The problem
 
@@ -57,7 +57,7 @@ try {
 }
 ```
 
-At the process boundary, wire OS signals to `bus.stop()`. Pass an `AbortSignal` to `stop` itself if you need a hard deadline — anything still draining at that point will be force-aborted.
+At the process boundary, wire OS signals to `bus.stop()`. Note that `bus.stop()` accepts an `AbortSignal` parameter but currently **ignores it** — there is no signal-bounded wait and nothing is force-aborted at a deadline. `stop()` waits for in-flight handlers to drain after aborting their `ctx.signal`s; if a handler ignores its signal, `stop()` will wait for it rather than killing it at a deadline. The parameter is reserved for a future hard-deadline implementation, so passing one is harmless but has no effect today.
 
 ```ts
 const shutdown = new AbortController();
@@ -86,7 +86,7 @@ The composed signal fires as soon as either source aborts; the rest of the handl
 
 ### What `bus.stop()` actually does
 
-`bus.stop()` runs in three phases. First it stops the broker consumer so no new deliveries arrive. Second it aborts every active handler signal so in-flight work can wind down. Third it waits — bounded by the signal you pass — for handlers to finish, then closes channels and connections. Handlers that ignore `ctx.signal` will be cancelled at the connection close, not gracefully. That's why threading the signal through every async call matters: the difference between "5ms shutdown" and "10s shutdown" is whether your I/O is signal-aware.
+`bus.stop()` runs in three phases. First it stops the broker consumer so no new deliveries arrive. Second it aborts every active handler signal so in-flight work can wind down. Third it waits for handlers to finish — this wait is currently *unbounded* (the `AbortSignal` argument to `stop()` is ignored, so there is no deadline) — then closes channels and connections. Handlers that ignore `ctx.signal` will be cancelled at the connection close, not gracefully. That's why threading the signal through every async call matters: the difference between "5ms shutdown" and "10s shutdown" is whether your I/O is signal-aware.
 
 ## Common pitfalls
 

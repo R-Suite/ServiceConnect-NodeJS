@@ -94,7 +94,7 @@ The bare `new Promise<void>(() => {})` keeps the event loop alive without burnin
 ```ts
 await using bus = createBus({ /* ... */ });
 await bus.start();
-await bus.send('orders', 'PlaceOrder', { orderId: 'o-1' });
+await bus.send('PlaceOrder', { orderId: 'o-1' }, { endpoint: 'orders' });
 // scope exit calls bus.stop() automatically
 ```
 
@@ -111,7 +111,7 @@ Useful for tests because forgetting to stop the bus leaks broker connections acr
 ## Common pitfalls
 
 <Aside type="caution">
-  - `bus.start()` is single-shot — calling it twice throws `InvalidOperationError`. If your framework runs bootstrap hooks more than once (some test runners do), guard the call.
+  - `bus.start()` is idempotent — a second call while the bus is running is a no-op, so you do not need to guard double-bootstrap. It only throws (a plain `Error`) if you call `start()` after `stop()`; once stopped, a bus cannot be restarted and you must create a new instance.
   - Forgetting `await` on `bus.stop()` during shutdown — handlers may not drain, and the next deploy ships with a tail of redeliveries.
   - Mapping `consumerBusy` to liveness — it returns `degraded` when nothing's flowing, which can trip your orchestrator into restarting healthy idle pods. Keep it on readiness or a soft alert.
 </Aside>

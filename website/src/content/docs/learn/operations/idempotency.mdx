@@ -7,7 +7,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 ## Overview
 
-ServiceConnect over RabbitMQ delivers each message **at least once**. The framework will retry, the broker will redeliver, and at scale these aren't edge cases — they're traffic. Handlers therefore need to be idempotent: running the same delivery twice must have the same observable effect as running it once. The framework provides the building block — `ctx.messageId`, stable across redeliveries of the same publish — and the rest is application discipline.
+ServiceConnect over RabbitMQ delivers each message **at least once**. The framework will retry, the broker will redeliver, and at scale these aren't edge cases — they're traffic. Handlers therefore need to be idempotent: running the same delivery twice must have the same observable effect as running it once. The framework provides the building block — `ctx.messageId`, stable across redeliveries of the same publish (though it is `MessageId | undefined`, since it mirrors the inbound header and can be absent) — and the rest is application discipline.
 
 ## The problem
 
@@ -23,16 +23,24 @@ Two patterns cover almost all cases. Pick the one that fits the handler.
 
 For handlers that produce a non-idempotent side effect (charging a card, sending an email via a third party, calling an external API that creates records), record the `messageId` in the same transaction as the side effect. If the row already exists, short-circuit.
 
+`ctx.messageId` is `MessageId | undefined` — it mirrors the inbound `MessageId` header, which can be absent. Guard the missing-id case before using it as a dedup key: a message with no id cannot be safely deduplicated, so decide deliberately what to do (here we proceed without a dedup row, but you may prefer to reject).
+
 ```ts
 bus.handle<ChargeCard>('ChargeCard', async (msg, ctx) => {
+  if (ctx.messageId === undefined) {
+    // No id to dedup on — proceed (or reject, depending on your guarantees).
+    await db.payments.charge(msg.orderId, msg.total);
+    return;
+  }
+  const messageId = ctx.messageId;
   const inserted = await db.tx(async (t) => {
-    const fresh = await t.processed.tryInsert(ctx.messageId);
+    const fresh = await t.processed.tryInsert(messageId);
     if (!fresh) return false;
     await t.payments.charge(msg.orderId, msg.total);
     return true;
   });
   if (!inserted) {
-    ctx.logger.info({ messageId: ctx.messageId }, 'duplicate delivery — skipped');
+    ctx.logger.info('duplicate delivery — skipped', { messageId });
   }
 });
 ```

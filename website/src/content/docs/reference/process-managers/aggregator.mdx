@@ -27,7 +27,7 @@ export abstract class Aggregator<T extends Message> {
 
 - **`batchSize(): number`** — the maximum number of messages to buffer before flushing. Must be a positive integer; registration throws `AggregatorConfigurationError` otherwise.
 - **`timeout(): number`** — the maximum age in milliseconds of the oldest buffered message before a partial batch is flushed. Must be a positive finite number; registration throws `AggregatorConfigurationError` otherwise.
-- **`execute(messages, signal): Promise<void>`** — the business logic. `messages` is a `readonly` array of the buffered messages, in the order the bus received them. `signal` aborts when the bus is stopping; pass it into long-running awaits to participate in graceful shutdown. Throwing from `execute` re-queues the batch (the framework reverts the claim in the [`IAggregatorStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/iaggregatorstore/) and standard retry rules apply).
+- **`execute(messages, signal): Promise<void>`** — the business logic. `messages` is a `readonly` array of the buffered messages, in the order the bus received them. `signal` aborts when the bus is stopping; pass it into long-running awaits to participate in graceful shutdown. Throwing from `execute` does not revert the claim: the lease on the batch in the [`IAggregatorStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/iaggregatorstore/) is left in place, and the batch is re-claimed and re-processed only after that lease expires.
 
 ## Registration
 

@@ -196,7 +196,7 @@ Publishes a request and invokes `onReply` once per reply as they arrive. The ret
 openStream<T extends Message>(endpoint: string, typeName: string): Promise<StreamSender<T>>;
 ```
 
-Opens a typed outbound stream to `endpoint`. The returned `StreamSender<T>` has `send(message)` / `complete()` / `abort(reason)` methods and stamps sequence + stream headers automatically.
+Opens a typed outbound stream to `endpoint`. The returned `StreamSender<T>` has `sendChunk(chunk)` / `complete()` / `fault(reason)` methods and stamps sequence + stream headers automatically.
 
 ### `openWritableStream`
 
@@ -222,7 +222,7 @@ Registers an inbound stream handler. The handler receives an async iterable that
 - **`queue`** — `string`. The bus's logical service name, taken from `BusOptions.queue.name`.
 - **`isStarted`** — `boolean`. `true` after `start()` has resolved and before `stop()` begins.
 - **`isStopped`** — `boolean`. `true` once `stop()` has been called (whether or not it has finished).
-- **`lastConsumedAt`** — `Date | undefined`. Timestamp of the last successfully consumed message; used by health checks to detect a stalled consumer.
+- **`lastConsumedAt`** — `Date | undefined`. Timestamp of the last consumed message (set whenever the dispatcher completes, success or not); used by health checks to detect a stalled consumer.
 - **`producer`** — `ITransportProducer`. The wire-level producer, exposed for advanced wiring (health checks, custom dispatch).
 - **`consumer`** — `ITransportConsumer`. The wire-level consumer, similarly exposed.
 - **`messageRegistry`** — `IMessageTypeRegistry`. The registry the bus is using, whether you passed one in or it created its own.

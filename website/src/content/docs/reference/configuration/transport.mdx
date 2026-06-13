@@ -33,6 +33,8 @@ export function rabbitMQWithRegistry(
 ```ts
 export interface RabbitMQTransportOptions {
   url: string;
+  tls?: boolean | import('node:tls').ConnectionOptions;
+  onConnectionError?: (error: Error, role: 'producer' | 'consumer') => void;
   acquireTimeout?: number;
   heartbeat?: number;
   retryLow?: number;
@@ -45,6 +47,7 @@ export interface RabbitMQTransportOptions {
     maxMessageSize?: number;
   };
   consumer?: {
+    concurrency?: number;
     prefetch?: number;
     retryDelay?: number;
     maxRetries?: number;
@@ -61,6 +64,8 @@ export interface RabbitMQTransportOptions {
 ### Connection
 
 - **`url`** (required) — `string`. AMQP connection string. Supports the standard `amqp://user:pass@host:port/vhost` form and the comma-separated cluster shorthand `amqp://user:pass@host-1,host-2,host-3:5672/vhost`.
+- **`tls`** (optional) — `boolean | import('node:tls').ConnectionOptions`. When `true`, connect over TLS (`amqps`) with defaults. Pass an object to forward custom settings to Node's TLS layer (`ca` / `cert` / `key` / `pfx`, etc.) for mutual-TLS or private-CA brokers.
+- **`onConnectionError`** (optional) — `(error: Error, role: 'producer' | 'consumer') => void`. Callback invoked on a connection-level error; `role` tells you whether the failing connection is the producer's or the consumer's.
 - **`acquireTimeout`** (optional) — `number` (ms). How long the underlying client will wait for a channel or connection before throwing.
 - **`heartbeat`** (optional) — `number` (s). AMQP heartbeat interval. Smaller values detect dead peers faster at the cost of more idle traffic.
 - **`retryLow`** (optional) — `number` (ms). Lower bound for connect-retry backoff.
@@ -76,6 +81,7 @@ export interface RabbitMQTransportOptions {
 
 ### `consumer.*`
 
+- **`concurrency`** (optional) — `number`. Maximum number of messages this consumer processes simultaneously. Default unset/unbounded — `rabbitmq-client` processes up to `prefetch` messages at once. This is distinct from `prefetch`: `prefetch` governs how many unacknowledged messages the broker delivers, while `concurrency` caps how many are handled in parallel. Set it to `1` for strict, one-at-a-time, in-order processing — e.g. ordered saga handling where a message and its follow-ups must run in publish order.
 - **`prefetch`** (optional) — `number`. Per-channel prefetch count — the maximum number of unacknowledged messages the broker will deliver to this consumer at once. Default `100`.
 - **`retryDelay`** (optional) — `number` (ms). Delay before a failed message is redelivered to the main queue. Default `3000`.
 - **`maxRetries`** (optional) — `number`. How many redelivery attempts the consumer makes before routing the message to the error queue. Default `3`.

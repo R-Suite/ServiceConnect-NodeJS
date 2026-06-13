@@ -21,17 +21,17 @@ A handler is the only place where messaging meets business logic. Everything els
 
 The `ConsumeContext` is what makes a handler more than a function. It carries:
 
-- The full envelope — headers, message id, correlation id, source, sent time.
-- `ctx.reply<TRep>(typeName, payload)` — emit a reply on the requester's reply queue. The only outbound primitive on `ConsumeContext` itself.
+- The flattened message metadata — `ctx.headers`, plus `ctx.messageId`, `ctx.correlationId`, `ctx.messageType` lifted onto the context directly (there is no nested `envelope` object).
+- `ctx.reply<TRep>(typeName, payload, options?)` — replies to the sender's queue (the inbound `sourceAddress`; it throws if that header is absent), with an optional `ReplyOptions` third argument. The only outbound primitive on `ConsumeContext` itself.
 - `ctx.bus` — the same bus instance that dispatched the message. Reach through it (`ctx.bus.publish(...)`, `ctx.bus.send(...)`) when a handler needs to emit follow-up traffic.
 - The active `AbortSignal` (`ctx.signal`) — so long-running work can be cancelled when the bus stops.
 
 How the handler ends matters too:
 
 - **Return normally** — the message is acked and removed from the queue. This is the success path. Handlers return `Promise<void>`; there is no return-value sentinel.
-- **Throw** — the framework redelivers up to `BusOptions.maxRetries`, then routes the message to the configured error queue. Throw when you have hit a transient fault and want another attempt, or when the message is poison and belongs in the error queue. The retry count is visible to the handler via `ctx.envelope.headers.retryCount` if you need to gate behaviour on it.
+- **Throw** — the framework redelivers, then routes the message to an error queue. Throw when you have hit a transient fault and want another attempt, or when the message is poison and belongs in the error queue. The retry count is visible to the handler via `ctx.headers.retryCount` if you need to gate behaviour on it. Retries are a transport concern, not a core `BusOptions` field: with `@serviceconnect/rabbitmq` the message is redelivered up to `consumer.maxRetries` (default `3`) before landing in `consumer.errorQueue` (default `'errors'`).
 
-There is no "soft retry" sentinel — throw is the only signal for both transient retry and permanent failure. The distinction is in your error type and `maxRetries`, not in the return value.
+There is no "soft retry" sentinel — throw is the only signal for both transient retry and permanent failure. The distinction is in your error type and the transport's `consumer.maxRetries`, not in the return value.
 
 The bus also guarantees ordering inside a single handler invocation: any awaits inside your handler complete before the message is acked. There is no fire-and-forget unless you explicitly write it.
 

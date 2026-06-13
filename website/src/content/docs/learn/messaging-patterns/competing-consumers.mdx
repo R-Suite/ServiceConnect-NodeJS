@@ -30,17 +30,20 @@ import { createBus } from '@serviceconnect/core';
 import { createRabbitMQTransport } from '@serviceconnect/rabbitmq';
 
 const bus = createBus({
-  transport: createRabbitMQTransport({ url: 'amqp://localhost' }),
-  queue: { name: 'orders', prefetch: 16 },
+  transport: createRabbitMQTransport({
+    url: 'amqp://localhost',
+    consumer: { prefetch: 16 },
+  }),
+  queue: { name: 'orders' },
 });
 ```
 
-There is no special API — you are running the same service code in multiple processes, each with the same `queue.name`. The broker handles dispatch. `prefetch: 16` tells RabbitMQ how many unacknowledged messages this consumer is willing to hold at once.
+There is no special API — you are running the same service code in multiple processes, each with the same `queue.name`. The broker handles dispatch. `prefetch` is a transport-level consumer option (`consumer.prefetch`, default `100`); `16` tells RabbitMQ how many unacknowledged messages this consumer is willing to hold at once.
 
 ## Behind the scenes
 
 - Run N instances of the same service, each calling `createBus` with the same `queue.name`. RabbitMQ delivers each message to exactly one consumer; if that consumer crashes before acking, the broker redelivers to another worker.
-- `prefetch` (passed via `queue.prefetch`) controls how many unacknowledged messages a single consumer will hold at once. Higher values = more parallelism per process, at the cost of less even load distribution — a fast worker can grab a chunk of the queue and slow peers will idle. A modest value (8–32) is a good default; tune to your handler's latency profile.
+- `prefetch` (a transport-level consumer option, `consumer.prefetch` on `createRabbitMQTransport`, **not** a `queue` field) controls how many unacknowledged messages a single consumer will hold at once. The default is `100`. Higher values = more parallelism per process, at the cost of less even load distribution — a fast worker can grab a chunk of the queue and slow peers will idle. Lower it toward a modest value if you want more even distribution across workers; tune to your handler's latency profile.
 - Use this for command processing where work can be done in parallel across many workers. For events that every interested party should see, use pub/sub instead — there a fanout exchange gives each subscriber its own queue, and competing consumers within a subscriber pool the work for that subscriber alone.
 
 ## See also

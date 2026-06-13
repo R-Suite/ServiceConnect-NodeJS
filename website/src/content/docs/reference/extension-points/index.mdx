@@ -31,7 +31,7 @@ ServiceConnect is built around small, well-defined interfaces. Implementing any 
 
 The bus's request/reply machinery is driven by `RequestReplyManager`. You almost never instantiate it directly — `createBus` builds one and the public `bus.sendRequest` / `bus.sendRequestMulti` / `bus.publishRequest` methods are the supported surface. The class and its registration types are exported for the rare case of a custom transport that wants to drive the manager from its own dispatch loop:
 
-- **`RequestReplyManager`** — the correlation table that maps outbound `requestMessageId`s to pending promises (or per-reply callbacks). Methods: `registerSingle`, `registerMulti`, `registerCallback`, `onReply`, `cancel`.
+- **`RequestReplyManager`** — the correlation table that maps outbound `requestMessageId`s to pending promises (or per-reply callbacks). Methods: `registerSingle`, `registerMulti`, `registerCallback`, `tryRouteReply`, `cancel`, `shutdown`.
 - **`SingleRequestRegistration`** / **`MultiRequestRegistration`** / **`CallbackRequestRegistration`** — the three pending-request shapes the manager tracks.
 - **`RegisterSingleOptions`** / **`RegisterMultiOptions`** — the options bags passed when registering a pending request.
 
