@@ -96,7 +96,7 @@ Node 22 LTS or later. ESM only. TypeScript users: NodeNext module resolution.
 
 ## Contributing
 
-Issues and PRs are welcome. The full development guide is in [`CLAUDE.md`](./CLAUDE.md).
+Issues and PRs are welcome.
 
 ## License
 
