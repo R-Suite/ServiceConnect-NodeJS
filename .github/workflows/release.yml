@@ -1,25 +1,49 @@
 name: release
 
+# Triggered on a `v*` tag push (e.g. `v1.0.0`, or a pre-release `v1.0.0-beta.1`). The tag value
+# drives the published version for every package — release the same source tree against a new tag
+# by retagging, not by editing package.json versions. Pre-release tags (those with a SemVer
+# `-suffix`) publish under the `next` dist-tag instead of `latest`, so `npm install <pkg>` never
+# picks them up — the npm equivalent of a NuGet pre-release.
+
 on:
   push:
-    branches: [master]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version override (without leading v). Used only for manual dispatch; tag pushes use the tag value.'
+        required: false
 
-concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false
+permissions:
+  contents: read
 
 jobs:
   release:
+    name: Build + publish to npm
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-      id-token: write
+    environment:
+      name: npm
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          # Full history so the release guard can test whether the tagged commit is contained in
+          # origin/master; the ancestry walk needs the commit graph, not just the tag tip.
           fetch-depth: 0
+
+      # Releases are cut from master only. A v* tag (or a manual dispatch ref) can point at any
+      # commit, so gate the publish on the tagged commit being reachable from origin/master: a tag
+      # pushed on a feature branch fails here, before anything is built or published.
+      - name: Verify tag is on master
+        run: |
+          git fetch origin master --quiet
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/master; then
+            echo "::error::Tag ${GITHUB_REF#refs/tags/} ($GITHUB_SHA) is not contained in origin/master; refusing to release."
+            exit 1
+          fi
+          echo "Tag commit $GITHUB_SHA is contained in origin/master — proceeding."
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -31,19 +55,49 @@ jobs:
           cache: pnpm
           registry-url: https://registry.npmjs.org
 
+      - name: Resolve and validate version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            # github.ref is "refs/tags/v1.0.0"; strip the prefix.
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          fi
+          # Validate SemVer (with optional pre-release / build metadata).
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'; then
+            echo "::error::'$VERSION' is not a valid SemVer version."
+            exit 1
+          fi
+          # Pre-release tags (anything with a "-suffix") publish under the `next` dist-tag.
+          if echo "$VERSION" | grep -q '-'; then DIST_TAG=next; else DIST_TAG=latest; fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $VERSION (dist-tag: $DIST_TAG)"
+
       - name: Install
         run: pnpm install --frozen-lockfile
+
+      # The tag is the single source of truth for the version, so stamp it onto every workspace
+      # package. pnpm rewrites the internal `workspace:*` dependencies to this version on publish.
+      - name: Set package versions from tag
+        run: pnpm -r exec -- npm pkg set version="${{ steps.version.outputs.version }}"
 
       - name: Build
         run: pnpm build
 
-      - name: Release
-        uses: changesets/action@v1
-        with:
-          publish: pnpm release
-          version: pnpm version
-          title: "Version Packages"
-          commit: "Version Packages"
+      # Re-run the full suite against the exact tagged commit before publishing. CI already gates
+      # merges to master, but a tag can point at any commit and npm versions cannot be unpublished
+      # after 72h — a green run here is the last line of defence.
+      - name: Lint
+        run: pnpm lint
+      - name: Tests
+        run: pnpm test
+      - name: RabbitMQ end-to-end tests
+        run: pnpm --filter @serviceconnect/rabbitmq test:e2e
+
+      - name: Publish to npm
+        # --no-git-checks because the version stamp above leaves the tree dirty.
+        run: pnpm -r publish --access public --no-git-checks --tag "${{ steps.version.outputs.dist_tag }}"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

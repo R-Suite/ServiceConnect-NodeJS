@@ -1,61 +1,117 @@
 name: ci
 
 on:
-  pull_request:
-    branches: [v3]
   push:
-    branches: [v3]
-
-concurrency:
-  group: ci-${{ github.ref }}-${{ github.event_name }}
-  cancel-in-progress: true
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+# A new push to a PR / branch cancels the previous in-flight run for the same ref.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  ci:
-    runs-on: ubuntu-latest
+  build-and-test:
+    name: Build + unit tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22.x
           cache: pnpm
-
       - name: Install
         run: pnpm install --frozen-lockfile
-
-      - name: Build
-        run: pnpm build
-
-      - name: Test
-        run: pnpm test
-
+      - name: Build (packages)
+        run: pnpm exec turbo run build --filter='!@serviceconnect/website'
       - name: Lint
         run: pnpm lint
+      # Cross-platform unit suites only. The MongoDB and stress packages rely on
+      # Testcontainers (Docker / Linux containers) and run in the Linux-only jobs below.
+      - name: Unit tests
+        run: >-
+          pnpm exec turbo run test
+          --filter=@serviceconnect/core
+          --filter=@serviceconnect/telemetry
+          --filter=@serviceconnect/healthchecks
+          --filter=@serviceconnect/persistence-memory
+          --filter=@serviceconnect/rabbitmq
 
-      - name: Changeset status (PR only, skippable via label)
-        if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'skip-changeset')
-        run: pnpm changeset status --since=origin/v3
+  e2e:
+    name: E2E + MongoDB integration (Linux)
+    runs-on: ubuntu-latest
+    # Testcontainers spins up RabbitMQ + MongoDB; ubuntu-latest runners have Docker preinstalled.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build (packages)
+        run: pnpm exec turbo run build --filter='!@serviceconnect/website'
+      - name: MongoDB store tests
+        run: pnpm --filter @serviceconnect/persistence-mongodb test
+      - name: RabbitMQ end-to-end tests
+        run: pnpm --filter @serviceconnect/rabbitmq test:e2e
+
+  pack-validate:
+    name: Pack validation (dry-run)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build (packages)
+        run: pnpm exec turbo run build --filter='!@serviceconnect/website'
+      - name: Pack publishable packages
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/artifacts"
+          pnpm --filter='./packages/*' exec -- npm pack --pack-destination "$GITHUB_WORKSPACE/artifacts"
+      - name: List produced tarballs
+        run: ls -la artifacts/
+      - name: Upload tarballs
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-tarballs
+          path: artifacts/*.tgz
+          if-no-files-found: error
+          retention-days: 14
 
   stress-smoke:
-    needs: ci
+    name: Stress smoke (Linux)
+    needs: build-and-test
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
       - name: Setup Node
@@ -65,8 +121,8 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
-      - name: Build
-        run: pnpm build
+      - name: Build (packages)
+        run: pnpm exec turbo run build --filter='!@serviceconnect/website'
       - name: Stress smoke
         run: pnpm --filter @serviceconnect/stress-harness smoke
       - name: Upload report on failure
@@ -77,14 +133,13 @@ jobs:
           path: harness/stress/out/
 
   examples-smoke:
-    needs: ci
+    name: Examples smoke (Linux)
+    needs: build-and-test
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
       - name: Setup Node
@@ -94,7 +149,7 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
-      - name: Build
-        run: pnpm build
+      - name: Build (packages)
+        run: pnpm exec turbo run build --filter='!@serviceconnect/website'
       - name: Run all examples
         run: bash examples/run-all.sh
