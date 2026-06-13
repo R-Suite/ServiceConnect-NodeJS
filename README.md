@@ -96,7 +96,7 @@ Node 22 LTS or later. ESM only. TypeScript users: NodeNext module resolution.
 
 ## Contributing
 
-Issues and PRs are welcome.
+Issues and PRs are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for project layout, build/test instructions, coding conventions, and the release process.
 
 ## License
 
