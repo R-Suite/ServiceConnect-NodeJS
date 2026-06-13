@@ -12,7 +12,7 @@ This walkthrough installs `@serviceconnect/core` + `@serviceconnect/rabbitmq`, d
 ## Prerequisites
 
 - Node.js 22 LTS or later.
-- pnpm 9 (or npm / yarn — examples use pnpm).
+- npm 10+ (bundled with Node; pnpm or yarn work too).
 - Docker (for a one-line RabbitMQ).
 
 ## 1. Start RabbitMQ
@@ -26,9 +26,9 @@ Management UI: [http://localhost:15672](http://localhost:15672) — username `gu
 
 ```bash
 mkdir hello-serviceconnect && cd hello-serviceconnect
-pnpm init
-pnpm add @serviceconnect/core @serviceconnect/rabbitmq
-pnpm add -D typescript tsx @types/node
+npm init -y
+npm install @serviceconnect/core @serviceconnect/rabbitmq
+npm install -D typescript tsx @types/node
 ```
 
 In `package.json` set `"type": "module"`. In `tsconfig.json` use `"moduleResolution": "nodenext"` and `"module": "nodenext"`.

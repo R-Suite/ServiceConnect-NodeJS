@@ -16,16 +16,16 @@ Most Node.js AMQP clients give you a connection and a channel. You then write th
 ## Install
 
 ```bash
-pnpm add @serviceconnect/core @serviceconnect/rabbitmq
+npm install @serviceconnect/core @serviceconnect/rabbitmq
 ```
 
 Optional packages:
 
 ```bash
-pnpm add @serviceconnect/persistence-memory     # in-memory saga / aggregator stores (dev + tests)
-pnpm add @serviceconnect/persistence-mongodb    # MongoDB-backed stores (production)
-pnpm add @serviceconnect/telemetry              # OpenTelemetry hooks
-pnpm add @serviceconnect/healthchecks           # producer / consumer health probes
+npm install @serviceconnect/persistence-memory   # in-memory saga / aggregator stores (dev + tests)
+npm install @serviceconnect/persistence-mongodb  # MongoDB-backed stores (production)
+npm install @serviceconnect/telemetry            # OpenTelemetry hooks
+npm install @serviceconnect/healthchecks         # producer / consumer health probes
 ```
 
 ## Quickstart
