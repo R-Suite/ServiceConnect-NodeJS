@@ -14,7 +14,7 @@
     "scripts": {
         "build": "tsup",
         "test": "vitest run --project unit",
-        "test:e2e": "vitest run --project e2e",
+        "test:e2e": "vitest run --project e2e --no-file-parallelism",
         "lint": "biome check ."
     },
     "dependencies": {

@@ -1,46 +1,45 @@
 import { randomUUID } from 'node:crypto';
 import type { ConsumeResult, Envelope } from '@serviceconnect/core';
+import { Connection } from 'rabbitmq-client';
 import { describe, expect, it } from 'vitest';
 import { createRabbitMQTransport } from '../../src/transport.js';
 
 // Regression: retry/error/audit republishes must be persistent (durable:true) so a message parked
 // in the durable retry queue or dead-lettered to the durable error queue survives a broker restart.
+// We read the republished message back over AMQP and assert its `durable` flag (set from
+// deliveryMode===2), so the test needs only the broker — no management API / fixed ports.
 
-const MGMT = 'http://localhost:15672';
-const MGMT_AUTH = `Basic ${Buffer.from('guest:guest').toString('base64')}`;
-const VHOST = '%2F';
-
-interface MgmtMessage {
-    properties: {
-        delivery_mode?: number;
-        content_type?: string;
-        headers?: Record<string, unknown>;
-    };
+function waitFor(cond: () => boolean, ms = 8000): Promise<void> {
+    return new Promise((resolve) => {
+        const start = Date.now();
+        const t = setInterval(() => {
+            if (cond() || Date.now() - start > ms) {
+                clearInterval(t);
+                resolve();
+            }
+        }, 50);
+    });
 }
 
-async function pollMgmt(queue: string, timeoutMs = 8000): Promise<MgmtMessage[]> {
-    const start = Date.now();
-    while (Date.now() - start < timeoutMs) {
-        const res = await fetch(`${MGMT}/api/queues/${VHOST}/${encodeURIComponent(queue)}/get`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json', authorization: MGMT_AUTH },
-            body: JSON.stringify({ count: 5, ackmode: 'ack_requeue_false', encoding: 'auto' }),
-        });
-        if (!res.ok) throw new Error(`mgmt get ${queue} -> ${res.status}`);
-        const msgs = (await res.json()) as MgmtMessage[];
-        if (msgs.length > 0) return msgs;
-        await new Promise((r) => setTimeout(r, 150));
+// Read one message off `queue` over AMQP (one-shot basicGet, no consumer) and report whether it is
+// persistent. Polls briefly since the republish may land just after the handler returns.
+async function readDurable(url: string, queue: string): Promise<boolean | undefined> {
+    const conn = new Connection(url);
+    try {
+        const deadline = Date.now() + 8000;
+        while (Date.now() < deadline) {
+            const msg = await conn.basicGet({ queue, noAck: true });
+            if (msg) return msg.durable;
+            await new Promise((r) => setTimeout(r, 100));
+        }
+        return undefined;
+    } finally {
+        await conn.close();
     }
-    return [];
-}
-
-async function waitFor(cond: () => boolean, ms = 5000): Promise<void> {
-    const start = Date.now();
-    while (!cond() && Date.now() - start < ms) await new Promise((r) => setTimeout(r, 50));
 }
 
 describe('republished messages are persistent (durable)', () => {
-    it('error-queue republish is delivery_mode=2', async () => {
+    it('error-queue republish is persistent', async () => {
         const url = process.env.RABBITMQ_URL ?? 'amqp://guest:guest@localhost:5672';
         const queue = `reg-term-${randomUUID().slice(0, 8)}`;
         const errorQueue = `reg-errors-${randomUUID().slice(0, 8)}`;
@@ -62,17 +61,16 @@ describe('republished messages are persistent (durable)', () => {
         });
         await producer.send(queue, 'Foo', new TextEncoder().encode('{}'));
         await waitFor(() => attempts.length > 0);
-        await consumer.stop();
+        await consumer.stop(); // stop so it doesn't race us draining the error queue
 
-        const msgs = await pollMgmt(errorQueue);
-        expect(msgs).toHaveLength(1);
-        expect(msgs[0]?.properties.delivery_mode).toBe(2);
+        expect(await readDurable(url, errorQueue)).toBe(true);
         await producer[Symbol.asyncDispose]();
-    });
+    }, 30_000);
 
-    it('retry-queue republish is delivery_mode=2', async () => {
+    it('retry-queue republish is persistent', async () => {
         const url = process.env.RABBITMQ_URL ?? 'amqp://guest:guest@localhost:5672';
         const queue = `reg-retry-${randomUUID().slice(0, 8)}`;
+        // Long retryDelay so the message dwells in the durable retry queue while we read it.
         const { producer, consumer } = createRabbitMQTransport({
             url,
             consumer: {
@@ -97,9 +95,7 @@ describe('republished messages are persistent (durable)', () => {
         await waitFor(() => attempts.length > 0);
         await consumer.stop();
 
-        const msgs = await pollMgmt(`${queue}.Retries`);
-        expect(msgs).toHaveLength(1);
-        expect(msgs[0]?.properties.delivery_mode).toBe(2);
+        expect(await readDurable(url, `${queue}.Retries`)).toBe(true);
         await producer[Symbol.asyncDispose]();
-    });
+    }, 30_000);
 });

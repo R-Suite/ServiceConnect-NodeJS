@@ -19,6 +19,13 @@
         "tsup": "^8.3.0",
         "turbo": "^2.3.0",
         "typescript": "^5.6.0",
-        "vitest": "^2.1.0"
+        "vitest": "^3.2.6"
+    },
+    "pnpm": {
+        "overrides": {
+            "esbuild": ">=0.28.1",
+            "tmp": ">=0.2.6",
+            "yaml": ">=2.8.3"
+        }
     }
 }

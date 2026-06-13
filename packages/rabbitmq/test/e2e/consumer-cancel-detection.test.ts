@@ -1,24 +1,25 @@
 import { randomUUID } from 'node:crypto';
 import type { ConsumeResult, Envelope } from '@serviceconnect/core';
+import { Connection } from 'rabbitmq-client';
 import { describe, expect, it } from 'vitest';
 import { createRabbitMQTransport } from '../../src/transport.js';
 
 // Regression: when the broker cancels the consumer (e.g. the queue is deleted), the consumer must
 // report unhealthy — isConnected=false and isCancelledByBroker=true — instead of falsely healthy.
+// The queue is deleted over AMQP (no management API / fixed ports), so this runs on any broker.
 
 const success: ConsumeResult = { success: true, notHandled: false, terminalFailure: false };
-const auth = `Basic ${Buffer.from('guest:guest').toString('base64')}`;
 
-async function deleteQueue(queue: string): Promise<void> {
-    await fetch(`http://localhost:15672/api/queues/%2F/${encodeURIComponent(queue)}`, {
-        method: 'DELETE',
-        headers: { Authorization: auth },
+function waitFor(cond: () => boolean, ms = 8000): Promise<void> {
+    return new Promise((resolve) => {
+        const start = Date.now();
+        const t = setInterval(() => {
+            if (cond() || Date.now() - start > ms) {
+                clearInterval(t);
+                resolve();
+            }
+        }, 100);
     });
-}
-
-async function waitFor(cond: () => boolean, ms = 8000): Promise<void> {
-    const start = Date.now();
-    while (!cond() && Date.now() - start < ms) await new Promise((r) => setTimeout(r, 100));
 }
 
 describe('consumer reflects broker cancellation in its health', () => {
@@ -38,9 +39,13 @@ describe('consumer reflects broker cancellation in its health', () => {
         expect(received).toHaveLength(1);
         expect(consumer.isConnected).toBe(true);
 
-        await deleteQueue(queue);
+        // Delete the queue out from under the consumer over AMQP -> broker sends basic.cancel.
+        const admin = new Connection(url);
+        await admin.queueDelete({ queue });
+        await admin.close();
 
-        // The broker sends basic.cancel; the consumer must transition to unhealthy.
+        // The consumer must transition to unhealthy (basic.cancel -> 'error', no recovery because
+        // the passive re-declare keeps failing on the now-missing queue).
         await waitFor(() => !consumer.isConnected);
         expect(consumer.isConnected).toBe(false);
         expect(consumer.isCancelledByBroker).toBe(true);
