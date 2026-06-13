@@ -12,16 +12,21 @@ hero:
       link: /ServiceConnect-NodeJS/learn/getting-started/
       icon: right-arrow
       variant: primary
-    - text: GitHub
+    - text: API Reference
+      link: /ServiceConnect-NodeJS/reference/
+      icon: open-book
+      variant: secondary
+    - text: View on GitHub
       link: https://github.com/R-Suite/ServiceConnect-NodeJS
       icon: external
+      variant: secondary
 ---
 
 import { CardGrid, Card } from '@astrojs/starlight/components';
 
 ## What you get
 
-<CardGrid stagger>
+<CardGrid>
   <Card title="Typed bus" icon="seti:typescript">
     `bus.publish<OrderPlaced>('OrderPlaced', ...)` — message type carried in the type system, not just at runtime.
   </Card>
