@@ -16,6 +16,10 @@ export default defineConfig({
                 replacesTitle: true,
             },
             customCss: ['./src/styles/brand.css'],
+            components: {
+                Footer: './src/overrides/Footer.astro',
+                ThemeProvider: './src/overrides/ThemeProvider.astro',
+            },
             social: [
                 {
                     icon: 'github',
