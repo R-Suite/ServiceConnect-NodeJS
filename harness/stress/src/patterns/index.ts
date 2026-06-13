@@ -10,25 +10,25 @@ import { send } from './send.js';
 import { streaming } from './streaming.js';
 
 export interface PatternsContext {
-  readonly alphaQueue: string;
-  readonly betaQueue: string;
-  readonly alphaSagaStore: ISagaStore;
-  readonly betaSagaStore: ISagaStore;
-  readonly alphaTimeoutStore: ITimeoutStore;
-  readonly betaTimeoutStore: ITimeoutStore;
-  readonly alphaAggregatorStore: IAggregatorStore;
-  readonly betaAggregatorStore: IAggregatorStore;
+    readonly alphaQueue: string;
+    readonly betaQueue: string;
+    readonly alphaSagaStore: ISagaStore;
+    readonly betaSagaStore: ISagaStore;
+    readonly alphaTimeoutStore: ITimeoutStore;
+    readonly betaTimeoutStore: ITimeoutStore;
+    readonly alphaAggregatorStore: IAggregatorStore;
+    readonly betaAggregatorStore: IAggregatorStore;
 }
 
 export function corePatterns(ctx: PatternsContext): readonly PatternFlow[] {
-  return [
-    pubsub(),
-    send(ctx.alphaQueue, ctx.betaQueue),
-    requestReply(ctx.alphaQueue, ctx.betaQueue),
-    polymorphic(),
-    saga(ctx.alphaSagaStore, ctx.alphaTimeoutStore, ctx.betaSagaStore, ctx.betaTimeoutStore),
-    aggregator(ctx.alphaAggregatorStore, ctx.betaAggregatorStore),
-    routingSlip(ctx.alphaQueue, ctx.betaQueue),
-    streaming(ctx.alphaQueue, ctx.betaQueue),
-  ];
+    return [
+        pubsub(),
+        send(ctx.alphaQueue, ctx.betaQueue),
+        requestReply(ctx.alphaQueue, ctx.betaQueue),
+        polymorphic(),
+        saga(ctx.alphaSagaStore, ctx.alphaTimeoutStore, ctx.betaSagaStore, ctx.betaTimeoutStore),
+        aggregator(ctx.alphaAggregatorStore, ctx.betaAggregatorStore),
+        routingSlip(ctx.alphaQueue, ctx.betaQueue),
+        streaming(ctx.alphaQueue, ctx.betaQueue),
+    ];
 }

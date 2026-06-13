@@ -1,42 +1,42 @@
 {
-  "name": "@serviceconnect/rabbitmq",
-  "version": "0.0.0",
-  "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+    "name": "@serviceconnect/rabbitmq",
+    "version": "0.0.0",
+    "type": "module",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
+        }
+    },
+    "files": ["dist"],
+    "scripts": {
+        "build": "tsup",
+        "test": "vitest run --project unit",
+        "test:e2e": "vitest run --project e2e",
+        "lint": "biome check ."
+    },
+    "dependencies": {
+        "@serviceconnect/core": "workspace:*",
+        "rabbitmq-client": "^5.0.0"
+    },
+    "devDependencies": {
+        "@opentelemetry/api": "^1.7.0",
+        "@opentelemetry/context-async-hooks": "^1.27.0",
+        "@opentelemetry/core": "^1.27.0",
+        "@opentelemetry/sdk-trace-base": "^1.27.0",
+        "@serviceconnect/persistence-memory": "workspace:*",
+        "@serviceconnect/telemetry": "workspace:*",
+        "@testcontainers/rabbitmq": "^12.0.0",
+        "testcontainers": "^12.0.0"
+    },
+    "engines": { "node": ">=22" },
+    "publishConfig": { "access": "public" },
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/twatson83/ServiceConnect-NodeJS",
+        "directory": "packages/rabbitmq"
     }
-  },
-  "files": ["dist"],
-  "scripts": {
-    "build": "tsup",
-    "test": "vitest run --project unit",
-    "test:e2e": "vitest run --project e2e",
-    "lint": "biome check ."
-  },
-  "dependencies": {
-    "@serviceconnect/core": "workspace:*",
-    "rabbitmq-client": "^5.0.0"
-  },
-  "devDependencies": {
-    "@opentelemetry/api": "^1.7.0",
-    "@opentelemetry/context-async-hooks": "^1.27.0",
-    "@opentelemetry/core": "^1.27.0",
-    "@opentelemetry/sdk-trace-base": "^1.27.0",
-    "@serviceconnect/persistence-memory": "workspace:*",
-    "@serviceconnect/telemetry": "workspace:*",
-    "@testcontainers/rabbitmq": "^12.0.0",
-    "testcontainers": "^12.0.0"
-  },
-  "engines": { "node": ">=22" },
-  "publishConfig": { "access": "public" },
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/twatson83/ServiceConnect-NodeJS",
-    "directory": "packages/rabbitmq"
-  }
 }

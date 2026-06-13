@@ -19,12 +19,12 @@ export type { Handler, HandlerClass, HandlerFactory, HandlerFn } from './handler
 // Pipeline
 export { FilterAction, asFilter, asMiddleware } from './pipeline/index.js';
 export type {
-  Filter,
-  FilterRegistration,
-  Middleware,
-  MiddlewareRegistration,
-  PipelineContext,
-  PipelineStage,
+    Filter,
+    FilterRegistration,
+    Middleware,
+    MiddlewareRegistration,
+    PipelineContext,
+    PipelineStage,
 } from './pipeline/index.js';
 
 // Options
@@ -38,18 +38,18 @@ export type { SendOptions } from './options/send.js';
 export { jsonSerializer } from './serialization/json.js';
 export { createMessageTypeRegistry } from './serialization/registry.js';
 export type {
-  IMessageSerializer,
-  IMessageTypeRegistry,
-  MessageRegistration,
+    IMessageSerializer,
+    IMessageTypeRegistry,
+    MessageRegistration,
 } from './serialization/registry.js';
 export type { StandardSchemaV1 } from './serialization/standard-schema.js';
 
 // Transport
 export type {
-  ConsumeCallback,
-  ConsumeResult,
-  ITransportConsumer,
-  ITransportProducer,
+    ConsumeCallback,
+    ConsumeResult,
+    ITransportConsumer,
+    ITransportProducer,
 } from './transport.js';
 
 // Logger
@@ -58,24 +58,24 @@ export type { LogLevel, Logger } from './logger.js';
 
 // Errors
 export {
-  AbortError,
-  AggregatorConfigurationError,
-  ArgumentError,
-  ArgumentOutOfRangeError,
-  ConcurrencyError,
-  DuplicateSagaError,
-  HandlerNotRegisteredError,
-  InvalidOperationError,
-  MessageTypeNotRegisteredError,
-  OutgoingFiltersBlockedError,
-  RequestSendCancelledError,
-  RequestTimeoutError,
-  RoutingSlipDestinationError,
-  ServiceConnectError,
-  StreamFaultedError,
-  StreamSequenceError,
-  TerminalDeserializationError,
-  ValidationError,
+    AbortError,
+    AggregatorConfigurationError,
+    ArgumentError,
+    ArgumentOutOfRangeError,
+    ConcurrencyError,
+    DuplicateSagaError,
+    HandlerNotRegisteredError,
+    InvalidOperationError,
+    MessageTypeNotRegisteredError,
+    OutgoingFiltersBlockedError,
+    RequestSendCancelledError,
+    RequestTimeoutError,
+    RoutingSlipDestinationError,
+    ServiceConnectError,
+    StreamFaultedError,
+    StreamSequenceError,
+    TerminalDeserializationError,
+    ValidationError,
 } from './errors.js';
 
 // Aggregator (Phase E)
@@ -89,12 +89,12 @@ export type { ProcessBuilder, ProcessRuntimeOptions } from './process/builder.js
 
 // Routing slip (Phase E)
 export {
-  assertValidDestination,
-  destinationFailureReason,
-  isValidDestination,
-  ROUTING_SLIP_HEADER,
-  parseRoutingSlip,
-  serialiseRoutingSlip,
+    assertValidDestination,
+    destinationFailureReason,
+    isValidDestination,
+    ROUTING_SLIP_HEADER,
+    parseRoutingSlip,
+    serialiseRoutingSlip,
 } from './routing/index.js';
 
 // Streaming (Phase E)
@@ -105,28 +105,28 @@ export { StreamReceiver } from './streaming/receiver.js';
 
 // Persistence
 export type {
-  ConcurrencyToken,
-  FoundSaga,
-  ISagaStore,
-  ProcessData,
+    ConcurrencyToken,
+    FoundSaga,
+    ISagaStore,
+    ProcessData,
 } from './persistence/saga-store.js';
 export type {
-  AggregatorClaim,
-  IAggregatorStore,
+    AggregatorClaim,
+    IAggregatorStore,
 } from './persistence/aggregator-store.js';
 export type {
-  ITimeoutStore,
-  TimeoutRecord,
+    ITimeoutStore,
+    TimeoutRecord,
 } from './persistence/timeout-store.js';
 
 // RequestReplyManager (Phase D)
 export { RequestReplyManager } from './request-reply.js';
 export type {
-  CallbackRequestRegistration,
-  MultiRequestRegistration,
-  RegisterMultiOptions,
-  RegisterSingleOptions,
-  SingleRequestRegistration,
+    CallbackRequestRegistration,
+    MultiRequestRegistration,
+    RegisterMultiOptions,
+    RegisterSingleOptions,
+    SingleRequestRegistration,
 } from './request-reply.js';
 
 // Legacy probe constant — kept for the existing inter-package wiring test in @serviceconnect/rabbitmq

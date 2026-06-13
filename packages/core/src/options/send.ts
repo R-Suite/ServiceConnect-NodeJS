@@ -1,4 +1,4 @@
 export interface SendOptions {
-  readonly headers?: Readonly<Record<string, string>>;
-  readonly endpoint: string;
+    readonly headers?: Readonly<Record<string, string>>;
+    readonly endpoint: string;
 }

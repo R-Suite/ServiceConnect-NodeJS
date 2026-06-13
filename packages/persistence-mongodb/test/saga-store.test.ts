@@ -7,16 +7,16 @@ import { freshDb } from './helpers.js';
 let db: Db;
 
 beforeAll(async () => {
-  db = await freshDb();
+    db = await freshDb();
 });
 
 afterAll(async () => {
-  if (db) {
-    await db.dropDatabase().catch(() => undefined);
-  }
+    if (db) {
+        await db.dropDatabase().catch(() => undefined);
+    }
 });
 
 runSagaStoreContract('mongoSagaStore', () => {
-  const coll = `sagas-${Math.random().toString(36).slice(2, 8)}`;
-  return mongoSagaStore({ db, collectionName: coll });
+    const coll = `sagas-${Math.random().toString(36).slice(2, 8)}`;
+    return mongoSagaStore({ db, collectionName: coll });
 });

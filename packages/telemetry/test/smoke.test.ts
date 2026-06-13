@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PACKAGE_NAME } from '../src/index.js';
 
 describe('@serviceconnect/telemetry', () => {
-  it('exports its package name', () => {
-    expect(PACKAGE_NAME).toBe('@serviceconnect/telemetry');
-  });
+    it('exports its package name', () => {
+        expect(PACKAGE_NAME).toBe('@serviceconnect/telemetry');
+    });
 });

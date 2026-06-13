@@ -10,9 +10,9 @@ export type { RabbitMQTransportOptions } from './options.js';
 export type { RabbitMQProducer, ProducerSnapshot } from './producer.js';
 export type { RabbitMQConsumer, ConsumerSnapshot } from './consumer.js';
 export {
-  RabbitMQPayloadTooLargeError,
-  RabbitMQPublishConfirmTimeoutError,
-  RabbitMQTopologyMismatchError,
+    RabbitMQPayloadTooLargeError,
+    RabbitMQPublishConfirmTimeoutError,
+    RabbitMQTopologyMismatchError,
 } from './errors.js';
 
 /**
@@ -21,13 +21,13 @@ export {
  *   createRabbitMQTransport({ ...opts, parentsOf: (n) => registry.parentsOf(n) })
  */
 export function rabbitMQWithRegistry(
-  opts: Omit<RabbitMQTransportOptions, 'parentsOf'>,
-  registry: IMessageTypeRegistry,
+    opts: Omit<RabbitMQTransportOptions, 'parentsOf'>,
+    registry: IMessageTypeRegistry,
 ): RabbitMQTransport {
-  return createRabbitMQTransport({
-    ...opts,
-    parentsOf: (n) => registry.parentsOf(n),
-  });
+    return createRabbitMQTransport({
+        ...opts,
+        parentsOf: (n) => registry.parentsOf(n),
+    });
 }
 
 // Legacy probe surface — kept so existing smoke tests still pass.

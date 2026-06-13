@@ -7,16 +7,16 @@ import { freshDb } from './helpers.js';
 let db: Db;
 
 beforeAll(async () => {
-  db = await freshDb();
+    db = await freshDb();
 });
 
 afterAll(async () => {
-  if (db) {
-    await db.dropDatabase().catch(() => undefined);
-  }
+    if (db) {
+        await db.dropDatabase().catch(() => undefined);
+    }
 });
 
 runTimeoutStoreContract('mongoTimeoutStore', () => {
-  const coll = `timeouts-${Math.random().toString(36).slice(2, 8)}`;
-  return mongoTimeoutStore({ db, collectionName: coll });
+    const coll = `timeouts-${Math.random().toString(36).slice(2, 8)}`;
+    return mongoTimeoutStore({ db, collectionName: coll });
 });

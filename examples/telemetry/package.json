@@ -1,24 +1,24 @@
 {
-  "name": "@serviceconnect/example-telemetry",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "lint": "biome check .",
-    "start": "tsx src/index.ts"
-  },
-  "engines": { "node": ">=22" },
-  "dependencies": {
-    "@serviceconnect/core": "workspace:*",
-    "@serviceconnect/example-lib": "workspace:*",
-    "@serviceconnect/rabbitmq": "workspace:*",
-    "@serviceconnect/telemetry": "workspace:*"
-  },
-  "devDependencies": {
-    "@opentelemetry/api": "^1.7.0",
-    "@opentelemetry/context-async-hooks": "^1.27.0",
-    "@opentelemetry/core": "^1.27.0",
-    "@opentelemetry/sdk-trace-base": "^1.27.0",
-    "tsx": "^4.19.0"
-  }
+    "name": "@serviceconnect/example-telemetry",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "lint": "biome check .",
+        "start": "tsx src/index.ts"
+    },
+    "engines": { "node": ">=22" },
+    "dependencies": {
+        "@serviceconnect/core": "workspace:*",
+        "@serviceconnect/example-lib": "workspace:*",
+        "@serviceconnect/rabbitmq": "workspace:*",
+        "@serviceconnect/telemetry": "workspace:*"
+    },
+    "devDependencies": {
+        "@opentelemetry/api": "^1.7.0",
+        "@opentelemetry/context-async-hooks": "^1.27.0",
+        "@opentelemetry/core": "^1.27.0",
+        "@opentelemetry/sdk-trace-base": "^1.27.0",
+        "tsx": "^4.19.0"
+    }
 }

@@ -7,16 +7,16 @@ import { freshDb } from './helpers.js';
 let db: Db;
 
 beforeAll(async () => {
-  db = await freshDb();
+    db = await freshDb();
 });
 
 afterAll(async () => {
-  if (db) {
-    await db.dropDatabase().catch(() => undefined);
-  }
+    if (db) {
+        await db.dropDatabase().catch(() => undefined);
+    }
 });
 
 runAggregatorStoreContract('mongoAggregatorStore', () => {
-  const coll = `aggregators-${Math.random().toString(36).slice(2, 8)}`;
-  return mongoAggregatorStore({ db, collectionName: coll });
+    const coll = `aggregators-${Math.random().toString(36).slice(2, 8)}`;
+    return mongoAggregatorStore({ db, collectionName: coll });
 });

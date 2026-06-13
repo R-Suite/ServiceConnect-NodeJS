@@ -4,60 +4,60 @@ import type { IAggregatorStore } from '../persistence/aggregator-store.js';
 import type { Aggregator } from './aggregator.js';
 
 export interface AggregatorEntry {
-  readonly aggregator: Aggregator<Message>;
-  readonly batchSize: number;
-  readonly timeoutMs: number;
-  readonly store: IAggregatorStore;
+    readonly aggregator: Aggregator<Message>;
+    readonly batchSize: number;
+    readonly timeoutMs: number;
+    readonly store: IAggregatorStore;
 }
 
 export class AggregatorRegistry {
-  private readonly byType = new Map<string, AggregatorEntry>();
+    private readonly byType = new Map<string, AggregatorEntry>();
 
-  register<T extends Message>(
-    messageType: string,
-    aggregator: Aggregator<T>,
-    store?: IAggregatorStore,
-  ): void {
-    const batchSize = aggregator.batchSize();
-    const timeoutMs = aggregator.timeout();
-    if (!Number.isInteger(batchSize) || batchSize <= 0) {
-      throw new AggregatorConfigurationError(
-        `aggregator ${messageType}: batchSize() must be a positive integer (got ${batchSize})`,
-      );
+    register<T extends Message>(
+        messageType: string,
+        aggregator: Aggregator<T>,
+        store?: IAggregatorStore,
+    ): void {
+        const batchSize = aggregator.batchSize();
+        const timeoutMs = aggregator.timeout();
+        if (!Number.isInteger(batchSize) || batchSize <= 0) {
+            throw new AggregatorConfigurationError(
+                `aggregator ${messageType}: batchSize() must be a positive integer (got ${batchSize})`,
+            );
+        }
+        if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+            throw new AggregatorConfigurationError(
+                `aggregator ${messageType}: timeout() must be a positive finite number of ms (got ${timeoutMs})`,
+            );
+        }
+        if (!store) {
+            throw new AggregatorConfigurationError(
+                `aggregator ${messageType}: registerAggregator requires an IAggregatorStore`,
+            );
+        }
+        this.byType.set(messageType, {
+            aggregator: aggregator as Aggregator<Message>,
+            batchSize,
+            timeoutMs,
+            store,
+        });
     }
-    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-      throw new AggregatorConfigurationError(
-        `aggregator ${messageType}: timeout() must be a positive finite number of ms (got ${timeoutMs})`,
-      );
+
+    entryFor(messageType: string): AggregatorEntry | undefined {
+        return this.byType.get(messageType);
     }
-    if (!store) {
-      throw new AggregatorConfigurationError(
-        `aggregator ${messageType}: registerAggregator requires an IAggregatorStore`,
-      );
+
+    hasAny(): boolean {
+        return this.byType.size > 0;
     }
-    this.byType.set(messageType, {
-      aggregator: aggregator as Aggregator<Message>,
-      batchSize,
-      timeoutMs,
-      store,
-    });
-  }
 
-  entryFor(messageType: string): AggregatorEntry | undefined {
-    return this.byType.get(messageType);
-  }
+    timeouts(): ReadonlyMap<string, number> {
+        const out = new Map<string, number>();
+        for (const [k, v] of this.byType.entries()) out.set(k, v.timeoutMs);
+        return out;
+    }
 
-  hasAny(): boolean {
-    return this.byType.size > 0;
-  }
-
-  timeouts(): ReadonlyMap<string, number> {
-    const out = new Map<string, number>();
-    for (const [k, v] of this.byType.entries()) out.set(k, v.timeoutMs);
-    return out;
-  }
-
-  stores(): readonly IAggregatorStore[] {
-    return [...new Set([...this.byType.values()].map((e) => e.store))];
-  }
+    stores(): readonly IAggregatorStore[] {
+        return [...new Set([...this.byType.values()].map((e) => e.store))];
+    }
 }

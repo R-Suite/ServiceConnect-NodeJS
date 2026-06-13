@@ -1,19 +1,19 @@
 {
-  "name": "@serviceconnect/example-filters",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "lint": "biome check .",
-    "start": "tsx src/index.ts"
-  },
-  "engines": { "node": ">=22" },
-  "dependencies": {
-    "@serviceconnect/core": "workspace:*",
-    "@serviceconnect/example-lib": "workspace:*",
-    "@serviceconnect/rabbitmq": "workspace:*"
-  },
-  "devDependencies": {
-    "tsx": "^4.19.0"
-  }
+    "name": "@serviceconnect/example-filters",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "lint": "biome check .",
+        "start": "tsx src/index.ts"
+    },
+    "engines": { "node": ">=22" },
+    "dependencies": {
+        "@serviceconnect/core": "workspace:*",
+        "@serviceconnect/example-lib": "workspace:*",
+        "@serviceconnect/rabbitmq": "workspace:*"
+    },
+    "devDependencies": {
+        "tsx": "^4.19.0"
+    }
 }
