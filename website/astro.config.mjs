@@ -16,9 +16,13 @@ export default defineConfig({
                 replacesTitle: true,
             },
             customCss: ['./src/styles/brand.css'],
-            social: {
-                github: 'https://github.com/R-Suite/ServiceConnect-NodeJS',
-            },
+            social: [
+                {
+                    icon: 'github',
+                    label: 'GitHub',
+                    href: 'https://github.com/R-Suite/ServiceConnect-NodeJS',
+                },
+            ],
             sidebar: [
                 {
                     label: 'Learn',
@@ -106,7 +110,7 @@ export default defineConfig({
                 {
                     label: 'Reference',
                     collapsed: true,
-                    autogenerate: { directory: 'reference' },
+                    items: [{ autogenerate: { directory: 'reference' } }],
                 },
                 {
                     label: 'Project',
