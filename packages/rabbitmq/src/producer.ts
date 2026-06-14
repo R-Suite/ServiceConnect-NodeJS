@@ -36,7 +36,6 @@ export function createProducer(
         exchanges: [],
     }) as PublisherWithExchanges;
     const declaredExchanges = new Set<string>();
-    const declaredBindings = new Set<string>();
     let publishCount = 0;
     let lastPublishAt: string | null = null;
 
@@ -48,35 +47,29 @@ export function createProducer(
             durable: true,
         };
         await connection.exchangeDeclare(spec);
-        // Also push into the publisher's exchanges list so rabbitmq-client re-declares
-        // it on reconnect. Without this, a broker that loses exchange state across a
-        // restart would leave the publisher trying to publish to a missing exchange.
+        // Re-declare on reconnect (see rabbitmq-client publisher.exchanges).
         if (publisher.exchanges) {
             publisher.exchanges.push(spec);
         }
         declaredExchanges.add(typeName);
+    }
 
-        const parents = parentsOf?.(typeName) ?? [];
-        for (const parent of parents) {
-            await ensureExchangeDeclared(parent);
-            const bindingKey = `${typeName}->${parent}`;
-            if (!declaredBindings.has(bindingKey)) {
-                await (
-                    connection as unknown as {
-                        exchangeBind: (args: {
-                            source: string;
-                            destination: string;
-                            routingKey?: string;
-                        }) => Promise<void>;
-                    }
-                ).exchangeBind({
-                    source: exchangeNameForType(typeName),
-                    destination: exchangeNameForType(parent),
-                    routingKey: '',
-                });
-                declaredBindings.add(bindingKey);
+    // The published type plus the transitive closure of parentsOf, deduped and cycle-guarded.
+    // Master publishes a derived message to its own exchange AND every ancestor exchange.
+    function ancestorClosure(typeName: string): string[] {
+        const out: string[] = [];
+        const seen = new Set<string>();
+        const stack = [typeName];
+        while (stack.length > 0) {
+            const t = stack.pop() as string;
+            if (seen.has(t)) continue;
+            seen.add(t);
+            out.push(t);
+            for (const parent of parentsOf?.(t) ?? []) {
+                stack.push(parent);
             }
         }
+        return out;
     }
 
     function validateBodySize(body: Uint8Array): void {
@@ -111,23 +104,22 @@ export function createProducer(
         async publish(typeName, body, options, signal) {
             throwIfAborted(signal);
             validateBodySize(body);
-            await ensureExchangeDeclared(typeName);
-            throwIfAborted(signal);
-            await publisher.send(
-                {
-                    exchange: exchangeNameForType(typeName),
-                    routingKey: options?.routingKey ?? '',
-                    headers: { ...(options?.headers ?? {}) },
-                    contentType: 'application/json',
-                    // Stops rabbitmq-client auto-JSON-parsing the body on consume. The body is already
-                    // serialized bytes; without this the consumer parses it (1), re-stringifies it in
-                    // toEnvelope (2), then deserializes it again (3). With it the body round-trips as raw
-                    // bytes and is deserialized exactly once.
-                    contentEncoding: 'identity',
-                    durable: true,
-                },
-                Buffer.from(body),
-            );
+            const buf = Buffer.from(body);
+            for (const ancestor of ancestorClosure(typeName)) {
+                await ensureExchangeDeclared(ancestor);
+                throwIfAborted(signal);
+                await publisher.send(
+                    {
+                        exchange: exchangeNameForType(ancestor),
+                        routingKey: options?.routingKey ?? '',
+                        headers: { ...(options?.headers ?? {}) },
+                        contentType: 'application/json',
+                        contentEncoding: 'identity',
+                        durable: true,
+                    },
+                    buf,
+                );
+            }
             recordPublish();
         },
 

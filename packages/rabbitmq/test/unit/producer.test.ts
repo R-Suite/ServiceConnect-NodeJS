@@ -136,41 +136,49 @@ describe('createProducer', () => {
         expect(connection.close).toHaveBeenCalledOnce();
     });
 
-    it('publish declares parent exchanges and exchange-to-exchange bindings on first publish per type', async () => {
+    it('publish() multi-publishes to the type exchange and every ancestor exchange (no e2e binds)', async () => {
         const { connection, publisher } = fakeConnection();
-        const parentsOf = (n: string): readonly string[] =>
-            n === 'OrderShipped' ? ['DomainEvent'] : [];
+        const parentsOf = (n: string): readonly string[] => {
+            if (n === 'MyApp.Orders.OrderShipped') return ['MyApp.DomainEvent'];
+            if (n === 'MyApp.DomainEvent') return ['MyApp.Event'];
+            return [];
+        };
         const producer = createProducer(connection, resolveProducerOptions({ url: '' }), parentsOf);
-        await producer.publish('OrderShipped', new Uint8Array([1]));
-        await producer.publish('OrderShipped', new Uint8Array([2]));
-
-        // The derived exchange + the parent exchange both declared exactly once each.
-        expect(connection.exchangeDeclare).toHaveBeenCalledWith({
-            exchange: 'OrderShipped',
-            type: 'fanout',
-            durable: true,
-        });
-        expect(connection.exchangeDeclare).toHaveBeenCalledWith({
-            exchange: 'DomainEvent',
-            type: 'fanout',
-            durable: true,
-        });
-        // The e2e binding declared exactly once.
-        expect(connection.exchangeBind).toHaveBeenCalledWith({
-            source: 'OrderShipped',
-            destination: 'DomainEvent',
-            routingKey: '',
-        });
-        expect((connection.exchangeBind as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
-        // Both publishes routed to the derived exchange.
-        expect(publisher.send).toHaveBeenCalledTimes(2);
+        await producer.publish('MyApp.Orders.OrderShipped', new Uint8Array([1]));
+        const sentExchanges = (publisher.send as ReturnType<typeof vi.fn>).mock.calls.map(
+            (c) => c[0]?.exchange,
+        );
+        expect(new Set(sentExchanges)).toEqual(
+            new Set(['MyAppOrdersOrderShipped', 'MyAppDomainEvent', 'MyAppEvent']),
+        );
+        expect(connection.exchangeBind).not.toHaveBeenCalled();
     });
 
-    it('publish with no parentsOf callback skips e2e binding declaration', async () => {
-        const { connection } = fakeConnection();
+    it('publish() with no parents sends exactly once, to its own exchange', async () => {
+        const { connection, publisher } = fakeConnection();
         const producer = createProducer(connection, resolveProducerOptions({ url: '' }));
-        await producer.publish('OrderShipped', new Uint8Array([1]));
+        await producer.publish('MyApp.Solo', new Uint8Array([1]));
+        expect((publisher.send as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+        expect((publisher.send as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]?.exchange).toBe(
+            'MyAppSolo',
+        );
         expect(connection.exchangeBind).not.toHaveBeenCalled();
+    });
+
+    it('publish() dedupes a diamond hierarchy (one send per distinct exchange)', async () => {
+        const { connection, publisher } = fakeConnection();
+        const parentsOf = (n: string): readonly string[] => {
+            if (n === 'D.Leaf') return ['D.Left', 'D.Right'];
+            if (n === 'D.Left' || n === 'D.Right') return ['D.Base'];
+            return [];
+        };
+        const producer = createProducer(connection, resolveProducerOptions({ url: '' }), parentsOf);
+        await producer.publish('D.Leaf', new Uint8Array([1]));
+        const sent = (publisher.send as ReturnType<typeof vi.fn>).mock.calls.map(
+            (c) => c[0]?.exchange,
+        );
+        expect(sent).toHaveLength(4);
+        expect(new Set(sent)).toEqual(new Set(['DLeaf', 'DLeft', 'DRight', 'DBase']));
     });
 
     it('publish() declares and targets the FullName-stripped exchange', async () => {
@@ -184,18 +192,5 @@ describe('createProducer', () => {
         });
         const call = (publisher.send as ReturnType<typeof vi.fn>).mock.calls[0];
         expect(call?.[0]?.exchange).toBe('MyAppMessagesOrderPlaced');
-    });
-
-    it('publish() exchange-to-exchange binds parents using derived names', async () => {
-        const { connection } = fakeConnection();
-        const parentsOf = (n: string): readonly string[] =>
-            n === 'MyApp.Orders.OrderShipped' ? ['MyApp.DomainEvent'] : [];
-        const producer = createProducer(connection, resolveProducerOptions({ url: '' }), parentsOf);
-        await producer.publish('MyApp.Orders.OrderShipped', new Uint8Array([1]));
-        expect(connection.exchangeBind).toHaveBeenCalledWith({
-            source: 'MyAppOrdersOrderShipped',
-            destination: 'MyAppDomainEvent',
-            routingKey: '',
-        });
     });
 });
