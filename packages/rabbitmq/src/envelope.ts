@@ -17,12 +17,6 @@ export function toEnvelope(msg: AsyncMessage): Envelope {
         }
     }
 
-    // Standard AMQP properties win over caller-supplied headers when both present.
-    if (msg.contentType) headers.ContentType = msg.contentType;
-    if (msg.correlationId) headers.CorrelationId = msg.correlationId;
-    if (msg.messageId) headers.MessageId = msg.messageId;
-    if (msg.timestamp) headers.TimeSent = new Date(msg.timestamp * 1000).toISOString();
-
     // rabbitmq-client auto-parses the body when contentType is 'application/json',
     // giving us a plain JS value instead of a Buffer. Re-serialise so callers always
     // receive a Uint8Array regardless of how the message was published.

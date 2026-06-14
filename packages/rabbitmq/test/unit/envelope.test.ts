@@ -37,23 +37,6 @@ describe('toEnvelope', () => {
         expect([...env.body]).toEqual([1, 2, 3]);
     });
 
-    it('promotes AMQP standard properties to PascalCase headers', () => {
-        const msg = {
-            body: Buffer.alloc(0),
-            headers: {},
-            contentType: 'application/json',
-            correlationId: 'cor-1',
-            messageId: 'm-1',
-            timestamp: 1716393600,
-        } as unknown as Parameters<typeof toEnvelope>[0];
-        const env = toEnvelope(msg);
-        expect(env.headers.ContentType).toBe('application/json');
-        expect(env.headers.CorrelationId).toBe('cor-1');
-        expect(env.headers.MessageId).toBe('m-1');
-        expect(typeof env.headers.TimeSent).toBe('string');
-        expect((env.headers.TimeSent as string).endsWith('Z')).toBe(true);
-    });
-
     it('flattens x-headers into the envelope headers map', () => {
         const msg = {
             body: Buffer.alloc(0),
@@ -67,15 +50,5 @@ describe('toEnvelope', () => {
         expect(env.headers.MessageType).toBe('OrderCreated');
         expect(env.headers.RetryCount).toBe(2);
         expect(env.headers.CustomHeader).toBe('custom-value');
-    });
-
-    it('x-headers do not overwrite already-set standard properties', () => {
-        const msg = {
-            body: Buffer.alloc(0),
-            headers: { ContentType: 'will-not-win' },
-            contentType: 'application/json',
-        } as unknown as Parameters<typeof toEnvelope>[0];
-        const env = toEnvelope(msg);
-        expect(env.headers.ContentType).toBe('application/json');
     });
 });

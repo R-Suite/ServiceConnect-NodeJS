@@ -70,7 +70,7 @@ describe('createProducer', () => {
         });
     });
 
-    it('send() routes through default exchange to the endpoint queue and stamps MessageType header', async () => {
+    it('send() routes through default exchange to the endpoint queue with caller headers only', async () => {
         const { connection, publisher } = fakeConnection();
         const producer = createProducer(connection, resolveProducerOptions({ url: '' }));
         await producer.send('q-target', 'OrderCreated', new Uint8Array([1]), {
@@ -82,8 +82,9 @@ describe('createProducer', () => {
             routingKey: 'q-target',
             contentType: 'application/json',
             durable: true,
-            headers: { MessageType: 'OrderCreated', Custom: 'v' },
+            headers: { Custom: 'v' },
         });
+        expect(call?.[0]?.headers).not.toHaveProperty('MessageType');
     });
 
     it('send() stamps RoutingSlipHopsCompleted header when provided', async () => {

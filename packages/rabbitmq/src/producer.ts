@@ -122,13 +122,10 @@ export function createProducer(
             recordPublish();
         },
 
-        async send(endpoint, typeName, body, options, signal) {
+        async send(endpoint, _typeName, body, options, signal) {
             throwIfAborted(signal);
             validateBodySize(body);
-            const headers: Record<string, unknown> = {
-                MessageType: typeName,
-                ...(options?.headers ?? {}),
-            };
+            const headers: Record<string, unknown> = { ...(options?.headers ?? {}) };
             if (options?.routingSlipHopsCompleted !== undefined) {
                 headers.RoutingSlipHopsCompleted = String(options.routingSlipHopsCompleted);
             }
@@ -147,14 +144,14 @@ export function createProducer(
             recordPublish();
         },
 
-        async sendBytes(endpoint, typeName, body, options, signal) {
+        async sendBytes(endpoint, _typeName, body, options, signal) {
             throwIfAborted(signal);
             validateBodySize(body);
             await publisher.send(
                 {
                     exchange: '',
                     routingKey: endpoint,
-                    headers: { MessageType: typeName, ...(options?.headers ?? {}) },
+                    headers: { ...(options?.headers ?? {}) },
                     contentType: 'application/octet-stream',
                     durable: true,
                 },
