@@ -132,8 +132,8 @@ describe('createConsumer', () => {
         expect(dispatchPublisher.send).toHaveBeenCalledOnce();
         const call = (dispatchPublisher.send as ReturnType<typeof vi.fn>).mock.calls[0];
         expect(call?.[0]).toMatchObject({
-            exchange: 'q-self.Retries.Exchange',
-            routingKey: 'q-self',
+            exchange: '',
+            routingKey: 'q-self.Retries',
         });
         expect(call?.[0]?.headers?.RetryCount).toBe(1);
     });
@@ -150,7 +150,7 @@ describe('createConsumer', () => {
         await getHandler()?.(fakeAsyncMessage());
         expect(dispatchPublisher.send).toHaveBeenCalledOnce();
         const call = (dispatchPublisher.send as ReturnType<typeof vi.fn>).mock.calls[0];
-        expect(call?.[0]).toMatchObject({ exchange: '', routingKey: 'errors' });
+        expect(call?.[0]).toMatchObject({ exchange: 'errors', routingKey: '' });
         expect(call?.[0]?.headers?.Exception).toContain('bad json');
         expect(call?.[0]?.headers?.TerminalFailure).toBe('true');
     });
@@ -169,7 +169,7 @@ describe('createConsumer', () => {
         }));
         await getHandler()?.(fakeAsyncMessage({ RetryCount: 2 }));
         const call = (dispatchPublisher.send as ReturnType<typeof vi.fn>).mock.calls[0];
-        expect(call?.[0]).toMatchObject({ exchange: '', routingKey: 'errors' });
+        expect(call?.[0]).toMatchObject({ exchange: 'errors', routingKey: '' });
         expect(call?.[0]?.headers?.RetryCount).toBe(3);
     });
 
@@ -183,7 +183,7 @@ describe('createConsumer', () => {
         await getHandler()?.(fakeAsyncMessage());
         expect(dispatchPublisher.send).toHaveBeenCalledOnce();
         const call = (dispatchPublisher.send as ReturnType<typeof vi.fn>).mock.calls[0];
-        expect(call?.[0]).toMatchObject({ routingKey: 'audit' });
+        expect(call?.[0]).toMatchObject({ exchange: 'audit', routingKey: '' });
     });
 
     it('stop() aborts the per-message AbortSignal and closes the underlying consumer', async () => {

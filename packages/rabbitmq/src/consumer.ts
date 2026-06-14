@@ -135,8 +135,8 @@ export function createConsumer(
             const names = buildRetryExchangeNames(queueName ?? '');
             await publisher.send(
                 {
-                    exchange: names.retriesExchange,
-                    routingKey: queueName ?? '',
+                    exchange: '',
+                    routingKey: names.retryQueue,
                     // durable:true so the message survives a broker restart while parked in the durable retry
                     // queue — the producer publishes everything persistent, and the retry/error queues are
                     // declared durable, so a transient republish would otherwise be silently lost.
@@ -170,8 +170,8 @@ export function createConsumer(
         // durable:true so a dead-lettered message survives a broker restart in the durable error queue.
         await publisher.send(
             {
-                exchange: '',
-                routingKey: action.errorQueue,
+                exchange: action.errorQueue,
+                routingKey: '',
                 durable: true,
                 contentType: msg.contentType,
                 contentEncoding: msg.contentEncoding,

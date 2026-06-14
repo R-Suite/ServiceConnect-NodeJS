@@ -18,44 +18,73 @@ describe('buildTypeExchangeSpec', () => {
     });
 });
 
-describe('buildRetryExchangeNames', () => {
-    it('derives retry-routing exchange names from the queue name', () => {
-        const names = buildRetryExchangeNames('q-self');
-        expect(names.retriesExchange).toBe('q-self.Retries.Exchange');
-        expect(names.mainBackExchange).toBe('q-self.MainBack.Exchange');
-        expect(names.retryQueue).toBe('q-self.Retries');
+describe('retry/error/audit topology (master parity)', () => {
+    const opts = resolveConsumerOptions({ url: '', consumer: { auditEnabled: true } });
+    const topo = buildConsumerTopology('svc', ['MyApp.Foo'], opts);
+    it('names: retry queue + direct dead-letter exchange', () => {
+        expect(buildRetryExchangeNames('svc')).toEqual({
+            retryQueue: 'svc.Retries',
+            deadLetterExchange: 'svc.Retries.DeadLetter',
+        });
+    });
+    it('main queue is plain (no retry dead-letter args)', () => {
+        const main = topo.queues.find((q) => q.queue === 'svc');
+        expect(main?.arguments?.['x-dead-letter-exchange']).toBeUndefined();
+        expect(main?.arguments?.['x-dead-letter-routing-key']).toBeUndefined();
+    });
+    it('retry queue TTLs and dead-letters to the DLX', () => {
+        const retry = topo.queues.find((q) => q.queue === 'svc.Retries');
+        expect(retry?.arguments?.['x-message-ttl']).toBe(opts.retryDelay);
+        expect(retry?.arguments?.['x-dead-letter-exchange']).toBe('svc.Retries.DeadLetter');
+    });
+    it('declares the direct durable DLX and binds the main queue back via the retry key', () => {
+        expect(topo.exchanges).toContainEqual({
+            exchange: 'svc.Retries.DeadLetter',
+            type: 'direct',
+            durable: true,
+        });
+        expect(topo.queueBindings).toContainEqual({
+            exchange: 'svc.Retries.DeadLetter',
+            queue: 'svc',
+            routingKey: 'svc.Retries',
+        });
+    });
+    it('declares non-durable direct error + audit exchanges bound to durable queues', () => {
+        expect(topo.exchanges).toContainEqual({
+            exchange: 'errors',
+            type: 'direct',
+            durable: false,
+        });
+        expect(topo.exchanges).toContainEqual({
+            exchange: 'audit',
+            type: 'direct',
+            durable: false,
+        });
+        expect(topo.queues).toContainEqual({ queue: 'errors', durable: true });
+        expect(topo.queueBindings).toContainEqual({
+            exchange: 'errors',
+            queue: 'errors',
+            routingKey: '',
+        });
+        expect(topo.queueBindings).toContainEqual({
+            exchange: 'audit',
+            queue: 'audit',
+            routingKey: '',
+        });
+    });
+    it('omits retry topology when maxRetries is 0', () => {
+        const noRetry = buildConsumerTopology(
+            'svc',
+            [],
+            resolveConsumerOptions({ url: '', consumer: { maxRetries: 0 } }),
+        );
+        expect(noRetry.queues.some((q) => q.queue === 'svc.Retries')).toBe(false);
+        expect(noRetry.exchanges.some((e) => e.exchange === 'svc.Retries.DeadLetter')).toBe(false);
     });
 });
 
-describe('buildConsumerTopology', () => {
-    const baseOpts = {
-        prefetch: 100,
-        retryDelay: 3000,
-        maxRetries: 3,
-        errorQueue: 'errors' as const,
-        auditQueue: 'audit',
-        auditEnabled: false,
-        deadLetterUnhandled: false,
-        queueArguments: {},
-        retryQueueArguments: {},
-    };
-
-    it('declares the main queue with dead-letter routing back to the retries exchange', () => {
-        const t = buildConsumerTopology('q-self', ['OrderCreated'], baseOpts);
-        const main = t.queues.find((q) => q.queue === 'q-self');
-        expect(main).toBeDefined();
-        expect(main?.durable).toBe(true);
-        expect(main?.arguments?.['x-dead-letter-exchange']).toBe('q-self.Retries.Exchange');
-        expect(main?.arguments?.['x-dead-letter-routing-key']).toBe('q-self');
-    });
-
-    it('declares the retry queue with TTL and dead-letter routing back to the main-back exchange', () => {
-        const t = buildConsumerTopology('q-self', [], baseOpts);
-        const retry = t.queues.find((q) => q.queue === 'q-self.Retries');
-        expect(retry).toBeDefined();
-        expect(retry?.arguments?.['x-message-ttl']).toBe(3000);
-        expect(retry?.arguments?.['x-dead-letter-exchange']).toBe('q-self.MainBack.Exchange');
-    });
+describe('buildConsumerTopology (general)', () => {
+    const baseOpts = resolveConsumerOptions({ url: '', consumer: { maxRetries: 3 } });
 
     it('declares the error queue when errorQueue is non-null', () => {
         const t = buildConsumerTopology('q-self', [], baseOpts);
@@ -63,14 +92,22 @@ describe('buildConsumerTopology', () => {
     });
 
     it('omits the error queue when errorQueue is null', () => {
-        const t = buildConsumerTopology('q-self', [], { ...baseOpts, errorQueue: null });
+        const t = buildConsumerTopology(
+            'q-self',
+            [],
+            resolveConsumerOptions({ url: '', consumer: { errorQueue: null } }),
+        );
         expect(t.queues.find((q) => q.queue === 'errors')).toBeUndefined();
     });
 
     it('declares the audit queue only when auditEnabled is true', () => {
         const off = buildConsumerTopology('q-self', [], baseOpts);
         expect(off.queues.find((q) => q.queue === 'audit')).toBeUndefined();
-        const on = buildConsumerTopology('q-self', [], { ...baseOpts, auditEnabled: true });
+        const on = buildConsumerTopology(
+            'q-self',
+            [],
+            resolveConsumerOptions({ url: '', consumer: { auditEnabled: true } }),
+        );
         expect(on.queues.find((q) => q.queue === 'audit')).toBeDefined();
     });
 
@@ -88,51 +125,23 @@ describe('buildConsumerTopology', () => {
         });
     });
 
-    it('declares helper exchanges for retry routing', () => {
-        const t = buildConsumerTopology('q-self', [], baseOpts);
-        expect(t.exchanges).toContainEqual({
-            exchange: 'q-self.Retries.Exchange',
-            type: 'direct',
-            durable: true,
-        });
-        expect(t.exchanges).toContainEqual({
-            exchange: 'q-self.MainBack.Exchange',
-            type: 'fanout',
-            durable: true,
-        });
-    });
-
     it('binds main queue to every type-exchange', () => {
         const t = buildConsumerTopology('q-self', ['A', 'B'], baseOpts);
         expect(t.queueBindings).toContainEqual({ exchange: 'A', queue: 'q-self' });
         expect(t.queueBindings).toContainEqual({ exchange: 'B', queue: 'q-self' });
     });
 
-    it('binds retry queue to retries exchange with queue name as routing key', () => {
-        const t = buildConsumerTopology('q-self', [], baseOpts);
-        expect(t.queueBindings).toContainEqual({
-            exchange: 'q-self.Retries.Exchange',
-            queue: 'q-self.Retries',
-            routingKey: 'q-self',
-        });
-    });
-
-    it('binds main queue to mainBack exchange so retried messages return', () => {
-        const t = buildConsumerTopology('q-self', [], baseOpts);
-        expect(t.queueBindings).toContainEqual({
-            exchange: 'q-self.MainBack.Exchange',
-            queue: 'q-self',
-        });
-    });
-
-    it('merges caller queueArguments with framework keys winning on collision', () => {
-        const t = buildConsumerTopology('q-self', [], {
-            ...baseOpts,
-            queueArguments: { 'x-max-priority': 10, 'x-dead-letter-exchange': 'caller-override' },
-        });
+    it('merges caller queueArguments into the main queue', () => {
+        const t = buildConsumerTopology(
+            'q-self',
+            [],
+            resolveConsumerOptions({
+                url: '',
+                consumer: { maxRetries: 3, queueArguments: { 'x-max-priority': 10 } },
+            }),
+        );
         const main = t.queues.find((q) => q.queue === 'q-self');
         expect(main?.arguments?.['x-max-priority']).toBe(10);
-        expect(main?.arguments?.['x-dead-letter-exchange']).toBe('q-self.Retries.Exchange');
     });
 });
 

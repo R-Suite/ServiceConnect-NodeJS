@@ -27,7 +27,7 @@ describe('publishAudit', () => {
         await publishAudit(publisher, 'audit', msg);
         expect(publisher.send).toHaveBeenCalledOnce();
         const call = (publisher.send as ReturnType<typeof vi.fn>).mock.calls[0];
-        expect(call?.[0]).toMatchObject({ exchange: '', routingKey: 'audit' });
+        expect(call?.[0]).toMatchObject({ exchange: 'audit', routingKey: '' });
         expect(call?.[1]).toEqual(Buffer.from([1, 2, 3]));
     });
 });

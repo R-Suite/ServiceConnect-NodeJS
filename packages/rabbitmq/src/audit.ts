@@ -19,8 +19,8 @@ export async function publishAudit(
     // durable:true so audited messages survive a broker restart in the durable audit queue.
     await publisher.send(
         {
-            exchange: '',
-            routingKey: auditQueue,
+            exchange: auditQueue,
+            routingKey: '',
             durable: true,
             contentType: msg.contentType,
             contentEncoding: msg.contentEncoding,

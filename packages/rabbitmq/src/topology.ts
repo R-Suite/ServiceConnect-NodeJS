@@ -35,9 +35,8 @@ export interface ConsumerTopology {
 }
 
 export interface RetryExchangeNames {
-    retriesExchange: string;
-    mainBackExchange: string;
     retryQueue: string;
+    deadLetterExchange: string;
 }
 
 export function buildTypeExchangeSpec(typeName: string): ExchangeSpec {
@@ -46,9 +45,8 @@ export function buildTypeExchangeSpec(typeName: string): ExchangeSpec {
 
 export function buildRetryExchangeNames(queueName: string): RetryExchangeNames {
     return {
-        retriesExchange: `${queueName}.Retries.Exchange`,
-        mainBackExchange: `${queueName}.MainBack.Exchange`,
         retryQueue: `${queueName}.Retries`,
+        deadLetterExchange: `${queueName}.Retries.DeadLetter`,
     };
 }
 
@@ -59,49 +57,46 @@ export function buildConsumerTopology(
 ): ConsumerTopology {
     const names = buildRetryExchangeNames(queueName);
 
+    // Main queue carries only the caller's arguments (master keeps it plain re: retries).
     const queues: QueueSpec[] = [
-        {
-            queue: queueName,
-            durable: true,
-            arguments: {
-                ...opts.queueArguments,
-                'x-dead-letter-exchange': names.retriesExchange,
-                'x-dead-letter-routing-key': queueName,
-            },
-        },
-        {
+        { queue: queueName, durable: true, arguments: { ...opts.queueArguments } },
+    ];
+    const exchanges: ExchangeSpec[] = [];
+    const queueBindings: QueueBindingSpec[] = [];
+
+    if (opts.maxRetries > 0) {
+        queues.push({
             queue: names.retryQueue,
             durable: true,
             arguments: {
                 ...opts.retryQueueArguments,
                 'x-message-ttl': opts.retryDelay,
-                'x-dead-letter-exchange': names.mainBackExchange,
+                'x-dead-letter-exchange': names.deadLetterExchange,
             },
-        },
-    ];
+        });
+        exchanges.push({ exchange: names.deadLetterExchange, type: 'direct', durable: true });
+        queueBindings.push({
+            exchange: names.deadLetterExchange,
+            queue: queueName,
+            routingKey: names.retryQueue,
+        });
+    }
 
     if (opts.errorQueue !== null) {
+        exchanges.push({ exchange: opts.errorQueue, type: 'direct', durable: false });
         queues.push({ queue: opts.errorQueue, durable: true });
+        queueBindings.push({ exchange: opts.errorQueue, queue: opts.errorQueue, routingKey: '' });
     }
-
     if (opts.auditEnabled) {
+        exchanges.push({ exchange: opts.auditQueue, type: 'direct', durable: false });
         queues.push({ queue: opts.auditQueue, durable: true });
+        queueBindings.push({ exchange: opts.auditQueue, queue: opts.auditQueue, routingKey: '' });
     }
 
-    const exchanges: ExchangeSpec[] = [
-        { exchange: names.retriesExchange, type: 'direct', durable: true },
-        { exchange: names.mainBackExchange, type: 'fanout', durable: true },
-        ...messageTypes.map(buildTypeExchangeSpec),
-    ];
-
-    const queueBindings: QueueBindingSpec[] = [
-        { exchange: names.retriesExchange, queue: names.retryQueue, routingKey: queueName },
-        { exchange: names.mainBackExchange, queue: queueName },
-        ...messageTypes.map((typeName) => ({
-            exchange: exchangeNameForType(typeName),
-            queue: queueName,
-        })),
-    ];
+    for (const typeName of messageTypes) {
+        exchanges.push(buildTypeExchangeSpec(typeName));
+        queueBindings.push({ exchange: exchangeNameForType(typeName), queue: queueName });
+    }
 
     return { queues, exchanges, queueBindings };
 }
