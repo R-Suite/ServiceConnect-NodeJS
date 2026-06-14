@@ -1,13 +1,15 @@
 /** Uppercases the first character (camelCase -> PascalCase). Leaves the rest untouched. */
 function toPascal(key: string): string {
-    if (key.length === 0) return key;
-    return key[0].toUpperCase() + key.slice(1);
+    const first = key[0];
+    if (first === undefined) return key;
+    return first.toUpperCase() + key.slice(1);
 }
 
 /** Lowercases the first character (PascalCase -> camelCase). Leaves the rest untouched. */
 function toCamel(key: string): string {
-    if (key.length === 0) return key;
-    return key[0].toLowerCase() + key.slice(1);
+    const first = key[0];
+    if (first === undefined) return key;
+    return first.toLowerCase() + key.slice(1);
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
