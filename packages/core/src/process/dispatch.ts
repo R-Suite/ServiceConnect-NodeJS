@@ -36,6 +36,13 @@ export async function runSagaBranch(
     const regs = deps.processes.registrationsFor(messageType);
     if (regs.length === 0) return { ran: false };
 
+    // correlationId travels in the body (master wire format), not a header; surface it on the context.
+    const ctxHeaders = {
+        ...headers,
+        correlationId:
+            (message as { correlationId?: string }).correlationId ?? headers.correlationId,
+    } as MessageHeaders;
+
     let anyRan = false;
     for (const reg of regs) {
         // Resolve the stores for THIS process. Each registration carries its own; deps.* is only a
@@ -83,7 +90,12 @@ export async function runSagaBranch(
 
         let markedComplete = false;
         const ctx: ProcessContext = {
-            ...createConsumeContext({ bus: deps.bus, headers, signal, logger: deps.logger }),
+            ...createConsumeContext({
+                bus: deps.bus,
+                headers: ctxHeaders,
+                signal,
+                logger: deps.logger,
+            }),
             markComplete: () => {
                 markedComplete = true;
             },
