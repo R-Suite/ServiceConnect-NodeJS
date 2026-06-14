@@ -25,7 +25,9 @@ async function main(): Promise<number> {
     bus.use(
         'beforeConsuming',
         asFilter((envelope) => {
-            const id = String(envelope.headers.correlationId ?? '');
+            // Incoming filters run before deserialization, and correlationId now travels in the
+            // body (master wire format) rather than a header — so discriminate on a custom header.
+            const id = String(envelope.headers.noteId ?? '');
             if (id.startsWith('drop-')) {
                 announce('filter', `dropped ${id}`);
                 return FilterAction.Stop;
@@ -33,7 +35,7 @@ async function main(): Promise<number> {
             return FilterAction.Continue;
         }),
         asMiddleware(async (context, next) => {
-            const id = String(context.envelope.headers.correlationId ?? '');
+            const id = String(context.envelope.headers.noteId ?? '');
             seenByMiddleware.push(id);
             announce('middleware', `saw ${id}`);
             await next();
@@ -49,9 +51,27 @@ async function main(): Promise<number> {
 
     try {
         announce('publisher', 'publishing 3 messages (2 normal + 1 drop)');
-        await bus.publish<Note>('Note', { correlationId: 'c-1', body: 'first' });
-        await bus.publish<Note>('Note', { correlationId: 'c-2', body: 'second' });
-        await bus.publish<Note>('Note', { correlationId: 'drop-1', body: 'dropped' });
+        await bus.publish<Note>(
+            'Note',
+            { correlationId: 'c-1', body: 'first' },
+            {
+                headers: { noteId: 'c-1' },
+            },
+        );
+        await bus.publish<Note>(
+            'Note',
+            { correlationId: 'c-2', body: 'second' },
+            {
+                headers: { noteId: 'c-2' },
+            },
+        );
+        await bus.publish<Note>(
+            'Note',
+            { correlationId: 'drop-1', body: 'dropped' },
+            {
+                headers: { noteId: 'drop-1' },
+            },
+        );
 
         const deadline = Date.now() + 5000;
         while (handled.length < 2 && Date.now() < deadline) {

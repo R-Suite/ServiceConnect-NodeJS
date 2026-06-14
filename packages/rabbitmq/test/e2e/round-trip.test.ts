@@ -34,7 +34,7 @@ describe('round-trip', () => {
         await producer[Symbol.asyncDispose]();
     });
 
-    it('send to a queue endpoint delivers to that specific queue with MessageType header', async () => {
+    it('send to a queue endpoint delivers to that specific queue and round-trips caller headers', async () => {
         const url = process.env.RABBITMQ_URL ?? 'amqp://guest:guest@localhost:5672';
         const queue = `q-rt-${randomUUID().slice(0, 8)}`;
 
@@ -46,7 +46,11 @@ describe('round-trip', () => {
             return successResult;
         });
 
-        await producer.send(queue, 'OrderCreated', new TextEncoder().encode('{}'));
+        // The transport carries caller-supplied headers verbatim; core owns wire-header encoding
+        // (TypeName/MessageType), so a raw transport send here passes the header explicitly.
+        await producer.send(queue, 'OrderCreated', new TextEncoder().encode('{}'), {
+            headers: { TypeName: 'OrderCreated' },
+        });
 
         const start = Date.now();
         while (received.length === 0 && Date.now() - start < 5000) {
@@ -54,7 +58,7 @@ describe('round-trip', () => {
         }
 
         expect(received).toHaveLength(1);
-        expect(received[0]?.headers.MessageType).toBe('OrderCreated');
+        expect(received[0]?.headers.TypeName).toBe('OrderCreated');
 
         await consumer.stop();
         await producer[Symbol.asyncDispose]();
