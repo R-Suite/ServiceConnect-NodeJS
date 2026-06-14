@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { createRabbitMQTransport } from '../../src/transport.js';
 
 /**
- * Real Node <-> C# `master` interop proof (Phase 1 + Phase 2a).
+ * Real Node <-> C# `master` interop proof.
  *
  * Gated on INTEROP=1, because it requires a running C# `master` fixture service on the same broker
  * (see interop/csharp-fixture + interop/run.sh, which start the broker, build+run the fixture, set

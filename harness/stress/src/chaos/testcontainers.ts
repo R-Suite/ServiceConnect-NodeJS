@@ -8,7 +8,7 @@ export interface SoftChaosOptions {
 }
 
 /**
- * Phase H placeholder chaos: records the cadence of chaos events that WOULD happen
+ * Placeholder chaos: records the cadence of chaos events that WOULD happen
  * but does not actually stop the broker. A future iteration will replace this with
  * a docker-compose-driven implementation that can stop+start the same broker port.
  */
@@ -24,9 +24,7 @@ export function testcontainersChaos(options: SoftChaosOptions): BrokerChaos {
                 const stoppedAt = new Date();
                 const startedAt = new Date(stoppedAt.getTime() + options.downtimeMs);
                 events.push({ stoppedAt, startedAt, downtimeMs: options.downtimeMs });
-                options.logger.warn(
-                    'chaos: soft event recorded (broker not actually toggled in Phase H)',
-                );
+                options.logger.warn('chaos: soft event recorded (broker not actually toggled)');
             }, options.intervalMs);
         },
         async stop() {

@@ -58,7 +58,7 @@ export interface RequestOptions {
 - **`endpoint`** (optional) — point-to-point destination. If omitted the request is published; if set it is sent.
 - **`timeoutMs`** (optional, required for `sendRequest`) — milliseconds before the pending request rejects with `RequestTimeoutError` (or, for `sendRequestMulti`, resolves with however many replies arrived).
 - **`expectedReplyCount`** (optional) — used by `sendRequestMulti` to short-circuit once the expected number of replies has arrived without waiting for the full timeout.
-- **`signal`** (optional) — caller-supplied `AbortSignal`. When the signal aborts before a reply arrives the request rejects with `AbortError`. Added in Phase D.
+- **`signal`** (optional) — caller-supplied `AbortSignal`. When the signal aborts before a reply arrives the request rejects with `AbortError`.
 - **`headers`** (optional) — extra headers merged into the outgoing request envelope.
 
 ### ReplyOptions

@@ -3,7 +3,7 @@ import type { ResolvedConsumerOptions } from './options.js';
 /**
  * Derives the pub/sub fanout exchange name from a message type, matching the C# `master`
  * convention `Type.FullName.Replace(".", "")` so Node and .NET share the same exchange.
- * The registered type name is the .NET FullName (Phase 1), e.g. "MyApp.Messages.OrderPlaced"
+ * The registered type name is the .NET FullName, e.g. "MyApp.Messages.OrderPlaced"
  * -> "MyAppMessagesOrderPlaced".
  */
 export function exchangeNameForType(typeName: string): string {

@@ -79,7 +79,7 @@ describe('errors', () => {
     });
 });
 
-describe('Phase E errors', () => {
+describe('routing-slip and stream errors', () => {
     it('RoutingSlipDestinationError extends ServiceConnectError', () => {
         const err = new RoutingSlipDestinationError('bad destination');
         expect(err).toBeInstanceOf(ServiceConnectError);
