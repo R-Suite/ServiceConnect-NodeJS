@@ -3,7 +3,7 @@ import { PACKAGE_NAME as CORE_NAME } from '@serviceconnect/core';
 import type { RabbitMQTransportOptions } from './options.js';
 import { type RabbitMQTransport, createRabbitMQTransport } from './transport.js';
 
-// Real public surface — landed in Phase C.
+// Public surface
 export { createRabbitMQTransport } from './transport.js';
 export type { RabbitMQTransport } from './transport.js';
 export type { RabbitMQTransportOptions } from './options.js';

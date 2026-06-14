@@ -78,16 +78,16 @@ export {
     ValidationError,
 } from './errors.js';
 
-// Aggregator (Phase E)
+// Aggregator
 export { Aggregator } from './aggregator/aggregator.js';
 export { AggregatorRegistry } from './aggregator/registry.js';
 
-// Process Manager (Phase E)
+// Process Manager
 export type { ProcessContext, ProcessHandler } from './process/handler.js';
 export { ProcessRegistry } from './process/registry.js';
 export type { ProcessBuilder, ProcessRuntimeOptions } from './process/builder.js';
 
-// Routing slip (Phase E)
+// Routing slip
 export {
     assertValidDestination,
     destinationFailureReason,
@@ -97,7 +97,7 @@ export {
     serialiseRoutingSlip,
 } from './routing/index.js';
 
-// Streaming (Phase E)
+// Streaming
 export { StreamHeaders } from './streaming/stream-headers.js';
 export type { StreamHeaderKey } from './streaming/stream-headers.js';
 export type { StreamSender } from './streaming/sender.js';
@@ -119,7 +119,7 @@ export type {
     TimeoutRecord,
 } from './persistence/timeout-store.js';
 
-// RequestReplyManager (Phase D)
+// RequestReplyManager
 export { RequestReplyManager } from './request-reply.js';
 export type {
     CallbackRequestRegistration,

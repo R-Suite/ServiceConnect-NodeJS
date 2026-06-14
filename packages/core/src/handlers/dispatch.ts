@@ -89,7 +89,7 @@ export function createDispatcher(deps: DispatcherDeps): ConsumeCallback {
             return { success: false, notHandled: false, error: err, terminalFailure: false };
         }
 
-        // Phase E stream-branch. Runs before deserialization because stream chunks (end-of-stream,
+        // Stream-branch. Runs before deserialization because stream chunks (end-of-stream,
         // fault) may carry empty or absent bodies that would fail JSON.parse. The branch performs
         // its own selective deserialization for data-bearing chunks only.
         if (deps.streamBranch) {
@@ -112,7 +112,7 @@ export function createDispatcher(deps: DispatcherDeps): ConsumeCallback {
             return { success: false, notHandled: false, error: err, terminalFailure: isTerminal };
         }
 
-        // Phase D: reply-branch. If this envelope is a reply correlated to a pending request,
+        // Reply-branch. If this envelope is a reply correlated to a pending request,
         // route it to the manager and skip the handler chain. afterConsuming still runs.
         if (deps.requestReplyManager) {
             const matched = deps.requestReplyManager.tryRouteReply(
@@ -125,7 +125,7 @@ export function createDispatcher(deps: DispatcherDeps): ConsumeCallback {
             }
         }
 
-        // Phase E saga-branch. Runs only when a saga registration matches.
+        // Saga-branch. Runs only when a saga registration matches.
         if (deps.sagaBranch) {
             const sagaOutcome = await deps.sagaBranch(envelope, message, signal);
             if (sagaOutcome.ran && sagaOutcome.result) {
@@ -135,7 +135,7 @@ export function createDispatcher(deps: DispatcherDeps): ConsumeCallback {
             }
         }
 
-        // Phase E aggregator-branch. Short-circuits if a registration matches.
+        // Aggregator-branch. Short-circuits if a registration matches.
         if (deps.aggregatorBranch) {
             const aggOutcome = await deps.aggregatorBranch(envelope, message, signal);
             if (aggOutcome.ran && aggOutcome.result) {
@@ -176,7 +176,7 @@ export function createDispatcher(deps: DispatcherDeps): ConsumeCallback {
             }
         }
 
-        // Phase E routing-slip forward hook (after success pipeline, before after-pipeline)
+        // Routing-slip forward hook (after success pipeline, before after-pipeline)
         await maybeForward(!handlerError && !successPipelineError);
 
         // Step 7: afterConsuming (always)

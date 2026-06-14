@@ -590,9 +590,9 @@ class BusImpl implements Bus {
                 'publishRequest does not accept options.endpoint; use sendRequest for single-destination requests',
             );
         }
-        // No caller-supplied (positive) timeoutMs → fall back to the documented default. Phase B
-        // exports DEFAULT_REQUEST_TIMEOUT_MS but we inline the literal here to keep this method
-        // self-contained.
+        // No caller-supplied (positive) timeoutMs → fall back to the documented default.
+        // DEFAULT_REQUEST_TIMEOUT_MS is exported, but the literal is inlined here to keep this
+        // method self-contained.
         const timeoutMs =
             typeof options.timeoutMs === 'number' && options.timeoutMs > 0
                 ? options.timeoutMs

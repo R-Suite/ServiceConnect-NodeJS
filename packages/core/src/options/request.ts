@@ -5,7 +5,7 @@ export interface RequestOptions {
     readonly expectedReplyCount?: number;
     /**
      * Caller-supplied AbortSignal. When the signal aborts before a reply arrives the request
-     * rejects with `AbortError`. Added in Phase D.
+     * rejects with `AbortError`.
      */
     readonly signal?: AbortSignal;
 }
