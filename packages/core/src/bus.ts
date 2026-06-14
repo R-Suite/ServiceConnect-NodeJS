@@ -756,7 +756,19 @@ class BusImpl implements Bus {
         };
 
         const finalCallback = this.opts.consumeWrapper?.(withHeartbeat) ?? withHeartbeat;
-        await this.consumer.start(this.queue, this.registry.allRegisteredNames(), finalCallback);
+        // Bind the consumer queue only to exchanges for types this bus actually CONSUMES (handlers,
+        // sagas, aggregators) — not every registered type. Binding to a type AND its ancestor would
+        // double-deliver a multi-published derived message (one copy per exchange). Types registered
+        // only for resolution/deserialization (e.g. a concrete subtype a base handler deserializes)
+        // are not bound. Replies/routing/streams are point-to-point and need no exchange binding.
+        const consumedTypes = [
+            ...new Set([
+                ...this.handlers.handledTypeNames(),
+                ...this._processRegistry.allMessageTypes(),
+                ...this._aggregatorRegistry.allMessageTypes(),
+            ]),
+        ];
+        await this.consumer.start(this.queue, consumedTypes, finalCallback);
         this._started = true;
     }
 

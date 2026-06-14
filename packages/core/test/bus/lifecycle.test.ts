@@ -16,12 +16,15 @@ describe('Bus lifecycle', () => {
         expect(bus.isStopped).toBe(false);
     });
 
-    it('start() calls consumer.start with the registered message type list', async () => {
+    it('start() binds consumer to consumed (handled) types, not merely registered ones', async () => {
         const t = fakeTransport();
         const startSpy = vi.spyOn(t.consumer, 'start');
         const bus = createBus({ transport: t, queue: { name: 'q-self' } });
         bus.registerMessage<Foo>('Foo');
         bus.registerMessage<Foo>('Bar');
+        bus.registerMessage<Foo>('Baz'); // registered for resolution only — NOT handled
+        bus.handle<Foo>('Foo', async () => {});
+        bus.handle<Foo>('Bar', async () => {});
         await bus.start();
         expect(startSpy).toHaveBeenCalledOnce();
         const call = startSpy.mock.calls[0];
@@ -29,7 +32,7 @@ describe('Bus lifecycle', () => {
         const [queue, types] = call ?? (['', []] as [string, readonly string[], ...unknown[]]);
 
         expect(queue).toBe('q-self');
-        expect([...types].sort()).toEqual(['Bar', 'Foo']);
+        expect([...types].sort()).toEqual(['Bar', 'Foo']); // Baz excluded — registered but not consumed
         expect(bus.isStarted).toBe(true);
     });
 

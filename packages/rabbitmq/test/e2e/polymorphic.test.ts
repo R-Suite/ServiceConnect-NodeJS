@@ -11,7 +11,7 @@ interface OrderShipped extends DomainEvent {
 }
 
 describe('E2E polymorphic', () => {
-    it('subscriber to base type receives derived messages via e2e binding', async () => {
+    it('subscriber to base type receives derived messages via producer multi-publish', async () => {
         const url = process.env.RABBITMQ_URL ?? 'amqp://guest:guest@localhost:5672';
         const auditQueue = `q-audit-${randomUUID().slice(0, 8)}`;
         const baseType = `DomainEvent-${randomUUID().slice(0, 8)}`;

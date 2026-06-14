@@ -51,6 +51,11 @@ export class AggregatorRegistry {
         return this.byType.size > 0;
     }
 
+    /** Message types with a registered aggregator (used to bind consumer exchanges). */
+    allMessageTypes(): readonly string[] {
+        return [...this.byType.keys()];
+    }
+
     timeouts(): ReadonlyMap<string, number> {
         const out = new Map<string, number>();
         for (const [k, v] of this.byType.entries()) out.set(k, v.timeoutMs);

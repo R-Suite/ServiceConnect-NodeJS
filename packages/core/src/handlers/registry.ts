@@ -39,6 +39,11 @@ export class HandlerRegistry {
         return (this.byType.get(typeName)?.length ?? 0) > 0;
     }
 
+    /** Message types that have at least one registered handler (used to bind consumer exchanges). */
+    handledTypeNames(): readonly string[] {
+        return [...this.byType.keys()];
+    }
+
     /**
      * Returns handlers for `typeName` and all registered ancestor types (via the message-type
      * registry's parents links). Each handler instance is invoked at most once even when
