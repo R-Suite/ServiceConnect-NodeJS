@@ -36,7 +36,7 @@ export interface BusOptions {
 - **`serializer`** (optional) — `IMessageSerializer`. Defaults to `jsonSerializer(registry)`. Override to plug in MessagePack, Protobuf, or a schema-aware encoder.
 - **`registry`** (optional) — `IMessageTypeRegistry`. Defaults to a fresh `createMessageTypeRegistry()`. Pass an explicit registry when you need to share message-type registrations between the bus and a transport that needs them up-front (e.g. for exchange bindings).
 - **`logger`** (optional) — `Logger`. Defaults to `consoleLogger('info')`. Replace with your application's logger (pino, winston, OpenTelemetry-bound) for structured output.
-- **`defaultRequestTimeout`** (optional) — `number` (ms). Falls back to `DEFAULT_REQUEST_TIMEOUT_MS` (`10_000`). The per-call `RequestOptions.timeoutMs` always wins; this is the floor when you omit it.
+- **`defaultRequestTimeout`** (optional) — `number` (ms). Currently declared on `BusOptions` but **not consumed** by the bus — it is effectively inert/reserved. `sendRequest` and `sendRequestMulti` require a positive per-call `RequestOptions.timeoutMs` and throw `ArgumentOutOfRangeError` if it is missing or non-positive; they do not fall back to this option. `publishRequest` applies a hardcoded `10000` ms default when `timeoutMs` is omitted. Setting this field has no runtime effect today.
 - **`timeoutPollIntervalMs`** (optional) — `number` (ms). How often the saga timeout poller wakes to fire due timeouts. Only relevant if you have registered process managers with scheduled timeouts.
 - **`aggregatorFlushIntervalMs`** (optional) — `number` (ms). How often the aggregator flush timer wakes to flush time-windowed aggregators. Only relevant if you have registered aggregators.
 - **`consumeWrapper`** (optional) — `(cb: ConsumeCallback) => ConsumeCallback`. A pass-through around the inbound consume callback. Used by `@serviceconnect/telemetry` to start an OpenTelemetry span per message; you rarely set this yourself.
@@ -53,7 +53,6 @@ const bus = createBus({
   transport: createRabbitMQTransport({ url: 'amqp://localhost' }),
   registry,
   logger: consoleLogger('debug'),
-  defaultRequestTimeout: 30_000,
   timeoutPollIntervalMs: 1_000,
 });
 ```

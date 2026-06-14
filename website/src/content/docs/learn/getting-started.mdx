@@ -94,7 +94,7 @@ received o-1 19.99
 - `createMessageTypeRegistry()` builds a type registry — the bus uses it to map message type strings to TypeScript types at runtime.
 - `rabbitMQWithRegistry` constructs a RabbitMQ transport pre-wired with the registry's polymorphic relationships.
 - `createBus(...)` returns a bus that owns the consumer, the producer, the pipeline, and the request-reply manager.
-- `bus.handle<OrderPlaced>('OrderPlaced', ...)` registers a typed handler. The string and the type parameter must agree — the type registry catches mismatches at startup.
+- `bus.handle<OrderPlaced>('OrderPlaced', ...)` registers a typed handler. The string identifies the message type at runtime; the type parameter gives you compile-time typing of the handler's payload. The bus throws `MessageTypeNotRegisteredError` at `handle()` time if the string was never registered (generics are erased at runtime, so a string/type-parameter disagreement is not — and cannot be — caught).
 - `bus.publish<OrderPlaced>('OrderPlaced', payload)` publishes a message. The bus serialises the payload, sets headers, and delivers to the exchange.
 - `await bus.start()` opens connections and begins consumption. `await bus.stop()` drains in-flight work and closes the transport.
 

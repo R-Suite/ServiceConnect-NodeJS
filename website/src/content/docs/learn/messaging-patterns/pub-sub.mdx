@@ -58,7 +58,7 @@ The `inventory` service registers a handler for `OrderPlaced` and starts the bus
 
 Each message type gets a **fanout exchange** named after the type string. When you call `bus.publish<OrderPlaced>('OrderPlaced', payload)`, the producer serialises the payload, stamps the envelope headers, and routes the bytes to the `OrderPlaced` exchange. Fanout exchanges ignore routing keys — every queue bound to the exchange receives a copy.
 
-Each consumer queue **binds to the exchange for every type it handles** at startup. Calling `bus.handle<OrderPlaced>('OrderPlaced', ...)` adds an `OrderPlaced` binding to the `inventory` queue. Binding declarations are idempotent, so handler registration and queue topology stay in lockstep.
+Each consumer queue **binds to the exchange for every message type *registered* on the bus**, declared once when `bus.start()` runs. Registering a type — via `registry.register('OrderPlaced')` (or `bus.registerMessage<OrderPlaced>('OrderPlaced')`) — is what produces the `OrderPlaced` exchange and the binding to the `inventory` queue at startup; `bus.handle<OrderPlaced>('OrderPlaced', ...)` then attaches a handler for that already-bound type. Topology is fixed at `start()` from the full set of registered types, so a type you register but never handle is still bound, and calling `handle()` after `start()` does not add a binding.
 
 This wire format **mirrors the C# version of ServiceConnect**, so a Node.js publisher and a .NET consumer (or vice versa) interoperate on the same exchange. The envelope headers and the exchange-per-type convention are identical across both runtimes — there is no Node-specific framing.
 

@@ -20,7 +20,7 @@ It is also handy when different callers want **different paths** through the sam
 If the next hop depends on the **content** of the message or on a runtime decision a consumer has to make, you want a Content-Based Router or a small process manager — not a routing slip. Skips itineraries are fixed at send time. Likewise, parallel fan-out belongs in [Scatter/Gather](/ServiceConnect-NodeJS/learn/messaging-patterns/scatter-gather/) or [Pub/Sub](/ServiceConnect-NodeJS/learn/messaging-patterns/pub-sub/); the slip is strictly sequential.
 
 <Aside type="caution">
-  A handler that **throws** stops the slip at that hop. The message goes to the current queue's error queue; the remaining destinations are not visited. Plan compensation explicitly if a partial pipeline run is not safe.
+  A handler that **throws** stops the slip at that hop — forwarding only fires on a successful exit, so the remaining destinations are not visited. The throw is a non-terminal failure, so under the RabbitMQ transport the message is retried per the transport's retry policy (default `maxRetries` = 3 total delivery attempts) and only dead-lettered to that queue's error queue once retries are exhausted. Plan compensation explicitly if a partial pipeline run is not safe.
 </Aside>
 
 ## Example
@@ -60,7 +60,7 @@ bus.use(
   asMiddleware(async (context, next) => {
     const raw = context.envelope.headers[ROUTING_SLIP_HEADER];
     const remaining = parseRoutingSlip(typeof raw === 'string' ? raw : undefined);
-    logger.info({ remaining }, 'hop visited');
+    context.logger.info('hop visited', { remaining });
     await next();
   }),
 );
@@ -69,7 +69,7 @@ bus.use(
 ## Behind the scenes
 
 - The slip is a JSON-encoded queue list carried in the `RoutingSlip` header.
-- Each consumer forwards to the next destination on any **success-classified** exit; on throw, the message stops where it is and routes to that queue's error queue.
+- Each consumer forwards to the next destination on any **success-classified** exit; on throw, forwarding is suppressed and the message stops where it is — the throw is retried per the transport's retry policy (default 3 attempts on RabbitMQ) and only dead-lettered to that queue's error queue once retries are exhausted.
 - Forwarding is not limited to registered message handlers. The slip also advances past a **passive hop** — a queue where the type is registered but nothing handles it — and on the success branch of a **saga** or **aggregator**. Any hop that consumes the message successfully strips the current entry and forwards the remainder, so a routed message is never acked with its itinerary silently dropped.
 - The framework removes the current destination after a successful exit, so the header shrinks by one entry per hop.
 - `bus.route(...)` is preferred over manually setting the header; the helpers `serialiseRoutingSlip` and `parseRoutingSlip` exist for advanced inspection.

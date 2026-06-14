@@ -57,7 +57,7 @@ export function createMessageTypeRegistry(): IMessageTypeRegistry;
 
 ## `createMessageTypeRegistry`
 
-`createMessageTypeRegistry()` returns the default in-memory implementation. It's a tiny `Map`-backed object; you should reach for it unless you have a specific reason to ship your own.
+`createMessageTypeRegistry()` returns the default in-memory implementation. It's a tiny `Map`-backed object. You rarely need to call this directly — `createBus(...)` builds one for you; reach for it only when you need to share a registry across multiple buses or supply a custom one.
 
 ## Standard Schema
 

@@ -54,13 +54,16 @@ class OnPaymentReceived implements ProcessHandler<OrderState, PaymentReceived> {
     ctx: ProcessContext,
   ): Promise<void> {
     data.status = 'paid';
-    ctx.logger.info({ orderId: msg.orderId }, 'payment received');
+    ctx.logger.info('payment received', { orderId: msg.orderId });
+    // `name` must be a type the process handles (wired via `handles(...)`), and we must NOT
+    // markComplete() here: completing deletes the saga row, so the timeout could never be
+    // delivered back. A separate `handles('ShipDeadline', ...)` handler completes the saga
+    // when the timeout fires.
     await ctx.requestTimeout(
-      'ship-deadline',
+      'ShipDeadline',
       new Date(Date.now() + 24 * 60 * 60 * 1000),
       { orderId: msg.orderId },
     );
-    ctx.markComplete();
   }
   correlate(msg: PaymentReceived): string {
     return msg.orderId;

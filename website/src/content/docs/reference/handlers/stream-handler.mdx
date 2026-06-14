@@ -5,7 +5,7 @@ description: Types and runtime for consuming an ordered message stream.
 
 ## Overview
 
-A **stream handler** consumes an ordered sequence of messages addressed to a single endpoint. The bus exposes outbound streams through [`openStream(...)`](/ServiceConnect-NodeJS/reference/bus/bus/#openstream) (returns a `StreamSender<T>`) and inbound streams through [`handleStream(...)`](/ServiceConnect-NodeJS/reference/bus/bus/#handlestream) (your handler receives an `AsyncIterable<T>`). Behind the iterable is a [`StreamReceiver<T>`](#streamreceiver) that buffers and orders chunks by `SequenceNumber` before delivering them.
+A **stream handler** consumes an ordered sequence of messages addressed to a single endpoint. The bus exposes outbound streams through [`openStream(...)`](/ServiceConnect-NodeJS/reference/bus/bus/#openstream) (returns a `StreamSender<T>`) and inbound streams through [`handleStream(...)`](/ServiceConnect-NodeJS/reference/bus/bus/#handlestream) (your handler receives an `AsyncIterable<T>`). Behind the iterable is a [`StreamReceiver<T>`](#streamreceivert) that buffers and orders chunks by `SequenceNumber` before delivering them.
 
 ## Import
 
@@ -54,7 +54,9 @@ export interface StreamSender<T extends Message> {
 ## `StreamReceiver<T>`
 
 ```ts
-export interface StreamReceiverOptions {
+// Note: StreamReceiverOptions is declared internally and is NOT re-exported
+// from @serviceconnect/core — only StreamReceiver itself is public.
+interface StreamReceiverOptions {
   maxBufferedChunks?: number; // default 1000
 }
 
@@ -89,7 +91,7 @@ interface Chunk extends Message {
   index: number;
 }
 
-const receiver = createBus({ /* ... */ })
+const bus = createBus({ /* ... */ })
   .registerMessage<Chunk>('Chunk')
   .handleStream<Chunk>('Chunk', async (stream) => {
     for await (const chunk of stream) {

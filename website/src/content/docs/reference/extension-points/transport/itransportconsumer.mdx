@@ -55,12 +55,12 @@ export interface ITransportConsumer extends AsyncDisposable {
 - **`isConnected`** — `boolean` getter. `true` once the consumer is bound to its queue and the delivery loop is running. Health checks read this to detect a disconnected consumer.
 - **`isStopped`** — `boolean` getter. `true` after `stop()` has been called (whether or not it has finished draining).
 - **`isCancelledByBroker`** — `boolean` getter. `true` when the broker cancelled the consumer mid-flight (e.g. queue redeclared, queue deleted, exclusive consumer pre-empted). Health checks read this so a cancelled consumer fails closed instead of looking healthy.
-- **`start(queueName, messageTypes, callback, signal?)`** — connect, declare the queue and any required topic bindings for `messageTypes`, and begin invoking `callback` for each delivery. Called exactly once per consumer lifetime. The promise resolves when the consumer is ready to receive messages; if the signal aborts before that, the promise rejects with `AbortError` and the consumer should leave no broker resources behind.
-- **`stop(signal?)`** — stop accepting new deliveries, wait for any in-flight callbacks to complete, then close the broker connection. Pass an `AbortSignal` to bound the drain window. Idempotent.
+- **`start(queueName, messageTypes, callback, signal?)`** — connect, declare the queue and any required bindings for `messageTypes`, and begin invoking `callback` for each delivery. Called exactly once per consumer lifetime. The promise resolves when the consumer is ready to receive messages. The `signal` parameter is an optional part of the contract that implementations MAY honour to abort a slow startup, but no shipped transport does so and the bus passes no signal here.
+- **`stop(signal?)`** — stop accepting new deliveries, wait for any in-flight callbacks to complete, then close the broker connection. Idempotent. The `signal` parameter is part of the interface but is currently ignored by every shipped implementation (and the bus calls `stop()` with no argument), so it does not bound the drain window today.
 
 ## `ConsumeCallback` contract
 
-For each inbound delivery the consumer calls the callback with the deserialised wire envelope and an `AbortSignal` derived from `stop`'s signal. The callback resolves with a `ConsumeResult` describing what happened; the consumer uses that result to ack, nack, retry, or route to the error/audit queue.
+For each inbound delivery the consumer calls the callback with the wire `Envelope` (raw byte `body` plus untyped `headers` — deserialisation of the body happens later in the bus dispatcher, not in the consumer) and an `AbortSignal` that the consumer aborts when `stop()` is called. The callback resolves with a `ConsumeResult` describing what happened; the consumer uses that result to ack, nack, retry, or route to the error/audit queue.
 
 - **`success`** — `true` when at least one handler ran to completion (or there was nothing to do and the message is safe to ack).
 - **`notHandled`** — `true` when no handler was registered for the message type. The consumer typically acks-and-drops these unless `deadLetterUnhandled` is enabled.

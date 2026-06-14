@@ -5,7 +5,7 @@ description: Runnable examples covering every messaging pattern.
 
 ## Overview
 
-Every pattern documented under [Messaging Patterns](/ServiceConnect-NodeJS/learn/messaging-patterns/pub-sub/) has a runnable example under [`examples/`](https://github.com/R-Suite/ServiceConnect-NodeJS/tree/v3/examples) in the repo. Each example is a standalone tsx-powered script that publishes some messages and exits.
+Most patterns documented under [Messaging Patterns](/ServiceConnect-NodeJS/learn/messaging-patterns/pub-sub/) have a runnable example under [`examples/`](https://github.com/R-Suite/ServiceConnect-NodeJS/tree/v3/examples) in the repo. Each example is a standalone tsx-powered script that publishes some messages and exits. A few patterns — competing consumers, content-based routing, and scatter-gather — don't have their own example directory; they're illustrated within other examples (for instance, scatter-gather is exercised inside the `request-reply` example via `sendRequestMulti`) and in the pattern docs themselves.
 
 ## Layout
 
@@ -13,7 +13,7 @@ Every pattern documented under [Messaging Patterns](/ServiceConnect-NodeJS/learn
 examples/
 ├── docker-compose.yml      # RabbitMQ + MongoDB for examples that need them
 ├── run-all.sh              # runs every example in sequence
-├── lib/                    # shared helpers (logging, ids)
+├── lib/                    # shared helpers (connection URLs, logging)
 ├── publish-subscribe/
 ├── send/
 ├── request-reply/

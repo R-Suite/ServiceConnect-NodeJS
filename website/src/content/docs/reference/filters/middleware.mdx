@@ -5,7 +5,7 @@ description: Wraps message processing — call next() to continue, do work befor
 
 ## Overview
 
-A `Middleware` wraps the rest of a pipeline stage. It receives a [`PipelineContext`](#pipelinecontext) and a `next` function; calling `await next()` runs the remaining middleware (and, at the innermost layer, the handler). Code before `next()` runs on the way in; code after — typically inside a `try`/`finally` — runs on the way out. Use [`asMiddleware(fn)`](#asmiddleware) to wrap a middleware function in a `MiddlewareRegistration` that [`bus.use(...)`](/ServiceConnect-NodeJS/reference/bus/bus/#use) accepts.
+A `Middleware` wraps the rest of a pipeline stage. It receives a [`PipelineContext`](#signature) and a `next` function; calling `await next()` runs the remaining middleware (and, at the innermost layer, the handler). Code before `next()` runs on the way in; code after — typically inside a `try`/`finally` — runs on the way out. Use [`asMiddleware(fn)`](#parameters) to wrap a middleware function in a `MiddlewareRegistration` that [`bus.use(...)`](/ServiceConnect-NodeJS/reference/bus/bus/#use) accepts.
 
 ## Import
 
@@ -38,8 +38,8 @@ export function asMiddleware(fn: Middleware): MiddlewareRegistration;
 
 - **`PipelineContext.envelope`** — the [`Envelope`](/ServiceConnect-NodeJS/reference/messages/envelope/) flowing through the stage; its headers may have been stamped by earlier outgoing middleware or by the transport.
 - **`PipelineContext.stage`** — the current [`PipelineStage`](/ServiceConnect-NodeJS/reference/filters/pipeline/) (`'outgoing'`, `'beforeConsuming'`, `'afterConsuming'`, or `'onConsumedSuccessfully'`).
-- **`PipelineContext.signal`** — an `AbortSignal` that aborts when the bus is shutting down. Forward it into any awaited work to participate in graceful shutdown.
-- **`PipelineContext.logger`** — a stage-scoped child [`Logger`](/ServiceConnect-NodeJS/reference/bus/bus-options/#logger).
+- **`PipelineContext.signal`** — an `AbortSignal`. On the inbound consume stages (`beforeConsuming`, `afterConsuming`, `onConsumedSuccessfully`) it aborts when the bus is shutting down, so forwarding it into any awaited work lets you participate in graceful shutdown. On the `outgoing` stage the signal comes from a fresh `AbortController` that is never aborted, so it does not fire on shutdown.
+- **`PipelineContext.logger`** — the bus's [`Logger`](/ServiceConnect-NodeJS/reference/bus/bus-options/#parameters) (the same logger configured on `createBus`), passed through unchanged.
 - **`Middleware`** — the function signature. Always `async`; always returns `Promise<void>`. Call `await next()` exactly once unless you genuinely intend to skip the rest of the stage.
 - **`MiddlewareRegistration`** — the typed wrapper `bus.use(...)` accepts. `kind` is the discriminant against `FilterRegistration`; `run` is the wrapped middleware function.
 - **`asMiddleware(fn)`** — convenience factory that returns `{ kind: 'middleware', run: fn }`.

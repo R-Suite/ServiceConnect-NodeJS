@@ -68,7 +68,7 @@ A complete process is built with three methods on the [`Bus`](/ServiceConnect-No
 ### `registerProcessData<TData>(dataType)`
 
 ```ts
-bus.registerProcessData<OrderState>('OrderState'): Bus;
+registerProcessData<TData extends ProcessData>(dataType: string): Bus;
 ```
 
 Declares that `OrderState` is a saga-data type known under the type-name `'OrderState'`. Must be called before `registerProcess` so the bus knows which `ProcessData` type the upcoming process is keyed on.

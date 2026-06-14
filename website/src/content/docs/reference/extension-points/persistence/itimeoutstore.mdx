@@ -41,7 +41,7 @@ export interface ITimeoutStore {
 
 - **`schedule(record)`** — persist a new timeout. The caller passes everything except the id; the store assigns one and returns the full `TimeoutRecord`. The `payload` field is opaque — implementations should round-trip it unchanged so the saga handler sees whatever was passed to `requestTimeout`.
 - **`claimDue(now, limit)`** — return up to `limit` timeouts whose `runAt <= now`. Implementations must atomically claim the rows they return (e.g. via `findAndUpdate` with a `claimedAt` column, a SELECT FOR UPDATE SKIP LOCKED in SQL, or an equivalent guard) so two pollers do not both fire the same timeout. Returning rows in `runAt` order is recommended but not required.
-- **`delete(id)`** — remove a timeout. Called after the bus has fired the timeout into the saga successfully, or when a saga marks itself complete. Safe to no-op if the row no longer exists.
+- **`delete(id)`** — remove a timeout. Called by the timeout poller after the timeout has been fired (published) successfully. The framework does not currently delete still-pending timeouts when a saga completes, so scheduled-but-unfired timeouts for a completed saga are not cleaned up automatically. Safe to no-op if the row no longer exists.
 
 ## See also
 

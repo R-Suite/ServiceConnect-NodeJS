@@ -53,6 +53,9 @@ export class ProcessRegistry {
     options: { dataType: string; store?: ISagaStore; timeoutStore?: ITimeoutStore },
   ): void;
 
+  hasAny(): boolean;
+  distinctTimeoutStores(): readonly ITimeoutStore[];
+
   startsWith<TData extends ProcessData, TMessage extends Message>(
     processName: string,
     messageType: string,
@@ -77,6 +80,8 @@ export class ProcessRegistry {
 - **`isDataTypeRegistered(dataType)`** — `true` if `dataType` was previously declared via `registerDataType`. Used by `registerProcess` to fail fast if you forget the data-type declaration.
 - **`lastRegisteredDataType()`** — the most recent value passed to `registerDataType`, or `undefined` if none has been declared. The fluent bus DSL uses this when `registerProcess` is called without an explicit `dataType` option.
 - **`registerProcess(processName, options)`** — register a process manager under `processName`, bound to `options.dataType`. Throws `InvalidOperationError` if the data type was not previously declared. Optionally accepts a per-process `store?: ISagaStore` and `timeoutStore?: ITimeoutStore` to bind this process to dedicated saga and timeout stores instead of the bus-wide defaults.
+- **`hasAny()`** — `true` if at least one process is registered. The bus consults this during `start()` to decide whether to wire the saga branch.
+- **`distinctTimeoutStores()`** — the unique-by-reference set of `ITimeoutStore` instances across all registered processes. The bus starts one `TimeoutPoller` per distinct store.
 - **`startsWith(processName, messageType, handler)`** — bind `handler` as a saga-starting handler for `messageType`. The bus invokes this handler with a fresh saga-state object when no row exists for the correlation id.
 - **`handles(processName, messageType, handler)`** — bind `handler` as a continue handler for `messageType`. The bus only invokes this handler when a saga row already exists for the correlation id.
 - **`registrationsFor(messageType)`** — list every `ProcessRegistration` (across all processes) that fires for `messageType`. Returns an empty array when no process is interested in that type.

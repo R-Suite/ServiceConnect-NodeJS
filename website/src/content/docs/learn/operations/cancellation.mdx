@@ -7,7 +7,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 ## Overview
 
-Cancellation in v3 is built on the platform's `AbortSignal`. Every handler gets `ctx.signal`, every outbound request accepts `{ signal }`, and `bus.stop()` aborts the handler signals it owns so in-flight work can unwind without being killed mid-byte. (Note: any `AbortSignal` you pass to `bus.stop()` itself is currently ignored — see below.)
+Cancellation in v3 is built on the platform's `AbortSignal`. Every handler gets `ctx.signal`, every outbound request accepts `{ signal }`, and `bus.stop()` stops the consumer, which aborts the handler signals so in-flight work can unwind without being killed mid-byte. (Note: any `AbortSignal` you pass to `bus.stop()` itself is currently ignored — see below.)
 
 ## The problem
 
@@ -17,7 +17,7 @@ The fix is not "harder timeouts" — it is **propagating cancellation** into eve
 
 ## The solution
 
-`ConsumeContext` exposes a `signal: AbortSignal`. Forward it to anything that accepts one — `fetch`, `pg.Client.query` (via `AbortController` wiring), the MongoDB driver's `Aborted` option, child processes. When the bus stops, every handler signal is aborted, and well-behaved I/O resolves quickly with an `AbortError`.
+`ConsumeContext` exposes a `signal: AbortSignal`. Forward it to anything that accepts one — `fetch`, `pg.Client.query` (via `AbortController` wiring), the MongoDB driver's `Aborted` option, child processes. When the bus stops, it stops the consumer, which aborts every active handler signal, and well-behaved I/O resolves quickly with an `AbortError`.
 
 ```ts
 import type { ConsumeContext } from '@serviceconnect/core';
@@ -31,11 +31,10 @@ bus.handle<DownloadImage>('DownloadImage', async (msg, ctx) => {
 });
 ```
 
-For outbound requests, `bus.sendRequest` takes `{ signal }` in its `RequestOptions`. The three failure shapes are distinct on purpose: a signal that aborts before the publish lands raises `RequestSendCancelledError`, a signal that aborts after dispatch raises `AbortError`, and a missed deadline raises `RequestTimeoutError`. Handle them apart if you care about the difference between "I gave up" and "they never answered".
+For outbound requests, `bus.sendRequest` takes `{ signal }` in its `RequestOptions`. A `sendRequest`/`sendRequestMulti` caller sees two distinct failure shapes: an aborted `signal` — whether it aborts before the publish lands or after dispatch — rejects with `AbortError`, and a missed deadline rejects with `RequestTimeoutError`. Handle them apart if you care about the difference between "I gave up" and "they never answered". (If the underlying transport send itself fails before the message reaches the broker, the original transport error is what the caller catches — `RequestSendCancelledError` is only used internally as the pending-request cancellation reason and is never surfaced to the `sendRequest` caller.)
 
 ```ts
 import {
-  RequestSendCancelledError,
   AbortError,
   RequestTimeoutError,
 } from '@serviceconnect/core';
@@ -50,10 +49,9 @@ try {
     { endpoint: 'pricing', timeoutMs: 5_000, signal: controller.signal },
   );
 } catch (err) {
-  if (err instanceof RequestSendCancelledError) { /* cancelled before send */ }
-  else if (err instanceof AbortError) { /* cancelled mid-flight */ }
+  if (err instanceof AbortError) { /* signal aborted, before or after dispatch */ }
   else if (err instanceof RequestTimeoutError) { /* no reply within timeoutMs */ }
-  else throw err;
+  else throw err; // e.g. a transport send failure surfaces the underlying error
 }
 ```
 
@@ -92,7 +90,7 @@ The composed signal fires as soon as either source aborts; the rest of the handl
 
 <Aside type="caution">
   - Forgetting to thread `ctx.signal` into long-running I/O — the handler will keep running past `bus.stop()`, the broker eventually redelivers, and you may double-process.
-  - Confusing timeout with cancellation: `timeoutMs` raises `RequestTimeoutError`; cancellation via `signal` raises `AbortError` or `RequestSendCancelledError`. Catch them separately if the distinction matters to your business logic.
+  - Confusing timeout with cancellation: `timeoutMs` raises `RequestTimeoutError`; cancellation via `signal` raises `AbortError`. Catch them separately if the distinction matters to your business logic.
   - Swallowing `AbortError` inside a handler and resolving normally — the framework will ack the message even though the work didn't finish. If cancellation should be retryable, rethrow.
 </Aside>
 

@@ -53,7 +53,7 @@ interface OrderPlaced extends Message {
 }
 
 const onOrderPlaced: Handler<OrderPlaced> = async (msg, ctx) => {
-  ctx.logger.info({ orderId: msg.orderId }, 'processing');
+  ctx.logger.info('processing', { orderId: msg.orderId });
 };
 
 bus.handle<OrderPlaced>('OrderPlaced', onOrderPlaced);
@@ -70,7 +70,7 @@ interface OrderPlaced extends Message {
 
 class OnOrderPlaced implements HandlerClass<OrderPlaced> {
   async handle(msg: OrderPlaced, ctx: ConsumeContext): Promise<void> {
-    ctx.logger.info({ orderId: msg.orderId }, 'processing');
+    ctx.logger.info('processing', { orderId: msg.orderId });
   }
 }
 

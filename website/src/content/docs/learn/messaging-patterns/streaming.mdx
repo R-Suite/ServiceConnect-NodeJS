@@ -22,7 +22,7 @@ It also helps when the producer is **rate-limited by I/O** — reading a file fr
 If the payload fits comfortably in one message (kilobytes, not megabytes), just call `bus.send` or `bus.publish` — streaming adds bookkeeping you do not need. If the receiver needs random access to the data, streaming is the wrong shape; ship a reference to object storage instead. And if chunks are independently meaningful events the rest of the system cares about — say, individual `OrderPlaced` messages — those are events, not a stream, and belong on [Pub/Sub](/ServiceConnect-NodeJS/learn/messaging-patterns/pub-sub/).
 
 <Aside type="caution">
-  A faulted stream surfaces as a `StreamFaultedError` thrown from the `for await` loop on the receiver, and a sequence gap surfaces as `StreamSequenceError`. The receiver handler must let those propagate (or catch them deliberately) — silently swallowing them will hide real data loss.
+  A faulted stream surfaces as a `StreamFaultedError` thrown from the `for await` loop on the receiver — that is the only error the loop can ever reject with, so the receiver handler must let it propagate (or catch it deliberately); silently swallowing it will hide real data loss. An ordinary sequence gap does **not** throw — the receiver simply waits for the missing chunk. `StreamSequenceError` is a separate buffer-overflow guard raised inside the dispatch path (when more than `maxBufferedChunks` out-of-order chunks pile up) and is handled there, not surfaced to the `for await` loop.
 </Aside>
 
 ## Example
@@ -81,7 +81,7 @@ await receiver.start();
 
 - Each chunk carries headers from `StreamHeaders`: `StreamId` ties chunks together, `SequenceNumber` orders them, `IsStartOfStream` and `IsEndOfStream` mark the boundaries, and `StreamFault` carries the reason string when the sender aborts via `stream.fault(...)`.
 - The receiver buffers out-of-order chunks internally and yields them to the `for await` loop in sequence — the application code never sees the reordering work.
-- Sequence gaps surface as `StreamSequenceError`; faults sent by `stream.fault(reason)` surface as `StreamFaultedError` when the loop consumes them. Both errors are exported from `@serviceconnect/core`.
+- An ordinary sequence gap does not surface as an error — the receiver waits for the missing chunk. If too many out-of-order chunks accumulate (more than `maxBufferedChunks`, default 1000), the dispatch path raises `StreamSequenceError`. Faults sent by `stream.fault(reason)` surface as `StreamFaultedError` when the loop consumes them. Both errors are exported from `@serviceconnect/core`.
 - Backpressure is built in: the sender awaits each `sendChunk(...)`, so it never gets ahead of the broker. If the broker slows down, the sender slows down too — no unbounded in-memory queue.
 
 ## See also

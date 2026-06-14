@@ -46,11 +46,11 @@ const bus = createBus({
 })
   .registerMessage<DomainEvent>('DomainEvent')
   .handle<DomainEvent>('DomainEvent', async (e, ctx) => {
-    await audit.log(e.occurredAt, ctx.envelope.headers.messageType);
+    await audit.log(e.occurredAt, ctx.messageType);
   });
 ```
 
-The `audit` queue handles `DomainEvent`. When a producer somewhere else in the topology publishes `OrderPlaced`, the audit consumer receives it — because `OrderPlaced` was registered with `DomainEvent` as a parent. The handler still gets the full payload; it just sees it through the `DomainEvent` lens. `ctx.envelope.headers.messageType` carries the **concrete** type string, so downstream code can disambiguate when needed.
+The `audit` queue handles `DomainEvent`. When a producer somewhere else in the topology publishes `OrderPlaced`, the audit consumer receives it — because `OrderPlaced` was registered with `DomainEvent` as a parent. The handler still gets the full payload; it just sees it through the `DomainEvent` lens. `ctx.messageType` (equivalently `ctx.headers.messageType`) carries the **concrete** type string, so downstream code can disambiguate when needed.
 
 ## Behind the scenes
 

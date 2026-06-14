@@ -29,7 +29,7 @@ A few practical rules:
 - Wire-compatible with .NET ServiceConnect: a Node.js sender targeting `payments` reaches a .NET consumer bound to the same queue.
 - Endpoint names usually live in configuration. Hard-coding them in a single shared types package is also fine — pick whatever survives the next reorg.
 
-`bus.sendRequest` and `bus.sendRequestMulti` are also endpoint-based. The reply queue is set up by the bus on your behalf, so you do not name it — but the request queue you are targeting is just another endpoint.
+`bus.sendRequest` and `bus.sendRequestMulti` take an **optional** endpoint. The reply queue is set up by the bus on your behalf, so you do not name it. Supply an `endpoint` and the request goes point-to-point to that queue (another endpoint, just like `send`); omit it and the request is published (broadcast) to the type's fan-out exchange instead. The endpoint-targeted form is the common case, but not the only one.
 
 ## API touch-point
 
@@ -51,7 +51,7 @@ Two calls, two distinct shapes:
 - `send` takes the type string, the payload, then a `SendOptions` object whose `endpoint` field is required. The endpoint says *where*; the type string says *what*.
 - `publish` takes only the type string and the payload. The exchange (derived from the type) decides who hears it.
 
-You can call `bus.send` to your own queue if you want to defer work to a later poll of the consumer — it is sometimes a useful pattern for breaking up long handlers — but most of the time `send` targets some other service. `bus.sendRequest` and `bus.sendRequestMulti` follow the same `send` convention: they target named endpoints and they expect those endpoints to reply.
+You can call `bus.send` to your own queue if you want to defer work to a later poll of the consumer — it is sometimes a useful pattern for breaking up long handlers — but most of the time `send` targets some other service. `bus.sendRequest` and `bus.sendRequestMulti` follow the same `send` convention when given an `endpoint`: they target that named endpoint and expect a reply. The `endpoint` is optional, though — omit it and the request is broadcast to the type's fan-out exchange instead.
 
 ## See also
 

@@ -59,7 +59,7 @@ bus.registerAggregator<OrderLine>('OrderLine', new BatchOrderLines(), {
 });
 ```
 
-`BatchOrderLines` accumulates `OrderLine` messages on the `warehouse` queue. It flushes whenever it has buffered 100 lines, or 60 seconds have passed since the buffer was last empty, whichever happens first. The flush calls `warehouse.bulkPick(messages)` once with the whole array — replacing what would otherwise be one round-trip per line.
+`BatchOrderLines` accumulates `OrderLine` messages on the `warehouse` queue. It flushes whenever it has buffered 100 lines, or 60 seconds have passed since the oldest still-buffered line arrived, whichever happens first. The flush calls `warehouse.bulkPick(messages)` once with the whole array — replacing what would otherwise be one round-trip per line.
 
 ## Behind the scenes
 

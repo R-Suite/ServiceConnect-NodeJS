@@ -55,7 +55,7 @@ await bus.stop();
 - `bus.send<T>(typeName, payload, { endpoint, headers? })` — point-to-point to a named queue.
 - `bus.sendRequest<Req, Rep>(typeName, payload, { endpoint, timeoutMs, signal? })` — one request, one reply, returned as a promise.
 - `bus.sendRequestMulti<Req, Rep>(typeName, payload, { endpoint, expectedReplyCount, timeoutMs })` — gather N replies from a single endpoint with competing consumers; use `bus.publishRequest` for true broadcast-then-gather.
-- `bus.start()` / `bus.stop()` — lifecycle. Both are idempotent and safe to await.
+- `bus.start()` / `bus.stop()` — lifecycle. Repeated calls are safe to await: a second `start()` while running and a second `stop()` are no-ops. Note a bus cannot be restarted after `stop()` — `start()` throws if the bus has already been stopped (create a new instance to resume).
 
 The bus is also `AsyncDisposable`, so `await using bus = createBus(...)` is idiomatic in scripts and tests. In long-lived services you usually call `await bus.start()` once at boot and hook `bus.stop()` into your process's shutdown signal handler.
 

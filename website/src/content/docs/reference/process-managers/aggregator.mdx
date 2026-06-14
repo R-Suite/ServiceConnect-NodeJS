@@ -7,6 +7,8 @@ description: Abstract base class for batching consumed messages and executing th
 
 `Aggregator<T>` is the abstract base class you subclass to batch inbound messages of one type and execute them together. The bus claims a window's worth of messages into an [`IAggregatorStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/iaggregatorstore/), and when either the batch reaches the configured size or the timeout elapses it calls `execute(messages, signal)` with the buffered batch. Three abstract members drive the behaviour: `batchSize()`, `timeout()`, and `execute(...)`.
 
+Two flush paths exist, with different lease windows. The size-triggered path runs inline as messages arrive and claims the batch under a lease of `timeout()` × 5. The time-based path is a periodic flush timer that runs every `aggregatorFlushIntervalMs` (default `250` ms) and uses the bus's configured lease of `30_000` ms to expire batches whose oldest message has aged past `timeout()`. A thrown `execute(...)` leaves whichever lease is in place until it expires, then the batch is re-claimed and re-processed.
+
 ## Import
 
 ```ts

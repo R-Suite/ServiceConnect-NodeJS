@@ -78,7 +78,7 @@ export function consumerBusy(bus: Bus, options?: { graceMs?: number }): HealthCh
 A liveness probe for inbound traffic. Behaviour:
 
 - **Unhealthy** when the consumer is not connected (`!bus.consumer.isConnected`).
-- **Healthy** when `bus.lastConsumedAt` is `undefined` — the bus has consumed no messages yet, which is the normal state immediately after `start()`.
+- **Healthy** (with `description: 'no messages consumed yet'`) when `bus.lastConsumedAt` is `undefined` — the bus has consumed no messages yet, which is the normal state immediately after `start()`.
 - **Healthy** when the age of `bus.lastConsumedAt` is within `graceMs` (default `5000` ms). The result carries `data: { lastConsumedAt, ageMs }`.
 - **Degraded** when the age exceeds `graceMs`. The result carries `description` and the same `data` payload.
 

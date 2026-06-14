@@ -29,7 +29,7 @@ export interface Envelope {
 
 ### C# wire-format compatibility
 
-ServiceConnect's .NET sibling uses PascalCase header names (`MessageType`, `CorrelationId`, `MessageId`, `SourceAddress`, `DestinationAddress`, `TimeSent`, …). The Node consumer reads both casings: PascalCase first for interop with .NET services, falling back to the internal camelCase (`messageType`, `correlationId`, …) when only the Node-stamped headers are present. Outgoing envelopes from `@serviceconnect/core` stamp the camelCase form; transport adapters can mirror PascalCase keys when targeting a heterogeneous estate.
+ServiceConnect's .NET sibling uses PascalCase header names (`MessageType`, `CorrelationId`, `MessageId`, `SourceAddress`, `DestinationAddress`, `TimeSent`, …). Outgoing envelopes from `@serviceconnect/core` stamp the camelCase form (`messageType`, `correlationId`, …), and the dispatcher resolves the inbound message type from `headers.messageType` (camelCase) only — there is no PascalCase fallback read. Full PascalCase interop with .NET services is not implemented in this codebase: a message that arrives with only PascalCase headers (and no camelCase `messageType`) is treated as an unknown type.
 
 ## Example
 

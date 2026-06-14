@@ -50,10 +50,16 @@ const aggregatorStore = memoryAggregatorStore();
 ```ts
 import { memoryTimeoutStore } from '@serviceconnect/persistence-memory';
 
-export function memoryTimeoutStore(): ITimeoutStore;
+export interface MemoryTimeoutStoreOptions {
+  leaseMs?: number;
+}
+
+export function memoryTimeoutStore(options?: MemoryTimeoutStoreOptions): ITimeoutStore;
 ```
 
 Volatile timeout store used by the saga timeout poller.
+
+- **`leaseMs`** (optional, default `60_000`) — the per-record visibility lease applied by `claimDue`. A claimed record stays invisible to other claims for this long; if the poller crashes before deleting it, it becomes claimable again after the lease expires.
 
 ```ts
 const timeoutStore = memoryTimeoutStore();
@@ -75,7 +81,7 @@ export interface MongoStoreOptions {
 - **`db`** (required) — a `Db` instance from the `mongodb` driver. Construct the `MongoClient` yourself, connect, select a database, and pass the `Db` here.
 - **`collectionName`** (optional) — override the default collection. Useful when running multiple services against a single shared database.
 
-Each Mongo factory returns a typed extension of the corresponding store interface that adds an `ensureIndexes(): Promise<void>` method. Call it once at boot — typically in parallel with the other stores — to create the indexes the store relies on for correctness and performance.
+Each Mongo factory returns a typed extension of the corresponding store interface that adds an `ensureIndexes(): Promise<void>` method. Call it once at boot — typically in parallel with the other stores. The aggregator and timeout stores create the indexes they rely on for performance; the saga store's `ensureIndexes()` is a safe no-op because its compound `_id` (`{ dataType, correlationId }`) is auto-indexed and uniqueness-enforced by MongoDB.
 
 ### `mongoSagaStore`
 
@@ -118,6 +124,10 @@ export function mongoTimeoutStore(options: MongoStoreOptions): MongoTimeoutStore
 ```
 
 Persists scheduled saga timeouts. Default collection: `'serviceconnect.timeouts'`.
+
+In addition to `db` and `collectionName`, the timeout store's options accept:
+
+- **`leaseMs`** (optional, default `60_000`) — the visibility lease applied by `claimDue`. Concurrent pollers sharing this collection will not both claim the same record within the lease window; if the claiming poller dies before deleting the record, it becomes claimable again after the lease expires.
 
 ## Wiring example
 

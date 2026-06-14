@@ -5,7 +5,7 @@ description: Predicate that decides whether to continue processing a message.
 
 ## Overview
 
-A `Filter` is a predicate that runs at a pipeline stage and returns `Continue` to let the message proceed or `Stop` to short-circuit. Filters receive the [`Envelope`](/ServiceConnect-NodeJS/reference/messages/envelope/) directly — not a wrapping context — so they see the headers map and the raw body bytes exactly as they are on the wire. Use [`asFilter(fn)`](#asfilter) to wrap a filter function in a `FilterRegistration` that [`bus.use(...)`](/ServiceConnect-NodeJS/reference/bus/bus/#use) accepts.
+A `Filter` is a predicate that runs at a pipeline stage and returns `Continue` to let the message proceed or `Stop` to short-circuit. Filters receive the [`Envelope`](/ServiceConnect-NodeJS/reference/messages/envelope/) directly — not a wrapping context — so they see the headers map and the raw body bytes exactly as they are on the wire. Use [`asFilter(fn)`](#parameters) to wrap a filter function in a `FilterRegistration` that [`bus.use(...)`](/ServiceConnect-NodeJS/reference/bus/bus/#use) accepts.
 
 ## Import
 
@@ -40,7 +40,7 @@ export function asFilter(fn: Filter): FilterRegistration;
 
 - **`FilterAction.Continue`** — let pipeline processing proceed.
 - **`FilterAction.Stop`** — short-circuit. Subsequent filters in the stage are skipped and stage middleware never runs for this message.
-- **`Filter`** — a sync or async function `(envelope, signal) => FilterAction | Promise<FilterAction>`. The `signal` aborts when the bus is shutting down.
+- **`Filter`** — a sync or async function `(envelope, signal) => FilterAction | Promise<FilterAction>`. On the inbound consume stages (`beforeConsuming`, `afterConsuming`, `onConsumedSuccessfully`) the `signal` aborts when the bus is shutting down. On the `outgoing` stage the `signal` comes from a fresh `AbortController` that is never aborted, so it does not fire on shutdown.
 - **`FilterRegistration`** — the typed wrapper `bus.use(...)` accepts. `kind` is the discriminant against `MiddlewareRegistration`; `run` is the wrapped filter function.
 - **`asFilter(fn)`** — convenience factory that returns `{ kind: 'filter', run: fn }`.
 

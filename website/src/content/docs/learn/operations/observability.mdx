@@ -38,11 +38,11 @@ Pass it via `BusOptions.logger`. Inside a handler, `ctx.logger` is a child logge
 
 ### Metrics
 
-`@serviceconnect/telemetry` emits counters and histograms through the OpenTelemetry metrics SDK. The instruments cover the obvious shapes — publishes attempted/failed, consume durations, consume errors — and use the OTel `messaging.*` semantic conventions so dashboards built against any standard messaging system work without translation. Pass a custom `Meter` via `TelemetryOptions.meter` if you want a non-default namespace; otherwise the default global meter is used.
+`@serviceconnect/telemetry` emits counters and histograms through the OpenTelemetry metrics SDK. The instruments cover four shapes — a publish/send count (`serviceconnect.publish.count`), a consume count (`serviceconnect.consume.count`), a producer error count (`serviceconnect.error.count`, incremented when a publish/send throws), and a processing-duration histogram (`serviceconnect.processing.duration`) — and use the OTel `messaging.*` semantic conventions so dashboards built against any standard messaging system work without translation. There is no consume-error counter: a failed consume is reflected only via the span's `ERROR` status, not a metric. Pass a custom `Meter` via `TelemetryOptions.meter` if you want a non-default namespace; otherwise the default global meter is used.
 
 ### Traces
 
-`telemetryProducer(producer)` wraps the transport producer so each `publish` or `send` opens a `PRODUCER` span and injects W3C trace context into the outgoing headers. `telemetryConsumeWrapper()` extracts that context on the consumer side and opens a `CONSUMER` span around the handler. Spans are named `<destination> publish` and `<messageType> process` per OTel messaging conventions.
+`telemetryProducer(producer)` wraps the transport producer so each `publish` or `send` opens a `PRODUCER` span and injects W3C trace context into the outgoing headers. `telemetryConsumeWrapper()` extracts that context on the consumer side and opens a `CONSUMER` span around the handler. Producer spans are named `<destination> <operation>` — `<type> publish` for `publish` and `<endpoint> send` for `send`/`sendBytes` — and consumer spans are named `<messageType> process`, per OTel messaging conventions.
 
 For spans to flow correctly through `await`, set a global propagator and a context manager **once** at boot. Without `AsyncHooksContextManager`, the active span context is lost on the first `await` and every consume span becomes a root — the trace tree falls apart.
 
@@ -76,11 +76,13 @@ const tracer = new NodeTracerProvider();
 tracer.register();
 
 const transport = createRabbitMQTransport({ url: 'amqp://localhost' });
-transport.producer = telemetryProducer(transport.producer);
 
 const bus = createBus({
   queue: { name: 'orders' },
-  transport,
+  transport: {
+    producer: telemetryProducer(transport.producer),
+    consumer: transport.consumer,
+  },
   logger: consoleLogger('info'),
   consumeWrapper: telemetryConsumeWrapper(),
 });
@@ -92,7 +94,7 @@ const bus = createBus({
 
 <Aside type="caution">
   - Forgetting `AsyncHooksContextManager` — active span context doesn't propagate through `await`, every consume span looks like a root, and the trace tree falls apart.
-  - Wrapping `consumer` instead of `producer`: telemetry on the producer needs `transport.producer = telemetryProducer(transport.producer)`. The consumer side uses `BusOptions.consumeWrapper` with `telemetryConsumeWrapper()`, not direct wrapping.
+  - Trying to mutate the transport in place: `transport.producer` is `readonly`, so `transport.producer = telemetryProducer(...)` won't compile. Wrap the producer when assembling the transport you pass to `createBus` — `transport: { producer: telemetryProducer(transport.producer), consumer: transport.consumer }`. The consumer side uses `BusOptions.consumeWrapper` with `telemetryConsumeWrapper()`, not direct wrapping.
   - Treating logs as the only signal — at scale, full-text search across millions of lines doesn't scale and doesn't show causality. Combine structured logs with traces so you can pivot from one slow request to the chain of messages it kicked off.
   - Letting `consumerBusy` drive restarts — `degraded` on an idle queue is correct behaviour, not a fault.
 </Aside>

@@ -54,7 +54,7 @@ await bus.start();
 // `await using` calls bus.stop() automatically.
 ```
 
-If you do not want `await using`, call `await bus.stop()` (optionally with an `AbortSignal`) explicitly. `stop()` drains in-flight work before closing the transport.
+If you do not want `await using`, call `await bus.stop()` explicitly. `stop()` drains in-flight work before closing the transport. (It accepts an optional `AbortSignal` parameter, but that parameter is currently ignored and has no effect on the drain or teardown.)
 
 ## 2. Registration
 
@@ -96,7 +96,7 @@ bus
 
 Differences worth calling out:
 
-- The handler signature shrinks from four positional arguments to `(message, context)`. Everything else moves onto `context`: `context.headers`, `context.messageType`, `context.sourceAddress`, `context.reply(...)`, `context.signal`.
+- The handler signature shrinks from four positional arguments to `(message, context)`. Everything else moves onto `context`: `context.headers`, `context.messageType`, `context.headers.sourceAddress`, `context.reply(...)`, `context.signal`. (The source address lives on `context.headers.sourceAddress`; there is no top-level `context.sourceAddress`.)
 - Every v3 message must extend `Message`, which means it must carry a `correlationId: string`. v1 did not require this — adding it is the main schema change you will see at every call site.
 - v3 is strict about registration: `bus.handle('X', ...)` throws at startup if `'X'` was not declared with `registerMessage`. v1 would happily accept any string.
 
@@ -278,9 +278,9 @@ The table maps every v1 default in `lib/settings.js` to its v3 equivalent. Anyth
 | v1 key | v3 equivalent |
 |---|---|
 | `amqpSettings.queue.name` | `BusOptions.queue.name` |
-| `amqpSettings.queue.durable` | Default: `true`. Override via `transport.consumer.queueArguments`. |
+| `amqpSettings.queue.durable` | Fixed at `true`; not configurable. `queueArguments` only feeds the AMQP `arguments` (x-args) map and cannot change the queue's `durable` declaration flag. |
 | `amqpSettings.queue.exclusive` | Not exposed; v3 queues are non-exclusive by design. |
-| `amqpSettings.queue.autoDelete` | Default: `false`. Override via `transport.consumer.queueArguments`. |
+| `amqpSettings.queue.autoDelete` | Not exposed; v3 queues are not auto-delete. `queueArguments` only feeds the AMQP `arguments` map and cannot set the `autoDelete` declaration flag. |
 | `amqpSettings.queue.noAck` | Not exposed; v3 always uses explicit ack. |
 | `amqpSettings.queue.maxPriority` | Set `'x-max-priority'` in `transport.consumer.queueArguments`. |
 | `amqpSettings.host` | `transport: createRabbitMQTransport({ url: 'amqp://...' })`. |
@@ -302,7 +302,7 @@ The table maps every v1 default in `lib/settings.js` to its v3 equivalent. Anyth
 v3-only configuration without a v1 equivalent:
 
 - `BusOptions.serializer` — pluggable serializer (JSON is the default).
-- `BusOptions.defaultRequestTimeout` — default timeout for `sendRequest`/`sendRequestMulti`.
+- `BusOptions.defaultRequestTimeout` — currently inert/reserved: it is accepted but never read. `sendRequest`/`sendRequestMulti` require an explicit positive per-call `timeoutMs` (they throw `ArgumentOutOfRangeError` otherwise) and do not fall back to this option.
 - `BusOptions.timeoutPollIntervalMs` — request-reply timeout poll cadence.
 - `BusOptions.aggregatorFlushIntervalMs` — aggregator flush timer cadence.
 - `BusOptions.consumeWrapper` — wrap every handler invocation (e.g. for OpenTelemetry).
@@ -333,7 +333,7 @@ const bus = new Bus({
 
 v3 has four stages — `'outgoing'`, `'beforeConsuming'`, `'afterConsuming'`, and `'onConsumedSuccessfully'` — and splits the pipeline into two kinds of unit:
 
-- **Filters** decide whether processing continues. They return `FilterAction.Continue` or `FilterAction.Stop`. `Stop` short-circuits the stage. Use `asFilter(fn)` to register one — `fn` returns `void` or `FilterAction`.
+- **Filters** decide whether processing continues. They return `FilterAction.Continue` or `FilterAction.Stop`. `Stop` short-circuits the stage. Use `asFilter(fn)` to register one — `fn` must return a `FilterAction` (return `FilterAction.Continue` explicitly on the non-Stop path). A filter receives the raw `Envelope` (`{ headers, body }`), not a decoded message.
 - **Middleware** wraps the rest of the pipeline. It takes a `next()` callback and can run code before and after. Use `asMiddleware(fn)` to register one.
 
 ```ts
@@ -343,22 +343,25 @@ import { asFilter, asMiddleware, FilterAction } from '@serviceconnect/core';
 bus
   .use(
     'outgoing',
-    asMiddleware(async (envelope, next) => {
-      envelope.headers['X-Tenant'] = 'acme';
+    asMiddleware(async (context, next) => {
+      context.envelope.headers['X-Tenant'] = 'acme';
       await next();
     }),
   )
   .use(
     'beforeConsuming',
     asFilter(async (envelope) => {
-      if (!envelope.message.tenant) return FilterAction.Stop;
+      // Filters run before deserialization, so they see only the raw
+      // headers/body — there is no decoded message here. Inspect a header.
+      if (!envelope.headers['X-Tenant']) return FilterAction.Stop;
+      return FilterAction.Continue;
     }),
   )
   .use(
     'onConsumedSuccessfully',
-    asMiddleware(async (envelope, next) => {
+    asMiddleware(async (context, next) => {
       await next();
-      console.log('processed', envelope.messageType);
+      console.log('processed', context.envelope.headers.messageType);
     }),
   );
 ```

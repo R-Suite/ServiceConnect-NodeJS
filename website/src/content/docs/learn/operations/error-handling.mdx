@@ -19,8 +19,8 @@ The defaults shipped with the transport handle the common case well; tuning them
 
 The default consumer policy is:
 
-- **`maxRetries` is the total number of deliveries** before error-queue routing (`3` by default), with `retryDelay` ms (`3000`) in between. So `maxRetries=3` means the initial delivery plus 2 redeliveries — 3 attempts in total — before the message is routed to the error queue. Each retry is a fresh broker delivery, so the `RetryCount` AMQP header (surfaced as `ctx.headers.retryCount`) increments and the message goes back through your whole pipeline.
-- **After the final delivery fails**, the framework publishes the message to the **error queue** (`'errors'` by default, configurable via `transport.consumer.errorQueue`) along with headers describing the failure (retry count, last error, original queue).
+- **`maxRetries` is the total number of deliveries** before error-queue routing (`3` by default), with `retryDelay` ms (`3000`) in between. So `maxRetries=3` means the initial delivery plus 2 redeliveries — 3 attempts in total — before the message is routed to the error queue. Each retry is a fresh broker delivery, so the `RetryCount` AMQP header (read in a handler as `ctx.headers.RetryCount`) increments and the message goes back through your whole pipeline.
+- **After the final delivery fails**, the framework publishes the message to the **error queue** (`'errors'` by default, configurable via `transport.consumer.errorQueue`) along with headers describing the failure (retry count, last error, and a terminal-failure flag).
 - **Terminal classification happens only in the deserialize step**: a `TerminalDeserializationError` thrown by the serializer, or a Standard Schema `ValidationError`, routes the message directly to the error queue with zero retries. A handler that throws is *always* treated as a retryable failure — there is no way to short-circuit retries from inside a handler.
 - **Audit queue (opt-in)**: setting `auditEnabled: true` and an `auditQueue` mirrors every consumed message to a separate queue (default `'audit'`). Off by default (`auditEnabled` defaults to `false`) because the disk cost is real.
 - **Unhandled message types**: if no handler is registered for a message type, the consumer either acks (default) or dead-letters depending on `deadLetterUnhandled`.
@@ -62,14 +62,16 @@ Redriving from the error queue (re-publishing a stuck message to its original qu
 When the framework routes a message to the error queue, it adds headers that describe the failure. The most useful ones in a postmortem are:
 
 - `RetryCount` — how many attempts were made before giving up.
-- `OriginalQueue` — where the message came from, so a redrive tool can put it back.
-- `Exception` — the message of the last thrown error, plus its class name.
+- `TerminalFailure` — set to `'true'` when the failure was terminal-classified (a deserialization/validation failure routed straight to errors with zero retries).
+- `Exception` — the last thrown error's message followed by its stack trace (stack truncated to 2048 characters).
+
+The framework does **not** add a header carrying the source queue name. If a redrive tool needs to know where a message originated, derive it another way (e.g. from broker metadata) — there is no `OriginalQueue` header to rely on.
 
 These are plain AMQP headers, visible in the management UI and accessible from any consumer that subscribes to the error queue. Build alerting on top of the queue depth (`messages_ready` on the error queue itself) so a sudden spike pages you immediately rather than being discovered the next morning.
 
 ### Audit vs error
 
-The audit queue is a tee on the **consume** path: every message the consumer accepts is copied to the audit queue with a `TimeProcessed` header (an ISO timestamp) and a `Success: 'true'` header. Auditing is off by default (`auditEnabled` defaults to `false`); when enabled without an explicit `auditQueue`, the default queue name is `'audit'`. It is not a retry-tracker — failed messages still go to the error queue, audit just gives you a copy of every successful processing event. Use it for compliance ("did we ever process this order?") or replay scenarios; it is not a cheap dev tool, since it doubles your durable write volume on the broker.
+The audit queue is a tee on the **consume** path: every message the consumer successfully handles is copied to the audit queue with a `TimeProcessed` header (an ISO timestamp) and a `Success: 'true'` header. Auditing is off by default (`auditEnabled` defaults to `false`); when enabled without an explicit `auditQueue`, the default queue name is `'audit'`. It is not a retry-tracker — failed messages still go to the error queue, audit just gives you a copy of every successful processing event. Use it for compliance ("did we ever process this order?") or replay scenarios; it is not a cheap dev tool, since it doubles your durable write volume on the broker.
 
 ### Error classes the framework throws
 
@@ -81,7 +83,7 @@ Most of these are caught and translated into queue routing by the consumer; a fe
 - **`ValidationError`** — thrown when a Standard Schema validator attached via `registerMessage` rejects an inbound payload. The message goes straight to the error queue without a retry.
 - **`HandlerNotRegisteredError`** — thrown on shutdown / diagnostic paths when a code path expects a handler for a type and none was attached. In normal operation the consumer policy (`deadLetterUnhandled`) decides what happens to unhandled inbound traffic; this error is for cases where the absence is a programmer error.
 - **`MessageTypeNotRegisteredError`** — thrown on the outgoing side when `publish` / `send` / `sendRequest` references a type string that was never `registerMessage`'d. Always a wiring bug.
-- **`AggregatorConfigurationError`** — thrown by `registerAggregator` when an aggregator's options are inconsistent (e.g. no store, missing release predicate).
+- **`AggregatorConfigurationError`** — thrown by `registerAggregator` when an aggregator's options are inconsistent (e.g. no store, a `batchSize()` that is not a positive integer, or a `timeout()` that is not a positive finite number of ms).
 - **`RoutingSlipDestinationError`** — thrown by `bus.route(...)` when the destinations list is empty or contains a malformed entry. The framework's destination helpers (`assertValidDestination`, `isValidDestination`, `destinationFailureReason`) are exported for callers that need to pre-validate a slip before handing it to the bus.
 - **`OutgoingFiltersBlockedError`** — thrown on the outbound path when an outgoing-pipeline filter returns `FilterAction.Stop`. The publish or send never reached the wire.
 - **`RequestTimeoutError`** / **`RequestSendCancelledError`** / **`AbortError`** — request/reply outcomes. See [Cancellation](/ServiceConnect-NodeJS/learn/operations/cancellation/) for the full failure taxonomy.

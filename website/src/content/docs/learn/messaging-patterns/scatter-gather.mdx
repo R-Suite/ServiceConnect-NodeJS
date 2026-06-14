@@ -45,7 +45,7 @@ try {
   if (err instanceof RequestTimeoutError) {
     // Shortfall: fewer than expectedReplyCount arrived before the deadline.
     // The partial set is attached to the error.
-    const partial = err.replies as PriceQuoteReply[];
+    const partial = err.partialReplies as PriceQuoteReply[];
     partial.forEach((q, i) => console.log(`reply ${i}`, q.unitPrice));
   } else {
     throw err;
@@ -53,7 +53,7 @@ try {
 }
 ```
 
-With `expectedReplyCount` set, the promise **resolves** only if the full count arrives before the deadline. If `timeoutMs` elapses with fewer replies, the promise **rejects** with `RequestTimeoutError` — the partial set is attached to the error's `.replies` property. To "take whatever arrives by the deadline" instead, **omit `expectedReplyCount`**: the gather then always resolves at the timeout with whatever replies landed.
+With `expectedReplyCount` set, the promise **resolves** only if the full count arrives before the deadline. If `timeoutMs` elapses with fewer replies, the promise **rejects** with `RequestTimeoutError` — the partial set is attached to the error's `partialReplies` property. To "take whatever arrives by the deadline" instead, **omit `expectedReplyCount`**: the gather then always resolves at the timeout with whatever replies landed.
 
 If your responders sit on **different** queues (heterogeneous services that should all see the question), use `bus.publishRequest` for a true broadcast-then-gather over the type's fanout exchange:
 
@@ -67,10 +67,10 @@ await bus.publishRequest<PriceQuoteRequest, PriceQuoteReply>(
 );
 ```
 
-`publishRequest` delivers a single request to every subscriber of the type's exchange and invokes `onReply` for each reply that arrives before the timeout. With `expectedReplyCount` set, the promise resolves once that many replies have landed; if the deadline passes with fewer, it **rejects** with `RequestTimeoutError` (the partial set is on `err.replies`). Wrap the call in `try/catch` to handle a shortfall, or omit `expectedReplyCount` to resolve with whatever arrived by the deadline. It never accepts an `endpoint`.
+`publishRequest` delivers a single request to every subscriber of the type's exchange and invokes `onReply` for each reply that arrives before the timeout. With `expectedReplyCount` set, the promise resolves once that many replies have landed; if the deadline passes with fewer, it **rejects** with `RequestTimeoutError` (the partial set is on `err.partialReplies`). Wrap the call in `try/catch` to handle a shortfall, or omit `expectedReplyCount` to resolve with whatever arrived by the deadline. It never accepts an `endpoint`.
 
 <Aside type="caution">
-  Partial-reply semantics can hide silent responder failures. With `expectedReplyCount` set, a shortfall surfaces as a rejected `RequestTimeoutError` — catch it and inspect `err.replies` for the partial set. With `expectedReplyCount` omitted, a short set resolves silently: one or more responders dropped the request and the caller will never know unless it checks the array length. Log the discrepancy at minimum; for critical flows, treat a short reply set as an error and surface it.
+  Partial-reply semantics can hide silent responder failures. With `expectedReplyCount` set, a shortfall surfaces as a rejected `RequestTimeoutError` — catch it and inspect `err.partialReplies` for the partial set. With `expectedReplyCount` omitted, a short set resolves silently: one or more responders dropped the request and the caller will never know unless it checks the array length. Log the discrepancy at minimum; for critical flows, treat a short reply set as an error and surface it.
 </Aside>
 
 ## Behind the scenes
@@ -81,7 +81,7 @@ The gather is keyed by a generated **`requestMessageId`** (via `newMessageId()`)
 
 The behaviour at the deadline splits on `expectedReplyCount`:
 
-- **`expectedReplyCount` set:** a shortfall (fewer than expected by the deadline) **rejects** with `RequestTimeoutError`, with the partial set attached to `err.replies`. The same holds for the `publishRequest`/`onReply` form.
+- **`expectedReplyCount` set:** a shortfall (fewer than expected by the deadline) **rejects** with `RequestTimeoutError`, with the partial set attached to `err.partialReplies`. The same holds for the `publishRequest`/`onReply` form.
 - **`expectedReplyCount` omitted:** the gather chooses progress over completeness — it always **resolves** at the timeout with whatever arrived, including an empty array if nothing did. This is the case where `timeoutMs` is a budget rather than a deadline.
 
 Either way, pick `timeoutMs` carefully: it directly bounds the worst-case wall-clock cost of the operation, and there is no built-in retry.

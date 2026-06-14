@@ -20,7 +20,7 @@ It is also useful for **graceful migrations** — temporarily steer a fraction o
 If the routing decision is **static and known by the caller**, a routing slip or a direct `bus.send` to the right endpoint is simpler and cheaper — no filter to maintain. If you find yourself encoding business logic in a routing filter, that logic probably belongs in a handler instead; filters should classify, not transform.
 
 <Aside type="caution">
-  A routing filter that calls `bus.send(...)` and then returns `FilterAction.Stop` is doing two things — re-publishing and dropping. If the second publish fails, the original message still gets dropped. Wrap the publish in a `try`/`catch` or fail loudly so messages do not vanish on broker hiccups.
+  A routing filter that calls `bus.send(...)` and then returns `FilterAction.Stop` is doing two things — re-publishing and dropping. Let the publish throw: if `await bus.send(...)` rejects, the filter never reaches `return FilterAction.Stop`, the consume fails, and the message is **retried and eventually dead-lettered** — not lost. The message only vanishes if you wrap the publish in a `try`/`catch`, swallow the error, and still return `Stop`. So do **not** catch the publish error and then `Stop`; either let it propagate (so retries kick in) or return `FilterAction.Continue` on failure.
 </Aside>
 
 ## Example

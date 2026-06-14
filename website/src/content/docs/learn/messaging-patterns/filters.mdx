@@ -48,8 +48,8 @@ The filter rejects any message that arrives without a `tenant` header; the middl
 There are four stages, each catching a different moment in the message lifecycle:
 
 - `'outgoing'` — runs before a message leaves the producer. Stamp headers, redact payloads, refuse sends that violate policy.
-- `'beforeConsuming'` — runs before the handler. Reject unauthorised messages, set up logging context, time the handler.
-- `'afterConsuming'` — runs after the handler returns or throws. Use a `try`/`finally` in middleware to capture timing or errors regardless of outcome.
+- `'beforeConsuming'` — runs before the handler. Reject unauthorised messages, set up logging context, or **wrap the handler** to time it: a middleware here can `await next()` inside a `try`/`finally` to observe success and failure alike (as the example above does).
+- `'afterConsuming'` — runs **unconditionally after** the handler, as a separate pipeline (on success, on failure, and even after a `beforeConsuming` `Stop`). It does **not** wrap the handler and the `PipelineContext` does not carry the handler's result or error, so use it for outcome-independent cleanup — not for timing the handler or capturing its exception (do that in `beforeConsuming`).
 - `'onConsumedSuccessfully'` — runs only after a successful handler. Emit "processed" metrics, commit downstream side-effects that should not happen on failure.
 
 Filters receive the `Envelope` directly (`(envelope, signal) => FilterAction`); middleware receives a `PipelineContext` (`(context, next) => Promise<void>`) carrying the envelope, the current stage, an `AbortSignal`, and a stage-scoped logger. Returning `FilterAction.Stop` ends pipeline processing for that message in that stage — subsequent filters in the stage are skipped and middleware never runs.

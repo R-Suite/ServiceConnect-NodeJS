@@ -21,7 +21,7 @@ import type { Bus } from '@serviceconnect/core';
 start(): Promise<void>;
 ```
 
-Connects the producer and consumer, attaches the inbound dispatcher, and starts any registered saga timeout poller / aggregator flush timer. Idempotent; safe to await once.
+Connects the producer and consumer, attaches the inbound dispatcher, and starts any registered saga timeout poller / aggregator flush timer. Idempotent on an already-started bus; safe to await once. Calling `start()` after `stop()` throws an `Error` (`bus is stopped; create a new instance to resume`) — a stopped bus cannot be restarted, so create a new instance.
 
 ### `stop`
 
@@ -29,7 +29,7 @@ Connects the producer and consumer, attaches the inbound dispatcher, and starts 
 stop(signal?: AbortSignal): Promise<void>;
 ```
 
-Stops consuming, waits for in-flight handlers to drain, then closes the producer and consumer in order. Pass an `AbortSignal` to bound the drain window. Idempotent.
+Stops consuming, waits for in-flight handlers to drain, then closes the producer and consumer in order. The `signal` parameter is accepted for forward compatibility but is currently ignored — passing an `AbortSignal` has no effect on the drain. Idempotent.
 
 ## Registration
 
@@ -93,7 +93,7 @@ registerProcess(
 ): ProcessBuilder;
 ```
 
-Registers a process manager (saga) and returns a builder used to attach `startedBy` / `whenReceived` / `whenTimeoutFires` handlers. `options.store` is the `ISagaStore`; `options.timeoutStore` is the optional `ITimeoutStore`. If `dataType` is omitted the saga binds to the last `registerProcessData` call.
+Registers a process manager (saga) and returns a builder used to attach `startsWith` (the starting handler) and `handles` (continuation handlers). There is no timeout-handler method on the builder; timeouts are scheduled from within a saga handler and re-delivered as normal messages handled by `handles`. `options.store` is the `ISagaStore`; `options.timeoutStore` is the optional `ITimeoutStore`. If `dataType` is omitted the saga binds to the last `registerProcessData` call.
 
 ### `registerAggregator`
 
@@ -173,7 +173,7 @@ sendRequestMulti<TReq extends Message, TRep extends Message>(
 ): Promise<TRep[]>;
 ```
 
-Scatter-gather variant: resolves with an array of replies once `options.expectedReplyCount` have arrived or `options.timeoutMs` elapses, whichever comes first. Returns whatever replies were collected on timeout rather than throwing.
+Scatter-gather variant: resolves with an array of replies once `options.expectedReplyCount` have arrived or `options.timeoutMs` elapses, whichever comes first. On timeout, if `options.expectedReplyCount` was set and fewer replies arrived, the promise rejects with `RequestTimeoutError` (with the collected replies on `error.partialReplies`); if no `expectedReplyCount` was given (or the count was already met), it resolves with the replies collected so far.
 
 ### `publishRequest`
 
@@ -186,7 +186,7 @@ publishRequest<TReq extends Message, TRep extends Message>(
 ): Promise<void>;
 ```
 
-Publishes a request and invokes `onReply` once per reply as they arrive. The returned promise resolves when the broker has accepted the publish; the callback continues to fire asynchronously until the registration is cancelled or the timeout fires.
+Publishes a request and invokes `onReply` once per reply as they arrive. The returned promise resolves once the expected replies have arrived (or rejects on timeout/abort) — not when the broker accepts the publish. Throws `ArgumentError` if `options.endpoint` is set (use `sendRequest` for point-to-point requests, since `publishRequest` always broadcasts). `options.timeoutMs` defaults to `10000` ms when omitted or non-positive.
 
 ## Streaming
 

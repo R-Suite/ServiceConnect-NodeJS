@@ -59,7 +59,7 @@ export interface ISagaStore {
 ## Members
 
 - **`findByCorrelationId(dataType, correlationId)`** — look up an existing saga by its `dataType` (the registered data-type name) and `correlationId`. Returns `{ data, concurrencyToken }` when a row exists, `undefined` otherwise. The returned `data` should be the freshly deserialised state — handlers will mutate it in place — and `concurrencyToken` is whatever opaque value lets `update` detect a concurrent write.
-- **`insert(dataType, data)`** — create a new saga row. Returns the initial `ConcurrencyToken`. Implementations must throw `DuplicateSagaError` if a row already exists for `(dataType, data.correlationId)` — the bus uses this signal to fall back to load-and-update when two `startsWith` handlers race.
+- **`insert(dataType, data)`** — create a new saga row. Returns the initial `ConcurrencyToken`. Implementations must throw `DuplicateSagaError` if a row already exists for `(dataType, data.correlationId)`. A `DuplicateSagaError` — like any insert failure — surfaces as a non-terminal failure, so the message is retried by the normal retry policy; on redelivery `findByCorrelationId` finds the now-existing row and the bus takes the update path. There is no immediate in-process load-and-update fallback within a single delivery.
 - **`update(dataType, data, expectedToken)`** — write a new version of the saga row. Implementations must throw `ConcurrencyError` if `expectedToken` does not match the token currently in storage (optimistic concurrency). On success, return the new token for the next round-trip.
 - **`delete(dataType, correlationId)`** — remove the row. Called when a saga marks itself complete. Safe to no-op if the row no longer exists.
 

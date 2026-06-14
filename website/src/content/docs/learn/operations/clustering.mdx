@@ -7,7 +7,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 ## Overview
 
-Production RabbitMQ runs as a cluster of three or more nodes so that a single VM failure doesn't take the bus down. The transport understands this natively: pass a comma-separated host list in the AMQP URL, pick the right queue type, and let `rabbitmq-client` deal with reconnect and failover.
+Production RabbitMQ runs as a cluster of three or more nodes so that a single VM failure doesn't take the bus down. Point the transport at a stable endpoint (a load balancer or DNS name that fronts the cluster), pick the right queue type, and let `rabbitmq-client` deal with reconnect after a disconnect.
 
 ## The problem
 
@@ -15,7 +15,7 @@ A single-node broker is a single point of failure. The moment that one box reboo
 
 ## The solution
 
-Treat the cluster as one logical broker via the URL, replicate state with **quorum queues**, and tune `prefetch` and `heartbeat` so failover is detected and rebalanced quickly.
+Front the cluster with one stable endpoint, replicate state with **quorum queues**, and tune `prefetch` and `heartbeat` so failover is detected and rebalanced quickly.
 
 ```ts
 import { rabbitMQWithRegistry } from '@serviceconnect/rabbitmq';
@@ -24,7 +24,7 @@ import { createMessageTypeRegistry } from '@serviceconnect/core';
 const registry = createMessageTypeRegistry();
 const transport = rabbitMQWithRegistry(
   {
-    url: 'amqp://app:secret@rabbit-1,rabbit-2,rabbit-3:5672/%2F?heartbeat=10',
+    url: 'amqp://app:secret@rabbit-lb:5672/%2F?heartbeat=10',
     connectionName: 'orders-service',
     consumer: {
       prefetch: 32,
@@ -37,8 +37,8 @@ const transport = rabbitMQWithRegistry(
 
 A few things are happening in that snippet:
 
-- **Comma-separated hosts.** `rabbitmq-client` interprets the host list as a cluster. If the first node refuses the connection, it tries the next. After a successful connect, the library keeps the list around for automatic reconnect on disconnect — your code does not change.
-- **`heartbeat=10` query param.** AMQP heartbeats are how a partitioned client notices the broker has gone away. The default (60 seconds) is fine for a workstation but far too slow for a load-balanced production cluster — drop it to 10 so a hung node is detected inside the next handler latency budget.
+- **Single stable endpoint.** `RabbitMQTransportOptions` exposes only a single `url`, which is forwarded verbatim to `rabbitmq-client` (it is parsed with Node's `new URL()`, so a comma-separated hostname becomes one literal, un-resolvable host — not a cluster). Point `url` at a load balancer or DNS name that fronts the cluster nodes; `rabbitmq-client` automatically reconnects through that endpoint after a disconnect. `rabbitmq-client`'s own multi-node failover lives behind its `hosts: string[]` option, which the transport does not currently surface.
+- **`heartbeat=10` query param.** AMQP heartbeats are how a partitioned client notices the broker has gone away. The transport's default `heartbeat` is `0` — heartbeats **disabled** (`buildConnectionOptions` passes `heartbeat: opts.heartbeat ?? 0`), so you must opt in. Set it via the URL `?heartbeat=N` query param (which wins) or the `heartbeat` option on `RabbitMQTransportOptions`; drop it to 10 in a load-balanced production cluster so a hung node is detected inside the next handler latency budget.
 - **Quorum queue.** Setting `x-queue-type: quorum` in `queueArguments` makes the queue Raft-replicated across the cluster. Messages survive a single node failure, and consumers are automatically reattached when their queue's leader moves.
 
 When the broker drops a consumer because the underlying node is shutting down, `bus.consumer.isCancelledByBroker` flips to `true` and the `consumerConnectivity` healthcheck reports unhealthy until the consumer reattaches on another node. Both signals are useful in liveness probes that gate traffic during planned failovers.

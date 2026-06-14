@@ -85,10 +85,10 @@ bus
 ## Behind the scenes
 
 - A `ProcessHandler` has a `correlate(message): string` that returns the saga's correlation key — typically a domain identifier like `orderId`.
-- The framework uses the key to look up existing state in the `ISagaStore`; `startsWith` creates a new instance if none exists, `handles` raises an error if no row matches.
+- The framework uses the key to look up existing state in the `ISagaStore`; `startsWith` creates a new instance if none exists, while `handles` requires an existing row — if none matches the correlation key the message is silently skipped (logged at debug) and acked, not treated as an error.
 - The `data` parameter is mutable; its post-handler value is persisted with an optimistic concurrency check. If a concurrent write wins, the framework retries the message.
 - `ctx.markComplete()` signals the saga is finished — the row is deleted on the next persist, freeing the correlation key for reuse.
-- `ctx.requestTimeout(name, runAt, payload?)` schedules a future tick driven by `ITimeoutStore`. The bus polls at `BusOptions.timeoutPollIntervalMs` and delivers the timeout as a normal message back through the saga's correlation key.
+- `ctx.requestTimeout(name, runAt, payload?)` schedules a future tick driven by `ITimeoutStore`. The bus polls at `BusOptions.timeoutPollIntervalMs`; when the timeout fires it **publishes a message of type `name`** to the bus's own queue, with the body set to `{ correlationId: <saga's correlation id>, ...payload }`. To receive it the process must register a handler (`startsWith`/`handles`) for that message type, whose `correlate()` resolves the saga key from the delivered message — the timeout is not auto-routed by correlation id alone.
 
 ## See also
 

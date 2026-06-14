@@ -24,10 +24,10 @@ The Node.js port deliberately puts everything in one place: a single `BusOptions
 - `registry?` — optional shared `MessageTypeRegistry`. Pass the same one to the transport for matching wire types.
 - `serializer?` — defaults to JSON; swap for MessagePack/etc.
 - `logger?` — defaults to `consoleLogger('info')`.
-- `defaultRequestTimeout?` — milliseconds. Per-call `timeoutMs` overrides.
+- `defaultRequestTimeout?` — declared but **currently inert**: the bus never reads it. Request timeouts must be set per call via `RequestOptions.timeoutMs` (`sendRequest`/`sendRequestMulti` throw `ArgumentOutOfRangeError` without a positive `timeoutMs`).
 - `timeoutPollIntervalMs?` — how often the timeout store is swept.
 - `aggregatorFlushIntervalMs?` — how often aggregators flush ready windows.
-- `consumeWrapper?` — wraps every handler invocation; useful for tracing or per-message scope.
+- `consumeWrapper?` — wraps each consumed-message dispatch (once per message, around the whole dispatch — deserialize, reply routing, every handler, pipeline stages); useful for tracing or per-message scope.
 
 Per-package option blocks live under their owners: `RabbitMQTransportOptions` for the transport, persistence factory options on the store factories, and pipeline behaviour added via `bus.use(...)`.
 
@@ -60,7 +60,6 @@ const bus = createBus({
   ),
   registry,
   logger: consoleLogger(process.env.LOG_LEVEL === 'debug' ? 'debug' : 'info'),
-  defaultRequestTimeout: 10_000,
   timeoutPollIntervalMs: 250,
   aggregatorFlushIntervalMs: 250,
 });
@@ -71,7 +70,7 @@ await sagaStore.ensureIndexes();
 await timeoutStore.ensureIndexes();
 ```
 
-Note the explicit `ensureIndexes()` calls — the stores never silently create indexes at first use. They're idempotent and cheap, but you must call them. Treat them as part of "boot the service", not "the framework will figure it out".
+Note the explicit `ensureIndexes()` calls — the stores never silently create indexes at first use. They're idempotent and cheap, so call them as part of "boot the service" rather than relying on "the framework will figure it out". For the timeout and aggregator stores this actually builds indexes (`runAt`/`claimToken`, and the aggregator's compound index); `mongoSagaStore.ensureIndexes()` is a no-op because its compound `_id` is auto-indexed by MongoDB, but calling it keeps the boot sequence uniform.
 
 There is no built-in env-var helper because the rules for parsing are different per app: some teams default to dev-friendly values, some refuse to start without explicit values, some pull from a secrets manager. Keep the parsing close to the call site so the contract between env and code is obvious to anyone reading the bootstrap.
 
@@ -106,7 +105,7 @@ The `Logger` interface is small on purpose. Anything that implements those six m
 ## Common pitfalls
 
 <Aside type="caution">
-  - Forgetting `await sagaStore.ensureIndexes()` at boot — the first request races index creation and feels slow for no obvious reason.
+  - Forgetting `await timeoutStore.ensureIndexes()` (or `aggregatorStore.ensureIndexes()`) at boot — those create indexes (`runAt`/`claimToken`, and the aggregator's compound index), so the first request races index creation and feels slow for no obvious reason. `mongoSagaStore.ensureIndexes()` is a no-op — its compound `_id` is auto-indexed by MongoDB — so omitting *that* call is harmless, though calling it is still fine.
   - Defaulting `timeoutPollIntervalMs` too aggressively (under 50 ms) — wastes I/O against the timeout store and rarely improves business behaviour.
   - Sharing one registry between transport and bus is correct; creating two diverging registries silently breaks polymorphic dispatch.
   - Hiding required env vars behind `?? 'localhost'` defaults — fine in dev, dangerous in prod. Consider failing fast when a required var is missing.

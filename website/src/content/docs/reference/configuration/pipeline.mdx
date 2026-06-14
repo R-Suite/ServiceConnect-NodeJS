@@ -22,7 +22,7 @@ use(stage: PipelineStage, ...items: Array<FilterRegistration | MiddlewareRegistr
 
 | Stage | When it runs |
 |---|---|
-| `'outgoing'` | Before a message leaves the producer (`publish`, `send`, `sendRequest`, `route`). |
+| `'outgoing'` | Before a message leaves the producer — every outgoing send path: `publish`, `send`, `sendToMany`, `route`, and all request methods (`sendRequest`, `sendRequestMulti`, `publishRequest`). |
 | `'beforeConsuming'` | Before the handler runs. |
 | `'afterConsuming'` | After the handler returns OR throws. |
 | `'onConsumedSuccessfully'` | After a successful handler only. |

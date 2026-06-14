@@ -94,7 +94,7 @@ The bare `new Promise<void>(() => {})` keeps the event loop alive without burnin
 ```ts
 await using bus = createBus({ /* ... */ });
 await bus.start();
-await bus.send('PlaceOrder', { orderId: 'o-1' }, { endpoint: 'orders' });
+await bus.send('PlaceOrder', { correlationId: 'c-1', orderId: 'o-1' }, { endpoint: 'orders' });
 // scope exit calls bus.stop() automatically
 ```
 
@@ -104,7 +104,7 @@ Useful for tests because forgetting to stop the bus leaks broker connections acr
 
 `@serviceconnect/healthchecks` ships three probes; each returns a `HealthCheck` — a `() => Promise<HealthCheckResult>` with a `status` of `'healthy' | 'unhealthy' | 'degraded'`. Map them to your platform's endpoints:
 
-- `consumerConnectivity(bus)` to **liveness** — fast, returns unhealthy only when the consumer channel has actually dropped.
+- `consumerConnectivity(bus)` to **liveness** — fast, returns unhealthy when the consumer has been cancelled by the broker or its connection has dropped.
 - `producerConnectivity(bus)` to **liveness** alongside the consumer check, so a half-open transport gets restarted.
 - `consumerBusy(bus, { graceMs })` to a slower-cadence **readiness** probe — it reports `degraded` when nothing has flowed for a while, useful for traffic shifting but a poor signal for "restart this pod".
 

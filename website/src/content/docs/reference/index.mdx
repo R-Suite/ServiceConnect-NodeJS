@@ -3,7 +3,7 @@ title: Reference
 description: Hand-written reference for every public type and function in @serviceconnect/*.
 ---
 
-The reference covers every exported name in the published packages. Pages are grouped by area and named for the type or function they document.
+The reference covers the primary public types and functions in the published packages. Pages are grouped by area and named for the type or function they document. A few exported names are not yet covered by a dedicated page — notably the error classes (`ServiceConnectError` and its subclasses, including `RequestTimeoutError`), the routing-slip helpers (`ROUTING_SLIP_HEADER`, `parseRoutingSlip`, `serialiseRoutingSlip`, `assertValidDestination`, `isValidDestination`, `destinationFailureReason`), and the logger surface (`Logger`, `LogLevel`, `consoleLogger`).
 
 ## Areas
 
@@ -14,8 +14,8 @@ The reference covers every exported name in the published packages. Pages are gr
 - **Process Managers** — sagas and aggregators.
 - **Health Checks** — producer / consumer probes.
 - **Telemetry** — OpenTelemetry wrappers.
-- **[Testing](/ServiceConnect-NodeJS/reference/testing/)** — in-memory transport doubles and store contract suites.
+- **Testing** — in-memory transport doubles and store contract suites.
 - **Configuration** — transport, persistence, queue, pipeline options.
 - **Extension Points** — interfaces you implement to plug in a new transport, store, serializer, or registry.
 
-Reference pages are hand-written: no auto-generation. If a type appears in the public surface and you can't find it here, please [open an issue](https://github.com/R-Suite/ServiceConnect-NodeJS/issues).
+Reference pages are hand-written: no auto-generation. If a primary type appears in the public surface and you can't find it here, please [open an issue](https://github.com/R-Suite/ServiceConnect-NodeJS/issues).
