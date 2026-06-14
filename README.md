@@ -84,11 +84,11 @@ docker compose up -d
 bash run-all.sh
 ```
 
-## Migration from v1
+## Migration from v2
 
-The legacy `service-connect` v1.x package (on the `master` branch) is preserved unchanged. v3 is a complete redesign with typed handlers, ESM-only, Node 22 LTS, and a pluggable transport.
+The legacy `service-connect` v2.x package (on the `master` branch) is preserved unchanged. v3 is a complete redesign with typed handlers, ESM-only, Node 22 LTS, and a pluggable transport.
 
-See the [migration guide](https://r-suite.github.io/ServiceConnect-NodeJS/migrating-v1-to-v3/) for a side-by-side mapping of every v1 concept to its v3 replacement.
+See the [migration guide](https://r-suite.github.io/ServiceConnect-NodeJS/migrating-v2-to-v3/) for a side-by-side mapping of every v2 concept to its v3 replacement.
 
 ## Engine support
 

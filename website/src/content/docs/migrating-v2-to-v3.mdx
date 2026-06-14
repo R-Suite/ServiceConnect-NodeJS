@@ -1,28 +1,28 @@
 ---
-title: Migrating from v1
-description: A side-by-side mapping of every v1 concept to its v3 replacement.
+title: Migrating from v2
+description: A side-by-side mapping of every v2 concept to its v3 replacement.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
 ## Overview
 
-The legacy `service-connect` v1.x package and the new `@serviceconnect/*` v3 packages share the wire format but otherwise look very different. v1 was a single CommonJS package with a class-based API and AMQP-only transport. v3 is an ESM monorepo with a typed bus, pluggable transport, and first-class patterns for everything v1 only had on the TODO list.
+The legacy `service-connect` v2.x package and the new `@serviceconnect/*` v3 packages share the wire format but otherwise look very different. v2 was a single CommonJS package with a class-based API and AMQP-only transport. v3 is an ESM monorepo with a typed bus, pluggable transport, and first-class patterns for everything v2 only had on the TODO list.
 
 <Aside type="caution">
-  v3 is not a drop-in replacement. Plan to migrate one service at a time, starting with a non-critical worker. Wire-format compatibility means v1 and v3 services can coexist on the same broker during migration.
+  v3 is not a drop-in replacement. Plan to migrate one service at a time, starting with a non-critical worker. Wire-format compatibility means v2 and v3 services can coexist on the same broker during migration.
 </Aside>
 
-The good news is that the on-the-wire envelope is unchanged. v1 publishes JSON payloads with `MessageType`, `RequestMessageId`, `ResponseMessageId`, `SourceAddress`, and the rest of the PascalCase header set; v3 reads and writes the same headers. A v3 consumer can take over a v1 producer's traffic without any broker reconfiguration, and v1 consumers can keep reading messages a v3 publisher emits. This lets you migrate services one at a time rather than all at once.
+The good news is that the on-the-wire envelope is unchanged. v2 publishes JSON payloads with `MessageType`, `RequestMessageId`, `ResponseMessageId`, `SourceAddress`, and the rest of the PascalCase header set; v3 reads and writes the same headers. A v3 consumer can take over a v2 producer's traffic without any broker reconfiguration, and v2 consumers can keep reading messages a v3 publisher emits. This lets you migrate services one at a time rather than all at once.
 
-The rest of this page walks every public concept in v1 and shows the v3 equivalent. Each section has a v1 snippet on the left and the v3 replacement on the right; where v3 introduces a new concept, the prose calls out what changed and why.
+The rest of this page walks every public concept in v2 and shows the v3 equivalent. Each section has a v2 snippet on the left and the v3 replacement on the right; where v3 introduces a new concept, the prose calls out what changed and why.
 
 ## 1. Lifecycle
 
-v1 was class-based. You constructed a `Bus` with the full configuration in one object, then called `init()` to connect, and `close()` to shut down.
+v2 was class-based. You constructed a `Bus` with the full configuration in one object, then called `init()` to connect, and `close()` to shut down.
 
 ```ts
-// v1
+// v2
 import { Bus } from 'service-connect';
 
 const bus = new Bus({
@@ -58,10 +58,10 @@ If you do not want `await using`, call `await bus.stop()` explicitly. `stop()` d
 
 ## 2. Registration
 
-v1 had a single registration method, `addHandler`. Handlers received four positional arguments: the message, the headers, the type string, and a reply callback.
+v2 had a single registration method, `addHandler`. Handlers received four positional arguments: the message, the headers, the type string, and a reply callback.
 
 ```ts
-// v1
+// v2
 await bus.addHandler('OrderPlaced', async (message, headers, type, replyCallback) => {
   console.log('placed', message.orderId);
   await replyCallback('OrderConfirmed', { orderId: message.orderId });
@@ -97,19 +97,19 @@ bus
 Differences worth calling out:
 
 - The handler signature shrinks from four positional arguments to `(message, context)`. Everything else moves onto `context`: `context.headers`, `context.messageType`, `context.headers.sourceAddress`, `context.reply(...)`, `context.signal`. (The source address lives on `context.headers.sourceAddress`; there is no top-level `context.sourceAddress`.)
-- Every v3 message must extend `Message`, which means it must carry a `correlationId: string`. v1 did not require this — adding it is the main schema change you will see at every call site.
-- v3 is strict about registration: `bus.handle('X', ...)` throws at startup if `'X'` was not declared with `registerMessage`. v1 would happily accept any string.
+- Every v3 message must extend `Message`, which means it must carry a `correlationId: string`. v2 did not require this — adding it is the main schema change you will see at every call site.
+- v3 is strict about registration: `bus.handle('X', ...)` throws at startup if `'X'` was not declared with `registerMessage`. v2 would happily accept any string.
 
 ## 3. Send and publish
 
-v1 took the endpoint as the first positional argument; v3 moves it into the options object. v1 also accepted an array for fan-out send; v3 splits that into a separate method, `sendToMany`, to keep the single-endpoint signature obvious.
+v2 took the endpoint as the first positional argument; v3 moves it into the options object. v2 also accepted an array for fan-out send; v3 splits that into a separate method, `sendToMany`, to keep the single-endpoint signature obvious.
 
 ```ts
-// v1 — send
+// v2 — send
 await bus.send('orders', 'OrderPlaced', { orderId: 'o-1' });
 await bus.send(['orders', 'fulfilment'], 'OrderPlaced', { orderId: 'o-1' });
 
-// v1 — publish
+// v2 — publish
 await bus.publish('OrderPlaced', { orderId: 'o-1' });
 ```
 
@@ -126,10 +126,10 @@ Both methods take an optional `headers` field on the options object for custom A
 
 ## 4. Request / reply
 
-v1's request/reply was callback-driven and could fire the callback once per reply for scatter-gather. The caller passed a callback as the fourth argument; v1 wired up the response correlation and invoked the callback for each matching reply.
+v2's request/reply was callback-driven and could fire the callback once per reply for scatter-gather. The caller passed a callback as the fourth argument; v2 wired up the response correlation and invoked the callback for each matching reply.
 
 ```ts
-// v1 — single-endpoint request
+// v2 — single-endpoint request
 await bus.sendRequest(
   'pricing',
   'GetQuote',
@@ -139,7 +139,7 @@ await bus.sendRequest(
   },
 );
 
-// v1 — broadcast request, expect 3 replies, 5-second timeout
+// v2 — broadcast request, expect 3 replies, 5-second timeout
 await bus.publishRequest(
   'GetQuote',
   { sku: 'abc' },
@@ -171,14 +171,14 @@ const quotes = await bus.sendRequestMulti<GetQuote, Quote>(
 console.log(quotes.length, 'quotes received');
 ```
 
-For the broadcast (publish-then-collect-replies) case, v3 exposes `bus.publishRequest` for symmetry with v1's broadcast request — it takes a per-reply callback and an optional `expectedReplyCount`. Use it when responders live on **different** queues (true scatter-gather across heterogeneous services); use `sendRequestMulti` when responders are competing consumers on the **same** queue. The promise-returning `sendRequest` / `sendRequestMulti` compose with `await`, `Promise.all`, and `AbortController` in ways the callback form cannot.
+For the broadcast (publish-then-collect-replies) case, v3 exposes `bus.publishRequest` for symmetry with v2's broadcast request — it takes a per-reply callback and an optional `expectedReplyCount`. Use it when responders live on **different** queues (true scatter-gather across heterogeneous services); use `sendRequestMulti` when responders are competing consumers on the **same** queue. The promise-returning `sendRequest` / `sendRequestMulti` compose with `await`, `Promise.all`, and `AbortController` in ways the callback form cannot.
 
 ## 5. Transport
 
-v1 hard-coded RabbitMQ. The broker URL, queue name, SSL, prefetch, retry, error queue, audit queue — everything lived under `amqpSettings` on the bus config. Switching transports would have required forking the library.
+v2 hard-coded RabbitMQ. The broker URL, queue name, SSL, prefetch, retry, error queue, audit queue — everything lived under `amqpSettings` on the bus config. Switching transports would have required forking the library.
 
 ```ts
-// v1
+// v2
 const bus = new Bus({
   amqpSettings: {
     queue: { name: 'orders' },
@@ -218,23 +218,23 @@ If you need polymorphic dispatch — a publish of a derived type also reaching b
 
 ## 6. Patterns built in v3
 
-v1 supported point-to-point, pub/sub, request/reply, scatter-gather, retries, auditing, error handling, SSL, and priority queues. The README also listed a "TODO" set of patterns that were never built. v3 ships all of them.
+v2 supported point-to-point, pub/sub, request/reply, scatter-gather, retries, auditing, error handling, SSL, and priority queues. The README also listed a "TODO" set of patterns that were never built. v3 ships all of them.
 
-- **Process Manager (saga)** — v1 TODO. v3 has `ProcessHandler<TData, TMessage>` and a fluent DSL: `bus.registerProcessData<TData>('DataType').registerProcess('order', { store, timeoutStore }).startsWith<M>('OrderPlaced', handler).handles<M>('PaymentReceived', handler)`. See [Process Manager](/ServiceConnect-NodeJS/learn/messaging-patterns/process-manager/).
-- **Aggregator** — v1 TODO. v3 has the `Aggregator<T>` abstract class with `batchSize`/`timeout`/`execute(batch)`, registered via `bus.registerAggregator(type, instance, { store })`. See [Aggregator](/ServiceConnect-NodeJS/learn/messaging-patterns/aggregator/).
-- **Routing Slip** — v1 TODO. v3 has `bus.route(typeName, msg, [...destinations])` and a `RoutingSlip` header that each handler forwards along the slip until it is empty. See [Routing Slip](/ServiceConnect-NodeJS/learn/messaging-patterns/routing-slip/).
-- **Streaming** — v1 TODO. v3 has `bus.openStream(endpoint, typeName)` returning a `StreamSender<T>`; consumers register with `bus.handleStream(typeName, async (stream) => { for await (const chunk of stream) { ... } })`. See [Streaming](/ServiceConnect-NodeJS/learn/messaging-patterns/streaming/).
-- **Polymorphic dispatch** — v1 TODO. v3 supports declared parents via `registry.register<T>(name, { parents: ['Parent'] })`. A handler for the parent type runs for every derived child. See [Polymorphic Messages](/ServiceConnect-NodeJS/learn/messaging-patterns/polymorphic-messages/).
-- **Filters as first-class registration** — v1 had a `filters.before`/`filters.after`/`filters.outgoing` array on the config. v3 has `bus.use(stage, asFilter(fn), asMiddleware(fn))` across four stages: `'outgoing'`, `'beforeConsuming'`, `'afterConsuming'`, and `'onConsumedSuccessfully'`. See [Filters](/ServiceConnect-NodeJS/learn/messaging-patterns/filters/).
-- **Content-based routing** — not in v1. v3 supports it directly as a `bus.handle` pattern that calls `bus.send` based on payload contents. See [Content-Based Routing](/ServiceConnect-NodeJS/learn/messaging-patterns/content-based-routing/).
-- **Scatter-gather** — v1 had it via `publishRequest`. v3 has both `publishRequest` and the more ergonomic `sendRequestMulti`. See [Scatter-Gather](/ServiceConnect-NodeJS/learn/messaging-patterns/scatter-gather/).
+- **Process Manager (saga)** — v2 TODO. v3 has `ProcessHandler<TData, TMessage>` and a fluent DSL: `bus.registerProcessData<TData>('DataType').registerProcess('order', { store, timeoutStore }).startsWith<M>('OrderPlaced', handler).handles<M>('PaymentReceived', handler)`. See [Process Manager](/ServiceConnect-NodeJS/learn/messaging-patterns/process-manager/).
+- **Aggregator** — v2 TODO. v3 has the `Aggregator<T>` abstract class with `batchSize`/`timeout`/`execute(batch)`, registered via `bus.registerAggregator(type, instance, { store })`. See [Aggregator](/ServiceConnect-NodeJS/learn/messaging-patterns/aggregator/).
+- **Routing Slip** — v2 TODO. v3 has `bus.route(typeName, msg, [...destinations])` and a `RoutingSlip` header that each handler forwards along the slip until it is empty. See [Routing Slip](/ServiceConnect-NodeJS/learn/messaging-patterns/routing-slip/).
+- **Streaming** — v2 TODO. v3 has `bus.openStream(endpoint, typeName)` returning a `StreamSender<T>`; consumers register with `bus.handleStream(typeName, async (stream) => { for await (const chunk of stream) { ... } })`. See [Streaming](/ServiceConnect-NodeJS/learn/messaging-patterns/streaming/).
+- **Polymorphic dispatch** — v2 TODO. v3 supports declared parents via `registry.register<T>(name, { parents: ['Parent'] })`. A handler for the parent type runs for every derived child. See [Polymorphic Messages](/ServiceConnect-NodeJS/learn/messaging-patterns/polymorphic-messages/).
+- **Filters as first-class registration** — v2 had a `filters.before`/`filters.after`/`filters.outgoing` array on the config. v3 has `bus.use(stage, asFilter(fn), asMiddleware(fn))` across four stages: `'outgoing'`, `'beforeConsuming'`, `'afterConsuming'`, and `'onConsumedSuccessfully'`. See [Filters](/ServiceConnect-NodeJS/learn/messaging-patterns/filters/).
+- **Content-based routing** — not in v2. v3 supports it directly as a `bus.handle` pattern that calls `bus.send` based on payload contents. See [Content-Based Routing](/ServiceConnect-NodeJS/learn/messaging-patterns/content-based-routing/).
+- **Scatter-gather** — v2 had it via `publishRequest`. v3 has both `publishRequest` and the more ergonomic `sendRequestMulti`. See [Scatter-Gather](/ServiceConnect-NodeJS/learn/messaging-patterns/scatter-gather/).
 
 ## 7. Module system
 
-v1 was CommonJS. The package set `"main": "index.js"` and shipped a `.d.ts` next to it; consumers used `const { Bus } = require('service-connect')` (or `import { Bus } from 'service-connect'` if their bundler did interop).
+v2 was CommonJS. The package set `"main": "index.js"` and shipped a `.d.ts` next to it; consumers used `const { Bus } = require('service-connect')` (or `import { Bus } from 'service-connect'` if their bundler did interop).
 
 ```ts
-// v1
+// v2
 const { Bus } = require('service-connect');
 // or, with esModuleInterop:
 import { Bus } from 'service-connect';
@@ -264,18 +264,18 @@ If your application is currently CommonJS, the smallest change is to set `"type"
 
 ## 8. Engine support
 
-v1 supported Node 16+. v3 requires Node 22 LTS. The headline reasons:
+v2 required Node 18+. v3 requires Node 22 LTS. The headline reasons:
 
-- **Top-level `await`** — every v3 example uses it. It works in Node 16, but the v3 packages rely on it inside their own ESM entry points.
+- **Top-level `await`** — every v3 example uses it. It works in Node 18, but the v3 packages rely on it inside their own ESM entry points.
 - **Native `AsyncDisposable`** — `await using bus = createBus(...)` is a Node 22 language feature (TypeScript 5.2+). v3 implements `[Symbol.asyncDispose]()` on the bus so `await using` calls `bus.stop()` automatically when the scope exits.
 - **Web Streams APIs** — the streaming pattern uses `ReadableStream`/`WritableStream` from the global scope, which is most stable on Node 22.
 - **Native test runner improvements** — not a hard dependency, but the test suite uses Node 22 features. If you depend on the v3 packages in a long-lived service, staying on Node 22 LTS keeps you on a supported runtime through 2027.
 
 ## 9. Configuration mapping
 
-The table maps every v1 default in `lib/settings.js` to its v3 equivalent. Anything missing on either side is called out.
+The table maps every v2 default in `lib/settings.js` to its v3 equivalent. Anything missing on either side is called out.
 
-| v1 key | v3 equivalent |
+| v2 key | v3 equivalent |
 |---|---|
 | `amqpSettings.queue.name` | `BusOptions.queue.name` |
 | `amqpSettings.queue.durable` | Fixed at `true`; not configurable. `queueArguments` only feeds the AMQP `arguments` (x-args) map and cannot change the queue's `durable` declaration flag. |
@@ -299,7 +299,7 @@ The table maps every v1 default in `lib/settings.js` to its v3 equivalent. Anyth
 | `client` (custom transport class) | Pass any `{ producer, consumer }` pair conforming to `ITransportProducer` + `ITransportConsumer`. |
 | `logger` | `BusOptions.logger`. The v3 `Logger` has six methods — `trace`, `debug`, `info`, `warn`, `error`, `fatal` — each `(msg: string, meta?: object)`; only `child` is optional. |
 
-v3-only configuration without a v1 equivalent:
+v3-only configuration without a v2 equivalent:
 
 - `BusOptions.serializer` — pluggable serializer (JSON is the default).
 - `BusOptions.defaultRequestTimeout` — currently inert/reserved: it is accepted but never read. `sendRequest`/`sendRequestMulti` require an explicit positive per-call `timeoutMs` (they throw `ArgumentOutOfRangeError` otherwise) and do not fall back to this option.
@@ -311,10 +311,10 @@ v3-only configuration without a v1 equivalent:
 
 ## 10. Filters and middleware
 
-v1 ran two filter arrays on every inbound message (`filters.before`, then handlers, then `filters.after`) and one on every outbound message (`filters.outgoing`). Filters returned `false` to short-circuit.
+v2 ran two filter arrays on every inbound message (`filters.before`, then handlers, then `filters.after`) and one on every outbound message (`filters.outgoing`). Filters returned `false` to short-circuit.
 
 ```ts
-// v1
+// v2
 const bus = new Bus({
   // ...
   filters: {
@@ -374,10 +374,10 @@ The `'onConsumedSuccessfully'` stage is new in v3; it runs after a handler resol
 
 ## 11. Wildcard handlers
 
-v1 supported `bus.addHandler('*', cb)` as a catch-all. The wildcard handler ran for every type, alongside (not instead of) any type-specific handler.
+v2 supported `bus.addHandler('*', cb)` as a catch-all. The wildcard handler ran for every type, alongside (not instead of) any type-specific handler.
 
 ```ts
-// v1
+// v2
 await bus.addHandler('*', async (message, headers, type) => {
   console.log('saw', type);
 });
@@ -417,16 +417,16 @@ The base handler now runs for every `OrderPlaced` and `PaymentReceived`. The tra
 
 ## 12. Reply primitive
 
-v1's reply primitive was the fourth positional argument to a handler. It took the reply's type string and payload; the bus wired up `ResponseMessageId` from the incoming `RequestMessageId` and sent to the inbound `SourceAddress`.
+v2's reply primitive was the fourth positional argument to a handler. It took the reply's type string and payload; the bus wired up `ResponseMessageId` from the incoming `RequestMessageId` and sent to the inbound `SourceAddress`.
 
 ```ts
-// v1
+// v2
 await bus.addHandler('GetQuote', async (message, headers, type, replyCallback) => {
   await replyCallback('Quote', { amount: 42, sku: message.sku });
 });
 ```
 
-v3 moves the reply primitive onto `ConsumeContext` as `ctx.reply<TReply>(typeName, payload, options?)`. It is typed and async. The bus correlates and routes the reply the same way v1 did; the difference is in how it surfaces.
+v3 moves the reply primitive onto `ConsumeContext` as `ctx.reply<TReply>(typeName, payload, options?)`. It is typed and async. The bus correlates and routes the reply the same way v2 did; the difference is in how it surfaces.
 
 ```ts
 // v3
@@ -439,23 +439,23 @@ bus.handle<GetQuote>('GetQuote', async (msg, ctx) => {
 });
 ```
 
-One behavioural change: v3 throws if you call `ctx.reply` from a handler whose incoming envelope has no `sourceAddress` header. v1 silently delivered the reply to the wrong place (or nowhere) in that case. The new behaviour fails fast — replies belong on point-to-point flows, not on broadcasts you observed by accident.
+One behavioural change: v3 throws if you call `ctx.reply` from a handler whose incoming envelope has no `sourceAddress` header. v2 silently delivered the reply to the wrong place (or nowhere) in that case. The new behaviour fails fast — replies belong on point-to-point flows, not on broadcasts you observed by accident.
 
 ## Migration checklist
 
-- [ ] Install v3 packages alongside v1. The package names do not collide (`service-connect` vs `@serviceconnect/core`).
+- [ ] Install v3 packages alongside v2. The package names do not collide (`service-connect` vs `@serviceconnect/core`).
 - [ ] Pick one consumer service to migrate first. Prefer a worker over a request-path service so a regression cannot break a user-facing flow.
 - [ ] Add `correlationId: string` to every message interface. v3 requires it on the `Message` base type.
 - [ ] Build a `MessageTypeRegistry` and call `registerMessage<T>(typeName)` for every type the service uses (including polymorphic parents).
 - [ ] Convert handlers one type at a time to the typed `bus.handle<T>(typeName, fn)` form. Move headers/type/reply uses from positional arguments to `ctx`.
 - [ ] Replace `bus.send(endpoint, type, msg)` with `bus.send<T>(typeName, msg, { endpoint })`. Split fan-out sends into `bus.sendToMany`.
 - [ ] Replace callback-based `sendRequest`/`publishRequest` with the promise-returning `sendRequest`/`sendRequestMulti`. Keep `publishRequest` only if you genuinely need a per-reply callback.
-- [ ] Move config from the v1 deep-merged `amqpSettings` blob to `BusOptions` + `RabbitMQTransportOptions`. Use the table in section 9 as a reference.
+- [ ] Move config from the v2 deep-merged `amqpSettings` blob to `BusOptions` + `RabbitMQTransportOptions`. Use the table in section 9 as a reference.
 - [ ] Convert the `filters.before` / `after` / `outgoing` arrays to `bus.use(stage, asFilter(fn)` and `asMiddleware(fn))` calls. Decide per-filter whether it is genuinely a filter (returns `Stop` / `Continue`) or a middleware (wraps `next()`).
 - [ ] If you used `bus.addHandler('*', ...)`, replace it with a base-type handler and declared parents (section 11).
 - [ ] Update your tsconfig to `"module": "nodenext"` + `"moduleResolution": "nodenext"` and your package.json to `"type": "module"`.
 - [ ] Bump CI to Node 22 LTS.
-- [ ] Retire the v1 package once the last consumer is moved.
+- [ ] Retire the v2 package once the last consumer is moved.
 
 ## See also
 

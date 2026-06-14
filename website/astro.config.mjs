@@ -119,7 +119,7 @@ export default defineConfig({
                 {
                     label: 'Project',
                     items: [
-                        { label: 'Migrating from v1', link: '/migrating-v1-to-v3/' },
+                        { label: 'Migrating from v2', link: '/migrating-v2-to-v3/' },
                         { label: 'Samples', link: '/samples/' },
                         { label: 'Releases', link: '/releases/' },
                     ],
