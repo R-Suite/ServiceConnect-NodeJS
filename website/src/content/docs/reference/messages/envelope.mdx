@@ -24,12 +24,17 @@ export interface Envelope {
 
 ## Parameters
 
-- **`headers`** — `Record<string, unknown>`. The wire headers map. Carries every documented [`MessageHeaders`](/ServiceConnect-NodeJS/reference/messages/message/) key (`messageId`, `correlationId`, `messageType`, `sourceAddress`, `destinationAddress`, `timeSent`, …) plus any custom headers the caller passed via `SendOptions.headers` / `PublishOptions.headers`. Values are typed `unknown` because they survive a round-trip through the transport — assume `string` for anything you set yourself.
+- **`headers`** — `Record<string, unknown>`. The in-process headers map — the internal camelCase [`MessageHeaders`](/ServiceConnect-NodeJS/reference/messages/message/) bag that the pipeline filters see. Carries keys such as `messageId`, `messageType`, `sourceAddress`, `destinationAddress`, and `timeSent`, plus any custom headers the caller passed via `SendOptions.headers` / `PublishOptions.headers`. At the transport boundary the bus rewrites these to the PascalCase wire names (see below). Values are typed `unknown` because they survive a round-trip through the transport — assume `string` for anything you set yourself.
 - **`body`** — `Uint8Array`. The serialised payload bytes. With the default serializer this is UTF-8 JSON; with a custom serializer it can be anything.
 
 ### C# wire-format compatibility
 
-ServiceConnect's .NET sibling uses PascalCase header names (`MessageType`, `CorrelationId`, `MessageId`, `SourceAddress`, `DestinationAddress`, `TimeSent`, …). Outgoing envelopes from `@serviceconnect/core` stamp the camelCase form (`messageType`, `correlationId`, …), and the dispatcher resolves the inbound message type from `headers.messageType` (camelCase) only — there is no PascalCase fallback read. Full PascalCase interop with .NET services is not implemented in this codebase: a message that arrives with only PascalCase headers (and no camelCase `messageType`) is treated as an unknown type.
+`@serviceconnect/core` is wire-compatible with the .NET ServiceConnect (`master`) stack, so Node.js and .NET services interoperate on the same RabbitMQ bus. The bus translates between its internal camelCase headers and .NET's PascalCase wire headers at the transport boundary:
+
+- **Outgoing** (`encodeWireHeaders`) — internal keys are stamped as PascalCase wire headers: `messageType` becomes `TypeName` (the .NET type identity), `messageId` → `MessageId`, `sourceAddress` → `SourceAddress`, and so on. A separate `MessageType` header carries the **operation** (`Publish` or `Send`), and every message is tagged `ConsumerType: 'RabbitMQ'` and `Language: 'Node'`. `correlationId` is **not** sent as a header — it is a property of the serialised message body, matching .NET.
+- **Incoming** (`decodeWireHeaders`) — PascalCase wire headers map back to camelCase. The message type is resolved from `FullTypeName` (an assembly-qualified name, reduced to its FullName) when present, otherwise from `TypeName`. `FullTypeName` is optional, and Node never sets it on outgoing messages.
+
+A message arriving from a .NET service with only PascalCase headers is therefore resolved correctly. This interop is exercised by the repository's `interop/` harness against a real C# `master` fixture.
 
 ## Example
 

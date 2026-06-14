@@ -29,7 +29,7 @@ export interface SendOptions {
 ```
 
 - **`endpoint`** (required) — the destination queue / endpoint name to send to. Stamped onto the outgoing envelope as `destinationAddress`.
-- **`headers`** (optional) — extra string-valued headers merged into the envelope before the outgoing pipeline runs. Bus-managed headers `messageType`, `correlationId`, `sourceAddress`, and `timeSent` are stamped unconditionally and override any caller-supplied value. `messageId` is the exception: a caller-supplied `messageId` is kept, and the bus only auto-generates one when it is absent.
+- **`headers`** (optional) — extra string-valued headers merged into the envelope before the outgoing pipeline runs. Bus-managed headers `messageType`, `sourceAddress`, and `timeSent` are stamped unconditionally and override any caller-supplied value (`destinationAddress` is set from `endpoint`). `messageId` is the exception: a caller-supplied `messageId` is kept, and the bus only auto-generates one when it is absent. `correlationId` is **not** a header — it travels on the message body — so it is not stamped here.
 
 ### PublishOptions
 

@@ -214,7 +214,7 @@ const transport = createRabbitMQTransport({
 const bus = createBus({ queue: { name: 'orders' }, transport });
 ```
 
-If you need polymorphic dispatch — derived-message-to-parent exchange bindings declared at startup — use `rabbitMQWithRegistry({ url }, registry)` instead. It wires the registry's parent map into the transport so messages bound to a parent exchange catch all derived types.
+If you need polymorphic dispatch — a publish of a derived type also reaching base-type subscribers — use `rabbitMQWithRegistry({ url }, registry)` instead. It wires the registry's parent map into the transport so the producer publishes each derived message to its own exchange and every declared parent's exchange.
 
 ## 6. Patterns built in v3
 

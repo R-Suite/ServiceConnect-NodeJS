@@ -15,12 +15,12 @@ The on-the-wire shape is the **envelope**: your payload plus a standard set of h
 
 Two services agree on a type string, not on a TypeScript file. That is what lets a Node.js publisher talk to a .NET consumer (and vice versa) without sharing code: as long as both sides register the same name and the same shape, the envelope is portable.
 
-The registry also opens the door to **polymorphic delivery**. If you declare that `OrderPlaced` has a parent of `DomainEvent`, the transport links the `OrderPlaced` exchange to the `DomainEvent` exchange — so anyone subscribed to `DomainEvent` also receives every `OrderPlaced`. This is opt-in: you register relationships explicitly, the framework never invents them by reflecting on your prototype chain.
+The registry also opens the door to **polymorphic delivery**. If you declare that `OrderPlaced` has a parent of `DomainEvent`, the producer publishes each `OrderPlaced` to both the `OrderPlaced` exchange and the `DomainEvent` exchange — so anyone subscribed to `DomainEvent` also receives every `OrderPlaced`. This is opt-in: you register relationships explicitly, the framework never invents them by reflecting on your prototype chain.
 
 A few practical consequences:
 
 - **Type strings need not match TypeScript names.** `OrderPlaced` and `MyCompany.Sales.OrderPlaced` are both fine. Pick what your other services use.
-- **Registration order does not matter** for parents — declare children first or last; the registry stores the parent list verbatim and the transport applies it (binding parent exchanges) when messages are published.
+- **Registration order does not matter** for parents — declare children first or last; the registry stores the parent list verbatim and the producer applies it (publishing to parent exchanges) when messages are published.
 - **One registry per process.** You hand the same `IMessageTypeRegistry` to both `createBus` and to your transport factory. That is how they stay in sync.
 - **Schema evolution is your responsibility.** ServiceConnect does not enforce versioning; it carries whatever fields are on your payload. Adding optional fields is safe; removing or renaming them is a coordinated change.
 
@@ -47,7 +47,7 @@ Note that the parent relationship is declared on the **registration**, not in Ty
 At runtime the bus uses the registry to:
 
 - Resolve a type string to a TypeScript type when dispatching to a handler.
-- Set the `MessageType` header on every outbound message.
+- Stamp the message's type identity onto every outbound message (the `TypeName` wire header).
 - Tell the transport which exchanges to declare and which to bind.
 
 If a message arrives with a type string the registry does not know, no handler runs — the dispatcher classifies it as `notHandled`. By default the RabbitMQ transport then **acks** that message (so it is effectively dropped), unless you enable `deadLetterUnhandled` with an error queue configured, in which case the unknown message is routed to the error queue instead. There is no implicit polymorphism. That is the trade-off for the small amount of boilerplate up front.

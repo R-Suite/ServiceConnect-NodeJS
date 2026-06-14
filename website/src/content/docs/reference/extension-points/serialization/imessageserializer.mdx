@@ -36,7 +36,7 @@ export interface IMessageSerializer {
 export function jsonSerializer(registry: IMessageTypeRegistry): IMessageSerializer;
 ```
 
-`jsonSerializer` is the batteries-included implementation used unless you pass your own. It JSON-encodes outbound messages and JSON-parses inbound payloads. When a type was registered with a [`StandardSchemaV1`](/ServiceConnect-NodeJS/reference/extension-points/serialization/imessagetyperegistry/) schema (Zod, Valibot, ArkType, …), `deserialize` runs the schema against the parsed value and throws `ValidationError` on schema failure or `TerminalDeserializationError` on invalid UTF-8 / invalid JSON. Schema validation is synchronous; async schemas raise `ValidationError` rather than blocking the consume loop.
+`jsonSerializer` is the batteries-included implementation used unless you pass your own. It JSON-encodes outbound messages and JSON-parses inbound payloads, transforming object keys to PascalCase on the way out and back to camelCase on the way in — so the body on the wire matches the .NET ServiceConnect format while your TypeScript code stays camelCase. When a type was registered with a [`StandardSchemaV1`](/ServiceConnect-NodeJS/reference/extension-points/serialization/imessagetyperegistry/) schema (Zod, Valibot, ArkType, …), `deserialize` runs the schema against the parsed value and throws `ValidationError` on schema failure or `TerminalDeserializationError` on invalid UTF-8 / invalid JSON. Schema validation is synchronous; async schemas raise `ValidationError` rather than blocking the consume loop.
 
 ## See also
 
