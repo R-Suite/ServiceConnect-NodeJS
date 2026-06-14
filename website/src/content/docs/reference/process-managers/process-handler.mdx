@@ -65,7 +65,7 @@ class OnOrderCreated implements ProcessHandler<OrderState, OrderCreated> {
 
 A complete process is built with three methods on the [`Bus`](/ServiceConnect-NodeJS/reference/bus/bus/) plus the returned builder.
 
-### `registerProcessData<TData>(dataType)`
+### `registerProcessData`
 
 ```ts
 registerProcessData<TData extends ProcessData>(dataType: string): Bus;
@@ -73,7 +73,7 @@ registerProcessData<TData extends ProcessData>(dataType: string): Bus;
 
 Declares that `OrderState` is a saga-data type known under the type-name `'OrderState'`. Must be called before `registerProcess` so the bus knows which `ProcessData` type the upcoming process is keyed on.
 
-### `registerProcess(processName, options)`
+### `registerProcess`
 
 ```ts
 bus.registerProcess(
