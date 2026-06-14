@@ -172,4 +172,30 @@ describe('createProducer', () => {
         await producer.publish('OrderShipped', new Uint8Array([1]));
         expect(connection.exchangeBind).not.toHaveBeenCalled();
     });
+
+    it('publish() declares and targets the FullName-stripped exchange', async () => {
+        const { connection, publisher } = fakeConnection();
+        const producer = createProducer(connection, resolveProducerOptions({ url: '' }));
+        await producer.publish('MyApp.Messages.OrderPlaced', new Uint8Array([1]));
+        expect(connection.exchangeDeclare).toHaveBeenCalledWith({
+            exchange: 'MyAppMessagesOrderPlaced',
+            type: 'fanout',
+            durable: true,
+        });
+        const call = (publisher.send as ReturnType<typeof vi.fn>).mock.calls[0];
+        expect(call?.[0]?.exchange).toBe('MyAppMessagesOrderPlaced');
+    });
+
+    it('publish() exchange-to-exchange binds parents using derived names', async () => {
+        const { connection } = fakeConnection();
+        const parentsOf = (n: string): readonly string[] =>
+            n === 'MyApp.Orders.OrderShipped' ? ['MyApp.DomainEvent'] : [];
+        const producer = createProducer(connection, resolveProducerOptions({ url: '' }), parentsOf);
+        await producer.publish('MyApp.Orders.OrderShipped', new Uint8Array([1]));
+        expect(connection.exchangeBind).toHaveBeenCalledWith({
+            source: 'MyAppOrdersOrderShipped',
+            destination: 'MyAppDomainEvent',
+            routingKey: '',
+        });
+    });
 });

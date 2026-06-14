@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { resolveConsumerOptions } from '../../src/options.js';
 import {
     buildConsumerTopology,
     buildRetryExchangeNames,
     buildTypeExchangeSpec,
+    exchangeNameForType,
 } from '../../src/topology.js';
 
 describe('buildTypeExchangeSpec', () => {
@@ -131,5 +133,36 @@ describe('buildConsumerTopology', () => {
         const main = t.queues.find((q) => q.queue === 'q-self');
         expect(main?.arguments?.['x-max-priority']).toBe(10);
         expect(main?.arguments?.['x-dead-letter-exchange']).toBe('q-self.Retries.Exchange');
+    });
+});
+
+describe('exchangeNameForType', () => {
+    it('strips dots from the .NET FullName (master convention)', () => {
+        expect(exchangeNameForType('MyApp.Messages.OrderPlaced')).toBe('MyAppMessagesOrderPlaced');
+    });
+    it('is a no-op for a name without dots', () => {
+        expect(exchangeNameForType('OrderPlaced')).toBe('OrderPlaced');
+    });
+    it('removes every dot, not just the first', () => {
+        expect(exchangeNameForType('A.B.C.D')).toBe('ABCD');
+    });
+});
+
+describe('consumer topology uses derived exchange names', () => {
+    it('declares and binds the type exchange as FullName-stripped', () => {
+        const topo = buildConsumerTopology(
+            'svc-queue',
+            ['MyApp.Messages.OrderPlaced'],
+            resolveConsumerOptions({ url: '' }),
+        );
+        expect(topo.exchanges).toContainEqual({
+            exchange: 'MyAppMessagesOrderPlaced',
+            type: 'fanout',
+            durable: true,
+        });
+        expect(topo.queueBindings).toContainEqual({
+            exchange: 'MyAppMessagesOrderPlaced',
+            queue: 'svc-queue',
+        });
     });
 });

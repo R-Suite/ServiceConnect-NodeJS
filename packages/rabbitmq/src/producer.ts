@@ -2,6 +2,7 @@ import type { ITransportProducer } from '@serviceconnect/core';
 import type { Connection, Publisher } from 'rabbitmq-client';
 import { RabbitMQPayloadTooLargeError } from './errors.js';
 import type { ResolvedProducerOptions } from './options.js';
+import { exchangeNameForType } from './topology.js';
 
 export interface ProducerSnapshot {
     readonly isHealthy: boolean;
@@ -41,7 +42,11 @@ export function createProducer(
 
     async function ensureExchangeDeclared(typeName: string): Promise<void> {
         if (declaredExchanges.has(typeName)) return;
-        const spec = { exchange: typeName, type: 'fanout' as const, durable: true };
+        const spec = {
+            exchange: exchangeNameForType(typeName),
+            type: 'fanout' as const,
+            durable: true,
+        };
         await connection.exchangeDeclare(spec);
         // Also push into the publisher's exchanges list so rabbitmq-client re-declares
         // it on reconnect. Without this, a broker that loses exchange state across a
@@ -64,7 +69,11 @@ export function createProducer(
                             routingKey?: string;
                         }) => Promise<void>;
                     }
-                ).exchangeBind({ source: typeName, destination: parent, routingKey: '' });
+                ).exchangeBind({
+                    source: exchangeNameForType(typeName),
+                    destination: exchangeNameForType(parent),
+                    routingKey: '',
+                });
                 declaredBindings.add(bindingKey);
             }
         }
@@ -106,7 +115,7 @@ export function createProducer(
             throwIfAborted(signal);
             await publisher.send(
                 {
-                    exchange: typeName,
+                    exchange: exchangeNameForType(typeName),
                     routingKey: options?.routingKey ?? '',
                     headers: { ...(options?.headers ?? {}) },
                     contentType: 'application/json',

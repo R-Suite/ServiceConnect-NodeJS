@@ -1,5 +1,15 @@
 import type { ResolvedConsumerOptions } from './options.js';
 
+/**
+ * Derives the pub/sub fanout exchange name from a message type, matching the C# `master`
+ * convention `Type.FullName.Replace(".", "")` so Node and .NET share the same exchange.
+ * The registered type name is the .NET FullName (Phase 1), e.g. "MyApp.Messages.OrderPlaced"
+ * -> "MyAppMessagesOrderPlaced".
+ */
+export function exchangeNameForType(typeName: string): string {
+    return typeName.replace(/\./g, '');
+}
+
 export interface ExchangeSpec {
     exchange: string;
     type: 'fanout' | 'direct' | 'topic' | 'headers';
@@ -31,7 +41,7 @@ export interface RetryExchangeNames {
 }
 
 export function buildTypeExchangeSpec(typeName: string): ExchangeSpec {
-    return { exchange: typeName, type: 'fanout', durable: true };
+    return { exchange: exchangeNameForType(typeName), type: 'fanout', durable: true };
 }
 
 export function buildRetryExchangeNames(queueName: string): RetryExchangeNames {
@@ -87,7 +97,10 @@ export function buildConsumerTopology(
     const queueBindings: QueueBindingSpec[] = [
         { exchange: names.retriesExchange, queue: names.retryQueue, routingKey: queueName },
         { exchange: names.mainBackExchange, queue: queueName },
-        ...messageTypes.map((typeName) => ({ exchange: typeName, queue: queueName })),
+        ...messageTypes.map((typeName) => ({
+            exchange: exchangeNameForType(typeName),
+            queue: queueName,
+        })),
     ];
 
     return { queues, exchanges, queueBindings };
