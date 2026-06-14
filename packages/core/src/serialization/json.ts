@@ -1,5 +1,6 @@
 import { TerminalDeserializationError, ValidationError } from '../errors.js';
 import type { Message } from '../message.js';
+import { camelizeKeys, pascalizeKeys } from './casing.js';
 import type { IMessageTypeRegistry } from './registry.js';
 import type { IMessageSerializer } from './serializer.js';
 import type { StandardSchemaV1 } from './standard-schema.js';
@@ -29,7 +30,7 @@ export function jsonSerializer(registry: IMessageTypeRegistry): IMessageSerializ
 
     return {
         serialize<T extends Message>(message: T): Uint8Array {
-            const json = JSON.stringify(message);
+            const json = JSON.stringify(pascalizeKeys(message));
             return encoder.encode(json);
         },
         deserialize<T extends Message>(bytes: Uint8Array, typeName: string): T {
@@ -44,7 +45,7 @@ export function jsonSerializer(registry: IMessageTypeRegistry): IMessageSerializ
             }
             let parsed: unknown;
             try {
-                parsed = JSON.parse(text);
+                parsed = camelizeKeys(JSON.parse(text));
             } catch (cause) {
                 throw new TerminalDeserializationError(
                     `payload is not valid JSON for ${typeName}`,

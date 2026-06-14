@@ -76,3 +76,22 @@ describe('jsonSerializer', () => {
         expect(() => ser.deserialize(bytes, 'OrderCreated')).toThrow(/synchronous/);
     });
 });
+
+describe('json serializer wire casing', () => {
+    it('serializes the body as PascalCase JSON', () => {
+        const reg = createMessageTypeRegistry();
+        reg.register('MyApp.Messages.OrderPlaced');
+        const ser = jsonSerializer(reg);
+        const bytes = ser.serialize({ correlationId: 'c', orderId: 'o1' } as never);
+        expect(new TextDecoder().decode(bytes)).toBe('{"CorrelationId":"c","OrderId":"o1"}');
+    });
+
+    it('deserializes PascalCase wire JSON back to camelCase', () => {
+        const reg = createMessageTypeRegistry();
+        reg.register('MyApp.Messages.OrderPlaced');
+        const ser = jsonSerializer(reg);
+        const bytes = new TextEncoder().encode('{"CorrelationId":"c","OrderId":"o1"}');
+        const msg = ser.deserialize(bytes, 'MyApp.Messages.OrderPlaced') as Record<string, unknown>;
+        expect(msg).toEqual({ correlationId: 'c', orderId: 'o1' });
+    });
+});

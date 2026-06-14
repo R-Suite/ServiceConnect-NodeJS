@@ -23,7 +23,7 @@ describe('Bus outbound', () => {
         expect(entry.operation).toBe('publish');
         expect(entry.typeName).toBe('Foo');
         const decoded = JSON.parse(new TextDecoder().decode(entry.body));
-        expect(decoded).toEqual({ correlationId: 'cor-1', v: 42 });
+        expect(decoded).toEqual({ CorrelationId: 'cor-1', V: 42 });
         expect(entry.headers.messageType).toBe('Foo');
         expect(entry.headers.correlationId).toBe('cor-1');
         expect(entry.headers.sourceAddress).toBe('q-self');
