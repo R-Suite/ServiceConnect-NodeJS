@@ -6,6 +6,14 @@ export type { Bus, BusOptions } from './bus.js';
 export { newCorrelationId, newMessageId } from './message.js';
 export type { CorrelationId, Message, MessageHeaders, MessageId } from './message.js';
 
+// Wire format (master interop)
+export { camelizeKeys, pascalizeKeys } from './serialization/casing.js';
+export {
+    type WireOperation,
+    decodeWireHeaders,
+    encodeWireHeaders,
+} from './wire/headers.js';
+
 // Envelope
 export type { Envelope } from './envelope.js';
 
