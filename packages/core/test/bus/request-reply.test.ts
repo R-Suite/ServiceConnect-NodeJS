@@ -51,17 +51,18 @@ describe('Bus request-reply', () => {
         );
 
         const outbound = await findRequestSent(t);
-        expect(outbound.headers.messageType).toBe('Req');
-        const requestMessageId = outbound.headers.requestMessageId;
+        // Outbound headers are now master PascalCase wire form.
+        expect(outbound.headers.TypeName).toBe('Req');
+        const requestMessageId = outbound.headers.RequestMessageId;
         expect(typeof requestMessageId).toBe('string');
 
         const replyEnvelope: Envelope = {
             headers: {
-                messageType: 'Rep',
-                correlationId: 'cor-1',
-                responseMessageId: requestMessageId,
+                TypeName: 'Rep',
+                MessageType: 'Send',
+                ResponseMessageId: requestMessageId,
             },
-            body: new TextEncoder().encode(JSON.stringify({ correlationId: 'cor-1', a: 'pong' })),
+            body: new TextEncoder().encode(JSON.stringify({ CorrelationId: 'cor-1', A: 'pong' })),
         };
         await t.deliver(replyEnvelope);
 
@@ -172,10 +173,10 @@ describe('Bus request-reply', () => {
             const settled = promise.catch((e) => e as RequestTimeoutError);
 
             const outbound = await findRequestSent(t);
-            const requestMessageId = outbound.headers.requestMessageId;
+            const requestMessageId = outbound.headers.RequestMessageId;
             const replyEnvelope: Envelope = {
-                headers: { messageType: 'Rep', responseMessageId: requestMessageId },
-                body: new TextEncoder().encode(JSON.stringify({ correlationId: 'c', a: '1' })),
+                headers: { TypeName: 'Rep', ResponseMessageId: requestMessageId },
+                body: new TextEncoder().encode(JSON.stringify({ CorrelationId: 'c', A: '1' })),
             };
             await t.deliver(replyEnvelope);
 
@@ -223,10 +224,10 @@ describe('Bus request-reply', () => {
         );
 
         const outbound = await findRequestSent(t);
-        const requestMessageId = outbound.headers.requestMessageId;
+        const requestMessageId = outbound.headers.RequestMessageId;
         const replyEnvelope = (a: string): Envelope => ({
-            headers: { messageType: 'Rep', responseMessageId: requestMessageId },
-            body: new TextEncoder().encode(JSON.stringify({ correlationId: 'c', a })),
+            headers: { TypeName: 'Rep', ResponseMessageId: requestMessageId },
+            body: new TextEncoder().encode(JSON.stringify({ CorrelationId: 'c', A: a })),
         });
         await t.deliver(replyEnvelope('1'));
         await t.deliver(replyEnvelope('2'));

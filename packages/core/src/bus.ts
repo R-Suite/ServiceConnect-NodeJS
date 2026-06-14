@@ -54,6 +54,7 @@ import { StreamRegistry, runStreamBranch } from './streaming/dispatch.js';
 import { type StreamSender, createStreamSender } from './streaming/sender.js';
 import { senderToWritableStream } from './streaming/web-streams.js';
 import type { ConsumeCallback, ITransportConsumer, ITransportProducer } from './transport.js';
+import { decodeWireHeaders, encodeWireHeaders } from './wire/headers.js';
 
 export interface BusOptions {
     transport: { producer: ITransportProducer; consumer: ITransportConsumer };
@@ -308,7 +309,7 @@ class BusImpl implements Bus {
         const body = this.serializer.serialize(message);
         const envelope = this.buildOutgoingEnvelope(typeName, message, body, options?.headers);
         await this.runOutgoing(envelope);
-        const headers = stringifyHeaders(envelope.headers);
+        const headers = encodeWireHeaders(envelope.headers, 'Publish');
         await this.producer.publish(typeName, body, { headers, routingKey: options?.routingKey });
     }
 
@@ -331,7 +332,7 @@ class BusImpl implements Bus {
             options.endpoint,
         );
         await this.runOutgoing(envelope);
-        const headers = stringifyHeaders(envelope.headers);
+        const headers = encodeWireHeaders(envelope.headers, 'Send');
         await this.producer.send(options.endpoint, typeName, body, { headers });
     }
 
@@ -352,7 +353,7 @@ class BusImpl implements Bus {
         const body = this.serializer.serialize(message);
         const envelope = this.buildOutgoingEnvelope(typeName, message, body, options?.headers);
         await this.runOutgoing(envelope);
-        const headers = stringifyHeaders(envelope.headers);
+        const headers = encodeWireHeaders(envelope.headers, 'Send');
         const errors: unknown[] = [];
         for (const endpoint of endpoints) {
             try {
@@ -404,7 +405,7 @@ class BusImpl implements Bus {
         // header-mutating filters apply and a FilterAction.Stop blocks the hop.
         await this.runOutgoing(envelope);
         const headers: Record<string, string> = {
-            ...stringifyHeaders(envelope.headers as Record<string, unknown>),
+            ...encodeWireHeaders(envelope.headers as Record<string, unknown>, 'Send'),
             [ROUTING_SLIP_HEADER]: serialiseRoutingSlip(remaining),
         };
 
@@ -413,14 +414,13 @@ class BusImpl implements Bus {
 
     private buildOutgoingEnvelope<T extends Message>(
         typeName: string,
-        message: T,
+        _message: T,
         body: Uint8Array,
         callerHeaders?: Readonly<Record<string, string>>,
         destinationAddress?: string,
     ): Envelope {
         const headers: Record<string, unknown> = { ...(callerHeaders ?? {}) };
         headers.messageType = typeName;
-        headers.correlationId = message.correlationId;
         headers.messageId = headers.messageId ?? newMessageId();
         headers.timeSent = new Date().toISOString();
         headers.sourceAddress = this.queue;
@@ -487,7 +487,7 @@ class BusImpl implements Bus {
 
         try {
             await this.runOutgoing(envelope);
-            const headers = stringifyHeaders(envelope.headers);
+            const headers = encodeWireHeaders(envelope.headers, 'Send');
             // No endpoint → broadcast publish (used by callers that target a fan-out exchange).
             if (options.endpoint) {
                 await this.producer.send(options.endpoint, typeName, body, { headers });
@@ -551,7 +551,7 @@ class BusImpl implements Bus {
 
         try {
             await this.runOutgoing(envelope);
-            const headers = stringifyHeaders(envelope.headers);
+            const headers = encodeWireHeaders(envelope.headers, 'Send');
             if (options.endpoint) {
                 await this.producer.send(options.endpoint, typeName, body, { headers });
             } else {
@@ -619,7 +619,7 @@ class BusImpl implements Bus {
 
         try {
             await this.runOutgoing(envelope);
-            const headers = stringifyHeaders(envelope.headers);
+            const headers = encodeWireHeaders(envelope.headers, 'Send');
             await this.producer.publish(typeName, body, { headers });
         } catch (err) {
             this.requestReplyManager.cancel(
@@ -746,7 +746,11 @@ class BusImpl implements Bus {
             this.aggregatorFlushTimer.start();
         }
         const withHeartbeat: ConsumeCallback = async (env, signal) => {
-            const result = await dispatcher(env, signal);
+            const decoded: Envelope = {
+                ...env,
+                headers: decodeWireHeaders(env.headers as Record<string, unknown>),
+            };
+            const result = await dispatcher(decoded, signal);
             this._lastConsumedAt = new Date();
             return result;
         };
@@ -789,12 +793,3 @@ export function createBus(options: BusOptions): Bus {
 
 // `ReplyOptions` re-exported here for surface-stability when Task 12+ extends the bus.
 export type { ReplyOptions };
-
-function stringifyHeaders(headers: Record<string, unknown>): Record<string, string> {
-    const out: Record<string, string> = {};
-    for (const [k, v] of Object.entries(headers)) {
-        if (v === undefined) continue;
-        out[k] = typeof v === 'string' ? v : String(v);
-    }
-    return out;
-}

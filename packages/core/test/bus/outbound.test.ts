@@ -24,14 +24,29 @@ describe('Bus outbound', () => {
         expect(entry.typeName).toBe('Foo');
         const decoded = JSON.parse(new TextDecoder().decode(entry.body));
         expect(decoded).toEqual({ CorrelationId: 'cor-1', V: 42 });
-        expect(entry.headers.messageType).toBe('Foo');
-        expect(entry.headers.correlationId).toBe('cor-1');
-        expect(entry.headers.sourceAddress).toBe('q-self');
-        expect(entry.headers.messageId).toBeDefined();
-        expect(entry.headers.timeSent).toBeDefined();
+        // Wire headers are master PascalCase; correlationId travels in the body, not a header.
+        expect(entry.headers.TypeName).toBe('Foo');
+        expect(entry.headers.correlationId).toBeUndefined();
+        expect(entry.headers.SourceAddress).toBe('q-self');
+        expect(entry.headers.MessageId).toBeDefined();
+        expect(entry.headers.TimeSent).toBeDefined();
     });
 
-    it('publish() preserves caller-supplied headers; framework keys win on collision', async () => {
+    it('publish() encodes master PascalCase wire headers (TypeName/MessageType, no camelCase)', async () => {
+        const t = fakeTransport();
+        const bus = createBus({ transport: t, queue: { name: 'q-self' } }).registerMessage<Foo>(
+            'MyApp.OrderPlaced',
+        );
+        await bus.publish<Foo>('MyApp.OrderPlaced', { correlationId: 'c', v: 1 });
+        const entry = t.outbox[0];
+        assert(entry !== undefined, 'expected outbox[0] to be defined');
+        expect(entry.headers.TypeName).toBe('MyApp.OrderPlaced');
+        expect(entry.headers.MessageType).toBe('Publish');
+        expect(entry.headers.correlationId).toBeUndefined();
+        expect(entry.headers.messageType).toBeUndefined();
+    });
+
+    it('preserves caller-supplied headers; framework keys win on collision', async () => {
         const t = fakeTransport();
         const bus = createBus({ transport: t, queue: { name: 'q-self' } }).registerMessage<Foo>(
             'Foo',
@@ -44,9 +59,9 @@ describe('Bus outbound', () => {
         const entry = t.outbox[0];
         assert(entry !== undefined, 'expected outbox[0] to be defined');
         expect(entry.headers.custom).toBe('v');
-        // Framework keys (messageType, correlationId, sourceAddress, messageId, timeSent)
-        // are stamped AFTER caller headers, so the framework value wins.
-        expect(entry.headers.messageType).toBe('Foo');
+        // Framework keys (messageType, sourceAddress, messageId, timeSent) are stamped AFTER
+        // caller headers, so the framework value wins; messageType encodes to the TypeName header.
+        expect(entry.headers.TypeName).toBe('Foo');
     });
 
     it('publish() passes routingKey to producer when supplied', async () => {

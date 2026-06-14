@@ -145,8 +145,20 @@ export function createDispatcher(deps: DispatcherDeps): ConsumeCallback {
             }
         }
 
-        // Step 4: resolve handlers
-        const ctx = createConsumeContext({ bus: deps.bus, headers, signal, logger: deps.logger });
+        // Step 4: resolve handlers. master carries correlationId in the body, not a header, so
+        // source it from the deserialized message (falling back to any header value) before
+        // building the consume context.
+        const ctxHeaders = {
+            ...headers,
+            correlationId:
+                (message as { correlationId?: string }).correlationId ?? headers.correlationId,
+        } as MessageHeaders;
+        const ctx = createConsumeContext({
+            bus: deps.bus,
+            headers: ctxHeaders,
+            signal,
+            logger: deps.logger,
+        });
         const resolved = deps.handlers.handlersFor(messageType, ctx);
         if (resolved.length === 0) {
             // Type is registered but nothing handles it here: still forward the slip so a routed

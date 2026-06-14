@@ -45,6 +45,33 @@ describe('Bus inbound integration', () => {
         expect(captured.correlationId).toBe('cor-1');
     });
 
+    it('decodes master PascalCase wire headers and sources correlationId from the body', async () => {
+        const t = fakeTransport();
+        const seen: Array<{ messageType: string; correlationId: string }> = [];
+        const bus = createBus({ transport: t, queue: { name: 'q-self' } })
+            .registerMessage<OrderCreated>('MyApp.OrderPlaced')
+            .handle<OrderCreated>('MyApp.OrderPlaced', async (_msg, ctx) => {
+                seen.push({ messageType: ctx.messageType, correlationId: ctx.correlationId });
+            });
+        await bus.start();
+        const result = await t.deliver({
+            headers: {
+                TypeName: 'MyApp.OrderPlaced',
+                MessageType: 'Send',
+                SourceAddress: 'other',
+            },
+            body: new TextEncoder().encode(
+                JSON.stringify({ CorrelationId: 'c-42', OrderId: 'o1' }),
+            ),
+        });
+        expect(result).toEqual({ success: true, notHandled: false, terminalFailure: false });
+        expect(seen).toHaveLength(1);
+        const captured = seen[0];
+        assert(captured !== undefined);
+        expect(captured.messageType).toBe('MyApp.OrderPlaced');
+        expect(captured.correlationId).toBe('c-42');
+    });
+
     it('beforeConsuming middleware runs before the handler', async () => {
         const t = fakeTransport();
         const order: string[] = [];
@@ -87,7 +114,8 @@ describe('Bus inbound integration', () => {
         const reply = replyEntries[0];
         assert(reply !== undefined);
         expect(reply.endpoint).toBe('q-other');
-        expect(reply.headers.responseMessageId).toBe('req-1');
+        // Outbound headers are master PascalCase; responseMessageId encodes to ResponseMessageId.
+        expect(reply.headers.ResponseMessageId).toBe('req-1');
     });
 
     it('factory handler is invoked once per delivery', async () => {
