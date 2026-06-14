@@ -129,13 +129,5 @@ export type {
     SingleRequestRegistration,
 } from './request-reply.js';
 
-// Diagnostics — OpenTelemetry conventions and the always-on messaging meter
-export * from './diagnostics/conventions.js';
-export {
-    type MessagingSystemAttributes,
-    messagingSystemAttributes,
-} from './diagnostics/attributes.js';
-export { serviceConnectMeter } from './diagnostics/meter.js';
-
 // Legacy probe constant — kept for the existing inter-package wiring test in @serviceconnect/rabbitmq
 export const PACKAGE_NAME = '@serviceconnect/core' as const;

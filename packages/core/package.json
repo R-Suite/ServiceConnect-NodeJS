@@ -27,11 +27,5 @@
         "type": "git",
         "url": "https://github.com/twatson83/ServiceConnect-NodeJS",
         "directory": "packages/core"
-    },
-    "dependencies": {
-        "@opentelemetry/api": "^1.7.0"
-    },
-    "devDependencies": {
-        "@opentelemetry/sdk-metrics": "^1.27.0"
     }
 }

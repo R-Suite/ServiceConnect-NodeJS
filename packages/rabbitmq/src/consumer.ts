@@ -1,33 +1,11 @@
 import type EventEmitter from 'node:events';
-import {
-    type ConsumeCallback,
-    type ConsumeResult,
-    type ITransportConsumer,
-    OUTCOME_ERROR,
-    OUTCOME_RETRY,
-    OUTCOME_SUCCESS,
-    messagingSystemAttributes,
-} from '@serviceconnect/core';
+import type { ConsumeCallback, ConsumeResult, ITransportConsumer } from '@serviceconnect/core';
 import type { AsyncMessage, Connection, Consumer, Publisher } from 'rabbitmq-client';
 import { publishAudit } from './audit.js';
 import { toEnvelope } from './envelope.js';
 import type { ResolvedConsumerOptions } from './options.js';
-import { type DispositionAction, decideDispositionAction } from './retry.js';
-import { emitConsumeMetrics } from './telemetry.js';
+import { decideDispositionAction } from './retry.js';
 import { buildConsumerTopology, buildRetryExchangeNames } from './topology.js';
-
-function outcomeForAction(kind: DispositionAction['kind']): string {
-    switch (kind) {
-        case 'ack':
-            return OUTCOME_SUCCESS;
-        case 'republishToRetry':
-            return OUTCOME_RETRY;
-        // republishToError and ackAndLog both represent a failed message (dead-lettered or
-        // logged-and-acked because no error queue is configured).
-        default:
-            return OUTCOME_ERROR;
-    }
-}
 
 export interface ConsumerSnapshot {
     readonly isConnected: boolean;
@@ -67,12 +45,6 @@ export function createConsumer(
     let consumer: Consumer | undefined;
     let dispatchPublisher: Publisher | undefined;
     const ac = new AbortController();
-
-    // Constant messaging.system / protocol / server.* tags, built once for the consumer's lifetime.
-    const metricBase = messagingSystemAttributes({
-        serverAddress: opts.serverAddress,
-        serverPort: opts.serverPort,
-    });
 
     async function declareTopology(name: string, messageTypes: readonly string[]): Promise<void> {
         const topology = buildConsumerTopology(name, messageTypes, opts);
@@ -116,7 +88,6 @@ export function createConsumer(
     async function handle(msg: AsyncMessage, callback: ConsumeCallback): Promise<void> {
         const envelope = toEnvelope(msg);
         const retryCount = readRetryCount(msg);
-        const start = performance.now();
         let result: ConsumeResult;
         try {
             result = await callback(envelope, ac.signal);
@@ -139,19 +110,6 @@ export function createConsumer(
             errorQueue: opts.errorQueue,
             deadLetterUnhandled: opts.deadLetterUnhandled,
         });
-
-        // Emit process.duration + consumed.messages (tagged by outcome) before disposition
-        // routing so every return path below is covered. The disposition action is the
-        // authoritative outcome: ack=success, retry, dead-letter/log=error.
-        const outcome = outcomeForAction(action.kind);
-        const errorType = outcome === OUTCOME_ERROR ? result.error?.name : undefined;
-        emitConsumeMetrics(
-            metricBase,
-            queueName ?? 'anonymous',
-            (performance.now() - start) / 1000,
-            outcome,
-            errorType,
-        );
 
         const publisher = dispatchPublisher;
         if (!publisher) {

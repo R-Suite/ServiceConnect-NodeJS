@@ -1,12 +1,16 @@
-import type { Tracer } from '@opentelemetry/api';
+import type { Meter, Tracer } from '@opentelemetry/api';
 import {
+    ATTR_MESSAGING_SYSTEM,
+    ATTR_PROTOCOL_NAME,
+    ATTR_SERVER_ADDRESS,
+    ATTR_SERVER_PORT,
     DEFAULT_MESSAGING_SYSTEM,
     DEFAULT_PROTOCOL_NAME,
-    messagingSystemAttributes,
-} from '@serviceconnect/core';
+} from './attributes.js';
 
 export interface TelemetryOptions {
     readonly tracer?: Tracer;
+    readonly meter?: Meter;
     /** OTel messaging.system identifier. Defaults to `rabbitmq`. */
     readonly messagingSystem?: string;
     /** network.protocol.name value. Defaults to `amqp`. */
@@ -17,9 +21,9 @@ export interface TelemetryOptions {
     readonly serverPort?: number;
     /**
      * Consume-only: the physical queue this consumer is attached to. Used as the
-     * messaging.destination.name on consume spans, mirroring the C# stack's consumer-queue
-     * tagging. Falls back to the inbound `destinationAddress` header, then to an anonymous
-     * destination.
+     * messaging.destination.name on consume spans and metrics, mirroring the C# stack's
+     * consumer-queue tagging. Falls back to the inbound `destinationAddress` header, then
+     * to an anonymous destination.
      */
     readonly queueName?: string;
 }
@@ -40,15 +44,19 @@ export function resolveSystem(options?: TelemetryOptions): ResolvedSystem {
     };
 }
 
-/**
- * Stamps messaging.system, network.protocol.name, and server.address/port onto a span's
- * attributes, delegating to the core builder so spans and transport metrics tag servers identically.
- */
+/** Stamps messaging.system, network.protocol.name, and server.address/port onto a span's attributes. */
 export function applySystemAttributes(
     attrs: Record<string, string | number | boolean>,
     sys: ResolvedSystem,
 ): void {
-    Object.assign(attrs, messagingSystemAttributes(sys));
+    attrs[ATTR_MESSAGING_SYSTEM] = sys.system;
+    attrs[ATTR_PROTOCOL_NAME] = sys.protocolName;
+    if (sys.serverAddress) {
+        attrs[ATTR_SERVER_ADDRESS] = sys.serverAddress;
+    }
+    if (typeof sys.serverPort === 'number' && sys.serverPort > 0) {
+        attrs[ATTR_SERVER_PORT] = sys.serverPort;
+    }
 }
 
 /**

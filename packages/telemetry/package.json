@@ -29,6 +29,7 @@
         "directory": "packages/telemetry"
     },
     "dependencies": {
+        "@opentelemetry/semantic-conventions": "^1.27.0",
         "@serviceconnect/core": "workspace:*"
     },
     "peerDependencies": {
@@ -38,6 +39,7 @@
         "@opentelemetry/api": "^1.7.0",
         "@opentelemetry/context-async-hooks": "^2.7.1",
         "@opentelemetry/core": "^2.7.1",
+        "@opentelemetry/sdk-metrics": "^1.27.0",
         "@opentelemetry/sdk-trace-base": "^1.27.0"
     }
 }

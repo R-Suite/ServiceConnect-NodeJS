@@ -1,9 +1,6 @@
-// OpenTelemetry semantic conventions shared by ServiceConnect metrics (emitted by the
-// transport) and traces (emitted by @serviceconnect/telemetry). Mirrors the C# stack's
-// MessagingAttributes / MetricNames so a mixed C#/Node deployment shares one schema.
-
-// Instrumentation scope used by the tracer and meter. Matches the C# ActivitySource/Meter
-// name ("ServiceConnect.Bus").
+// Instrumentation scope shared by the tracer and meter. Matches the C# stack's
+// ActivitySource/Meter name ("ServiceConnect.Bus") so spans and metrics from both
+// runtimes share a single scope in the backend.
 export const INSTRUMENTATION_SCOPE = 'ServiceConnect.Bus';
 
 // OpenTelemetry messaging semantic-convention attribute keys.
@@ -42,7 +39,7 @@ export const OUTCOME_ERROR = 'error';
 export const OUTCOME_RETRY = 'retry';
 
 // Metric instrument names, units, and descriptions. Identical to the C# stack's
-// MetricNames / ServiceConnectMeter so a mixed deployment aggregates onto one series.
+// MetricNames/ServiceConnectMeter so a mixed deployment aggregates onto one series.
 export const METRIC_PUBLISH_DURATION = 'messaging.publish.duration';
 export const METRIC_PROCESS_DURATION = 'messaging.process.duration';
 export const METRIC_PUBLISHED_MESSAGES = 'messaging.client.published.messages';

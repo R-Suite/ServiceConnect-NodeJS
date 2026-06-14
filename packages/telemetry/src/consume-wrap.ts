@@ -6,7 +6,9 @@ import {
     propagation,
     trace,
 } from '@opentelemetry/api';
+import type { ConsumeCallback } from '@serviceconnect/core';
 import {
+    ATTR_ERROR_TYPE,
     ATTR_MESSAGING_DESTINATION_ANONYMOUS,
     ATTR_MESSAGING_DESTINATION_NAME,
     ATTR_MESSAGING_MESSAGE_BODY_SIZE,
@@ -14,30 +16,31 @@ import {
     ATTR_MESSAGING_MESSAGE_ID,
     ATTR_MESSAGING_OPERATION_NAME,
     ATTR_MESSAGING_OPERATION_TYPE,
-    type ConsumeCallback,
+    ATTR_MESSAGING_OUTCOME,
+    ATTR_MESSAGING_SYSTEM,
     INSTRUMENTATION_SCOPE,
     OPERATION_NAME_PROCESS,
     OPERATION_TYPE_PROCESS,
-} from '@serviceconnect/core';
+    OUTCOME_ERROR,
+    OUTCOME_RETRY,
+    OUTCOME_SUCCESS,
+} from './attributes.js';
 import {
     type TelemetryOptions,
     applySystemAttributes,
     readHeader,
     resolveSystem,
 } from './common.js';
+import { buildInstruments } from './metrics.js';
 
 const ANONYMOUS_DESTINATION = 'anonymous';
 
-/**
- * Wraps a consume callback to emit one CONSUMER (process) span per message, parented on the
- * inbound W3C trace context. Metrics are emitted by the transport itself (always-on), so this
- * wrapper is tracing-only.
- */
 export function telemetryConsumeWrapper(
     options?: TelemetryOptions,
 ): (cb: ConsumeCallback) => ConsumeCallback {
     const tracer = options?.tracer ?? trace.getTracer(INSTRUMENTATION_SCOPE);
     const sys = resolveSystem(options);
+    const instruments = buildInstruments(options?.meter);
 
     return (cb: ConsumeCallback): ConsumeCallback =>
         async (envelope, signal) => {
@@ -47,7 +50,7 @@ export function telemetryConsumeWrapper(
             // and falls back to an anonymous destination.
             const destination = options?.queueName ?? readHeader(headers, 'destinationAddress');
             const hasDestination = typeof destination === 'string' && destination.length > 0;
-            const displayDestination = hasDestination
+            const metricDestination = hasDestination
                 ? (destination as string)
                 : ANONYMOUS_DESTINATION;
 
@@ -72,11 +75,14 @@ export function telemetryConsumeWrapper(
 
             const parent = propagation.extract(context.active(), headers, defaultTextMapGetter);
             const span = tracer.startSpan(
-                `${displayDestination} process`,
+                `${metricDestination} process`,
                 { kind: SpanKind.CONSUMER, attributes: attrs },
                 parent,
             );
 
+            const start = performance.now();
+            let outcome: string = OUTCOME_SUCCESS;
+            let errorType: string | undefined;
             try {
                 const result = await context.with(trace.setSpan(parent, span), () =>
                     cb(envelope, signal),
@@ -86,6 +92,8 @@ export function telemetryConsumeWrapper(
                 } else if (result.error) {
                     span.recordException(result.error);
                     span.setStatus({ code: SpanStatusCode.ERROR, message: result.error.message });
+                    outcome = OUTCOME_ERROR;
+                    errorType = result.error.name;
                 } else {
                     // Non-success result with no exception: the message was routed to the retry
                     // queue rather than failing outright.
@@ -93,14 +101,35 @@ export function telemetryConsumeWrapper(
                         code: SpanStatusCode.ERROR,
                         message: 'Dispatch returned success=false without an exception',
                     });
+                    outcome = OUTCOME_RETRY;
                 }
                 return result;
             } catch (err) {
                 const error = err instanceof Error ? err : new Error(String(err));
                 span.recordException(error);
                 span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
+                outcome = OUTCOME_ERROR;
+                errorType = error.name;
                 throw error;
             } finally {
+                const baseTags: Record<string, string> = {
+                    [ATTR_MESSAGING_SYSTEM]: sys.system,
+                    [ATTR_MESSAGING_OPERATION_TYPE]: OPERATION_TYPE_PROCESS,
+                    [ATTR_MESSAGING_OPERATION_NAME]: OPERATION_NAME_PROCESS,
+                    [ATTR_MESSAGING_DESTINATION_NAME]: metricDestination,
+                };
+                instruments.processDuration.record(
+                    (performance.now() - start) / 1000,
+                    errorType ? { ...baseTags, [ATTR_ERROR_TYPE]: errorType } : baseTags,
+                );
+                const consumedTags: Record<string, string> = {
+                    ...baseTags,
+                    [ATTR_MESSAGING_OUTCOME]: outcome,
+                };
+                if (errorType) {
+                    consumedTags[ATTR_ERROR_TYPE] = errorType;
+                }
+                instruments.consumedMessages.add(1, consumedTags);
                 span.end();
             }
         };
