@@ -65,8 +65,10 @@ async function main(): Promise<number> {
         await new Promise((r) => setTimeout(r, 200));
 
         const spans = exporter.getFinishedSpans();
-        const producerSpan = spans.find((s) => s.attributes['messaging.operation'] === 'send');
-        const consumerSpan = spans.find((s) => s.attributes['messaging.operation'] === 'process');
+        const producerSpan = spans.find((s) => s.attributes['messaging.operation.name'] === 'send');
+        const consumerSpan = spans.find(
+            (s) => s.attributes['messaging.operation.name'] === 'process',
+        );
 
         if (!producerSpan || !consumerSpan) {
             announce(
