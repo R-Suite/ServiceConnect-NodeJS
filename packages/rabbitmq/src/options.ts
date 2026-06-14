@@ -52,13 +52,43 @@ export interface RabbitMQTransportOptions {
     };
 }
 
-export interface ResolvedProducerOptions {
+/** Broker endpoint parsed from the AMQP URL, used to tag metric/span server.* attributes. */
+export interface ServerEndpoint {
+    readonly serverAddress?: string;
+    readonly serverPort?: number;
+}
+
+/**
+ * Parses the broker host and port from the AMQP URL for the OTel `server.address` / `server.port`
+ * attributes. Best-effort: an unparseable or empty URL yields no endpoint, and the attributes are
+ * simply omitted. Defaults to the AMQP well-known ports (5671 for amqps, 5672 otherwise) when the
+ * URL has no explicit port.
+ */
+export function parseServerEndpoint(url: string): ServerEndpoint {
+    try {
+        const u = new URL(url);
+        // A cluster URL may carry a comma-separated host list (e.g. "host1,host2"); server.address
+        // is a single host, so take the first — matching the C# transport's host handling.
+        const host = u.hostname.split(',')[0]?.trim();
+        const serverAddress = host ? host : undefined;
+        const serverPort = u.port
+            ? Number.parseInt(u.port, 10)
+            : u.protocol === 'amqps:'
+              ? 5671
+              : 5672;
+        return { serverAddress, serverPort };
+    } catch {
+        return {};
+    }
+}
+
+export interface ResolvedProducerOptions extends ServerEndpoint {
     readonly publishConfirmTimeoutMs: number;
     readonly maxAttempts: number;
     readonly maxMessageSize: number;
 }
 
-export interface ResolvedConsumerOptions {
+export interface ResolvedConsumerOptions extends ServerEndpoint {
     /** Max concurrent in-flight messages; undefined = unbounded (rabbitmq-client default). */
     readonly concurrency?: number;
     readonly prefetch: number;
@@ -78,6 +108,7 @@ export function resolveProducerOptions(opts: RabbitMQTransportOptions): Resolved
         publishConfirmTimeoutMs: p.publishConfirmTimeoutMs ?? 30_000,
         maxAttempts: p.maxAttempts ?? 3,
         maxMessageSize: p.maxMessageSize ?? 128 * 1024 * 1024,
+        ...parseServerEndpoint(opts.url),
     };
 }
 
@@ -94,5 +125,6 @@ export function resolveConsumerOptions(opts: RabbitMQTransportOptions): Resolved
         deadLetterUnhandled: c.deadLetterUnhandled ?? false,
         queueArguments: c.queueArguments ?? {},
         retryQueueArguments: c.retryQueueArguments ?? {},
+        ...parseServerEndpoint(opts.url),
     };
 }

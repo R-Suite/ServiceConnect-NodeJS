@@ -1,7 +1,8 @@
-import type { ITransportProducer } from '@serviceconnect/core';
+import { type ITransportProducer, messagingSystemAttributes } from '@serviceconnect/core';
 import type { Connection, Publisher } from 'rabbitmq-client';
 import { RabbitMQPayloadTooLargeError } from './errors.js';
 import type { ResolvedProducerOptions } from './options.js';
+import { emitPublishMetrics } from './telemetry.js';
 
 export interface ProducerSnapshot {
     readonly isHealthy: boolean;
@@ -92,6 +93,32 @@ export function createProducer(
         }
     }
 
+    // Constant messaging.system / protocol / server.* tags, built once for the producer's lifetime.
+    const metricBase = messagingSystemAttributes({
+        serverAddress: opts.serverAddress,
+        serverPort: opts.serverPort,
+    });
+
+    // Times the operation and records the publish.duration histogram (always) and the
+    // published.messages counter (on success), tagged with the destination. Any throw —
+    // including client-side validation or abort — records the duration with error.type.
+    async function timedPublish(destination: string, run: () => Promise<void>): Promise<void> {
+        const start = performance.now();
+        try {
+            await run();
+            emitPublishMetrics(metricBase, destination, (performance.now() - start) / 1000);
+        } catch (err) {
+            const errorType = err instanceof Error ? err.name : 'Error';
+            emitPublishMetrics(
+                metricBase,
+                destination,
+                (performance.now() - start) / 1000,
+                errorType,
+            );
+            throw err;
+        }
+    }
+
     return {
         get isHealthy(): boolean {
             return isConnectionReady(connection);
@@ -100,67 +127,73 @@ export function createProducer(
         maxMessageSize: opts.maxMessageSize,
 
         async publish(typeName, body, options, signal) {
-            throwIfAborted(signal);
-            validateBodySize(body);
-            await ensureExchangeDeclared(typeName);
-            throwIfAborted(signal);
-            await publisher.send(
-                {
-                    exchange: typeName,
-                    routingKey: options?.routingKey ?? '',
-                    headers: { ...(options?.headers ?? {}) },
-                    contentType: 'application/json',
-                    // Stops rabbitmq-client auto-JSON-parsing the body on consume. The body is already
-                    // serialized bytes; without this the consumer parses it (1), re-stringifies it in
-                    // toEnvelope (2), then deserializes it again (3). With it the body round-trips as raw
-                    // bytes and is deserialized exactly once.
-                    contentEncoding: 'identity',
-                    durable: true,
-                },
-                Buffer.from(body),
-            );
-            recordPublish();
+            await timedPublish(typeName, async () => {
+                throwIfAborted(signal);
+                validateBodySize(body);
+                await ensureExchangeDeclared(typeName);
+                throwIfAborted(signal);
+                await publisher.send(
+                    {
+                        exchange: typeName,
+                        routingKey: options?.routingKey ?? '',
+                        headers: { ...(options?.headers ?? {}) },
+                        contentType: 'application/json',
+                        // Stops rabbitmq-client auto-JSON-parsing the body on consume. The body is already
+                        // serialized bytes; without this the consumer parses it (1), re-stringifies it in
+                        // toEnvelope (2), then deserializes it again (3). With it the body round-trips as raw
+                        // bytes and is deserialized exactly once.
+                        contentEncoding: 'identity',
+                        durable: true,
+                    },
+                    Buffer.from(body),
+                );
+                recordPublish();
+            });
         },
 
         async send(endpoint, typeName, body, options, signal) {
-            throwIfAborted(signal);
-            validateBodySize(body);
-            const headers: Record<string, unknown> = {
-                MessageType: typeName,
-                ...(options?.headers ?? {}),
-            };
-            if (options?.routingSlipHopsCompleted !== undefined) {
-                headers.RoutingSlipHopsCompleted = String(options.routingSlipHopsCompleted);
-            }
-            await publisher.send(
-                {
-                    exchange: '',
-                    routingKey: endpoint,
-                    headers,
-                    contentType: 'application/json',
-                    // See publish(): suppresses redundant auto-parse so the body is deserialized once.
-                    contentEncoding: 'identity',
-                    durable: true,
-                },
-                Buffer.from(body),
-            );
-            recordPublish();
+            await timedPublish(endpoint, async () => {
+                throwIfAborted(signal);
+                validateBodySize(body);
+                const headers: Record<string, unknown> = {
+                    MessageType: typeName,
+                    ...(options?.headers ?? {}),
+                };
+                if (options?.routingSlipHopsCompleted !== undefined) {
+                    headers.RoutingSlipHopsCompleted = String(options.routingSlipHopsCompleted);
+                }
+                await publisher.send(
+                    {
+                        exchange: '',
+                        routingKey: endpoint,
+                        headers,
+                        contentType: 'application/json',
+                        // See publish(): suppresses redundant auto-parse so the body is deserialized once.
+                        contentEncoding: 'identity',
+                        durable: true,
+                    },
+                    Buffer.from(body),
+                );
+                recordPublish();
+            });
         },
 
         async sendBytes(endpoint, typeName, body, options, signal) {
-            throwIfAborted(signal);
-            validateBodySize(body);
-            await publisher.send(
-                {
-                    exchange: '',
-                    routingKey: endpoint,
-                    headers: { MessageType: typeName, ...(options?.headers ?? {}) },
-                    contentType: 'application/octet-stream',
-                    durable: true,
-                },
-                Buffer.from(body),
-            );
-            recordPublish();
+            await timedPublish(endpoint, async () => {
+                throwIfAborted(signal);
+                validateBodySize(body);
+                await publisher.send(
+                    {
+                        exchange: '',
+                        routingKey: endpoint,
+                        headers: { MessageType: typeName, ...(options?.headers ?? {}) },
+                        contentType: 'application/octet-stream',
+                        durable: true,
+                    },
+                    Buffer.from(body),
+                );
+                recordPublish();
+            });
         },
 
         snapshot() {

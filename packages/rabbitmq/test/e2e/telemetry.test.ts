@@ -86,7 +86,9 @@ describe('E2E telemetry', () => {
         const spans = exporter.getFinishedSpans();
         const parent = spans.find((s) => s.name === 'test-parent');
         const sendSpan = spans.find((s) => s.name === `${receiverQ} send`);
-        const processSpan = spans.find((s) => s.name === `${typeName} process`);
+        // The consume span's destination is the queue the message was sent to (the endpoint),
+        // taken from the destinationAddress header — not the message type.
+        const processSpan = spans.find((s) => s.name === `${receiverQ} process`);
 
         expect(parent).toBeDefined();
         expect(sendSpan).toBeDefined();

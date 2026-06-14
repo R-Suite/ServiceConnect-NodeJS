@@ -252,7 +252,15 @@ importers:
         specifier: ^3.2.6
         version: 3.2.6(@types/debug@4.1.13)(@types/node@24.12.4)(tsx@4.22.3)(yaml@2.9.0)
 
-  packages/core: {}
+  packages/core:
+    dependencies:
+      '@opentelemetry/api':
+        specifier: ^1.7.0
+        version: 1.9.1
+    devDependencies:
+      '@opentelemetry/sdk-metrics':
+        specifier: ^1.27.0
+        version: 1.30.1(@opentelemetry/api@1.9.1)
 
   packages/healthchecks:
     dependencies:
@@ -297,6 +305,9 @@ importers:
       '@opentelemetry/core':
         specifier: ^1.27.0
         version: 1.30.1(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-metrics':
+        specifier: ^1.27.0
+        version: 1.30.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-base':
         specifier: ^1.27.0
         version: 1.30.1(@opentelemetry/api@1.9.1)
@@ -315,9 +326,6 @@ importers:
 
   packages/telemetry:
     dependencies:
-      '@opentelemetry/semantic-conventions':
-        specifier: ^1.27.0
-        version: 1.41.1
       '@serviceconnect/core':
         specifier: workspace:*
         version: link:../core
@@ -331,9 +339,6 @@ importers:
       '@opentelemetry/core':
         specifier: ^2.7.1
         version: 2.7.1(@opentelemetry/api@1.9.1)
-      '@opentelemetry/sdk-metrics':
-        specifier: ^1.27.0
-        version: 1.30.1(@opentelemetry/api@1.9.1)
       '@opentelemetry/sdk-trace-base':
         specifier: ^1.27.0
         version: 1.30.1(@opentelemetry/api@1.9.1)
