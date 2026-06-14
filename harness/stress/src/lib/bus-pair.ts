@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { type Bus, createBus } from '@serviceconnect/core';
+import { type Bus, createBus, createMessageTypeRegistry } from '@serviceconnect/core';
 import { createRabbitMQTransport } from '@serviceconnect/rabbitmq';
 import type { PersistenceBundle } from '../persistence/index.js';
 
@@ -24,15 +24,29 @@ export async function createBusPair(options: BusPairOptions): Promise<BusPair> {
     const alphaQueue = `${prefix}-alpha`;
     const betaQueue = `${prefix}-beta`;
 
+    // Share each bus's registry with its transport so the producer's polymorphic multi-publish can
+    // resolve a derived type's ancestor exchanges (parentsOf). Without this, a published derived
+    // message only reaches its own exchange, not a base-type subscriber.
+    const alphaRegistry = createMessageTypeRegistry();
+    const betaRegistry = createMessageTypeRegistry();
+
     const alpha = createBus({
-        transport: createRabbitMQTransport({ url: options.brokerUrl }),
+        transport: createRabbitMQTransport({
+            url: options.brokerUrl,
+            parentsOf: (n) => alphaRegistry.parentsOf(n),
+        }),
+        registry: alphaRegistry,
         queue: { name: alphaQueue },
         timeoutPollIntervalMs: options.timeoutPollIntervalMs ?? 100,
         aggregatorFlushIntervalMs: options.aggregatorFlushIntervalMs ?? 100,
     });
 
     const beta = createBus({
-        transport: createRabbitMQTransport({ url: options.brokerUrl }),
+        transport: createRabbitMQTransport({
+            url: options.brokerUrl,
+            parentsOf: (n) => betaRegistry.parentsOf(n),
+        }),
+        registry: betaRegistry,
         queue: { name: betaQueue },
         timeoutPollIntervalMs: options.timeoutPollIntervalMs ?? 100,
         aggregatorFlushIntervalMs: options.aggregatorFlushIntervalMs ?? 100,
