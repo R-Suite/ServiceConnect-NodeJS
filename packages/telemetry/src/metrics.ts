@@ -1,35 +1,37 @@
 import { type Meter, metrics } from '@opentelemetry/api';
-
-const DURATION_BOUNDARIES_MS = [
-    5, 10, 25, 50, 75, 100, 250, 500, 750, 1000, 2500, 5000, 7500, 10000,
-];
+import {
+    INSTRUMENTATION_SCOPE,
+    METRIC_CONSUMED_MESSAGES,
+    METRIC_PROCESS_DURATION,
+    METRIC_PUBLISHED_MESSAGES,
+    METRIC_PUBLISH_DURATION,
+} from './attributes.js';
 
 export interface TelemetryInstruments {
-    publishCount: ReturnType<Meter['createCounter']>;
-    consumeCount: ReturnType<Meter['createCounter']>;
-    errorCount: ReturnType<Meter['createCounter']>;
-    duration: ReturnType<Meter['createHistogram']>;
+    publishDuration: ReturnType<Meter['createHistogram']>;
+    processDuration: ReturnType<Meter['createHistogram']>;
+    publishedMessages: ReturnType<Meter['createCounter']>;
+    consumedMessages: ReturnType<Meter['createCounter']>;
 }
 
 export function buildInstruments(meter?: Meter): TelemetryInstruments {
-    const m = meter ?? metrics.getMeter('@serviceconnect/telemetry');
+    const m = meter ?? metrics.getMeter(INSTRUMENTATION_SCOPE);
     return {
-        publishCount: m.createCounter('serviceconnect.publish.count', {
-            description: 'Number of messages published or sent by the bus.',
+        publishDuration: m.createHistogram(METRIC_PUBLISH_DURATION, {
+            description: 'Duration of a publish operation, from start to broker ack.',
+            unit: 's',
+        }),
+        processDuration: m.createHistogram(METRIC_PROCESS_DURATION, {
+            description: 'Duration of consumer-side message processing (handler dispatch).',
+            unit: 's',
+        }),
+        publishedMessages: m.createCounter(METRIC_PUBLISHED_MESSAGES, {
+            description: 'Number of messages successfully published.',
             unit: '{message}',
         }),
-        consumeCount: m.createCounter('serviceconnect.consume.count', {
-            description: 'Number of messages consumed by the bus.',
+        consumedMessages: m.createCounter(METRIC_CONSUMED_MESSAGES, {
+            description: 'Number of messages consumed, tagged by outcome.',
             unit: '{message}',
-        }),
-        errorCount: m.createCounter('serviceconnect.error.count', {
-            description: 'Number of messaging operations that failed.',
-            unit: '{error}',
-        }),
-        duration: m.createHistogram('serviceconnect.processing.duration', {
-            description: 'Processing duration of a consumed message.',
-            unit: 'ms',
-            advice: { explicitBucketBoundaries: DURATION_BOUNDARIES_MS },
         }),
     };
 }

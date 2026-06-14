@@ -71,7 +71,7 @@ describe('trace context propagation round-trip', () => {
 
         const spans = exporter.getFinishedSpans();
         const publish = spans.find((s) => s.name === 'OrderCreated publish');
-        const process = spans.find((s) => s.name === 'OrderCreated process');
+        const process = spans.find((s) => s.name === 'anonymous process');
         const parent = spans.find((s) => s.name === 'test-parent');
         expect(publish).toBeDefined();
         expect(process).toBeDefined();

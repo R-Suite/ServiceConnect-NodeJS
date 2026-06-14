@@ -35,21 +35,68 @@ const fail: ConsumeResult = {
 };
 
 describe('telemetryConsumeWrapper', () => {
-    it('opens a process span and ends with OK on success', async () => {
+    it('opens a process span named after the destination and ends OK on success', async () => {
         exporter.reset();
         const wrap = telemetryConsumeWrapper();
         const cb: ConsumeCallback = async () => ok;
         const wrapped = wrap(cb);
         await wrapped(
-            envelope({ messageType: 'OrderCreated', correlationId: 'c-1' }),
+            envelope({
+                messageType: 'OrderCreated',
+                correlationId: 'c-1',
+                destinationAddress: 'order-queue',
+            }),
             new AbortController().signal,
         );
         const spans = exporter.getFinishedSpans();
         expect(spans).toHaveLength(1);
-        expect(spans[0]?.name).toBe('OrderCreated process');
+        expect(spans[0]?.name).toBe('order-queue process');
         expect(spans[0]?.status.code).toBe(SpanStatusCode.OK);
-        expect(spans[0]?.attributes['messaging.operation']).toBe('process');
-        expect(spans[0]?.attributes['messaging.destination.name']).toBe('OrderCreated');
+        expect(spans[0]?.attributes['messaging.operation.type']).toBe('process');
+        expect(spans[0]?.attributes['messaging.operation.name']).toBe('process');
+        expect(spans[0]?.attributes['messaging.destination.name']).toBe('order-queue');
+        expect(spans[0]?.attributes['messaging.operation']).toBeUndefined();
+    });
+
+    it('falls back to an anonymous destination when no destinationAddress is present', async () => {
+        exporter.reset();
+        const wrap = telemetryConsumeWrapper();
+        const wrapped = wrap(async () => ok);
+        await wrapped(envelope({ messageType: 'OrderCreated' }), new AbortController().signal);
+        const spans = exporter.getFinishedSpans();
+        expect(spans[0]?.name).toBe('anonymous process');
+        expect(spans[0]?.attributes['messaging.destination.anonymous']).toBe(true);
+        expect(spans[0]?.attributes['messaging.destination.name']).toBeUndefined();
+    });
+
+    it('uses the queueName option as the destination when supplied', async () => {
+        exporter.reset();
+        const wrap = telemetryConsumeWrapper({ queueName: 'my-service-queue' });
+        const wrapped = wrap(async () => ok);
+        await wrapped(envelope({ messageType: 'OrderCreated' }), new AbortController().signal);
+        const spans = exporter.getFinishedSpans();
+        expect(spans[0]?.name).toBe('my-service-queue process');
+        expect(spans[0]?.attributes['messaging.destination.name']).toBe('my-service-queue');
+    });
+
+    it('reads PascalCase headers from C#-produced messages', async () => {
+        exporter.reset();
+        const wrap = telemetryConsumeWrapper();
+        const wrapped = wrap(async () => ok);
+        await wrapped(
+            envelope({
+                MessageType: 'OrderCreated',
+                CorrelationId: 'c-cs',
+                MessageId: 'm-cs',
+                DestinationAddress: 'csharp-queue',
+            }),
+            new AbortController().signal,
+        );
+        const spans = exporter.getFinishedSpans();
+        expect(spans[0]?.name).toBe('csharp-queue process');
+        expect(spans[0]?.attributes['messaging.destination.name']).toBe('csharp-queue');
+        expect(spans[0]?.attributes['messaging.message.id']).toBe('m-cs');
+        expect(spans[0]?.attributes['messaging.message.conversation_id']).toBe('c-cs');
     });
 
     it('marks span ERROR when ConsumeResult.success is false', async () => {

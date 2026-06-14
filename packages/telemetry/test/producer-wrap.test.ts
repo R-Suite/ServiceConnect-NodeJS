@@ -60,26 +60,35 @@ function fakeProducer(): ITransportProducer & {
 }
 
 describe('telemetryProducer', () => {
-    it('emits a span named "<typeName> publish" with PRODUCER kind for publish', async () => {
+    it('emits a PRODUCER publish span with OTel operation type/name attributes', async () => {
         exporter.reset();
         const wrapped = telemetryProducer(fakeProducer());
         await wrapped.publish('OrderCreated', new Uint8Array(7), {
             headers: { correlationId: 'c-1', messageId: 'm-1' },
+            routingKey: 'orders.created',
         });
 
         const spans = exporter.getFinishedSpans();
         expect(spans).toHaveLength(1);
         expect(spans[0]?.name).toBe('OrderCreated publish');
         expect(spans[0]?.attributes['messaging.system']).toBe('rabbitmq');
-        expect(spans[0]?.attributes['messaging.operation']).toBe('publish');
+        expect(spans[0]?.attributes['network.protocol.name']).toBe('amqp');
+        expect(spans[0]?.attributes['messaging.operation.type']).toBe('publish');
+        expect(spans[0]?.attributes['messaging.operation.name']).toBe('publish');
         expect(spans[0]?.attributes['messaging.destination.name']).toBe('OrderCreated');
+        expect(spans[0]?.attributes['messaging.rabbitmq.destination.routing_key']).toBe(
+            'orders.created',
+        );
         expect(spans[0]?.attributes['messaging.message.id']).toBe('m-1');
         expect(spans[0]?.attributes['messaging.message.conversation_id']).toBe('c-1');
-        expect(spans[0]?.attributes['messaging.message.body.size']).toBe(7);
+        // Producer spans do not carry body size (matches the C# publish span).
+        expect(spans[0]?.attributes['messaging.message.body.size']).toBeUndefined();
+        // The deprecated single-attribute form must not be emitted.
+        expect(spans[0]?.attributes['messaging.operation']).toBeUndefined();
         expect(spans[0]?.status.code).toBe(SpanStatusCode.OK);
     });
 
-    it('emits a span named "<endpoint> send" with PRODUCER kind for send', async () => {
+    it('emits a send span with operation.name=send but OTel operation.type=publish', async () => {
         exporter.reset();
         const wrapped = telemetryProducer(fakeProducer());
         await wrapped.send('shipping-queue', 'OrderShipped', new Uint8Array(4));
@@ -87,7 +96,8 @@ describe('telemetryProducer', () => {
         const spans = exporter.getFinishedSpans();
         expect(spans).toHaveLength(1);
         expect(spans[0]?.name).toBe('shipping-queue send');
-        expect(spans[0]?.attributes['messaging.operation']).toBe('send');
+        expect(spans[0]?.attributes['messaging.operation.type']).toBe('publish');
+        expect(spans[0]?.attributes['messaging.operation.name']).toBe('send');
         expect(spans[0]?.attributes['messaging.destination.name']).toBe('shipping-queue');
     });
 
@@ -127,11 +137,19 @@ describe('telemetryProducer', () => {
         expect(spans[0]?.events.some((e) => e.name === 'exception')).toBe(true);
     });
 
-    it('respects the messagingSystem option', async () => {
+    it('respects the messagingSystem, protocol, and server.* options', async () => {
         exporter.reset();
-        const wrapped = telemetryProducer(fakeProducer(), { messagingSystem: 'inmemory' });
+        const wrapped = telemetryProducer(fakeProducer(), {
+            messagingSystem: 'inmemory',
+            protocolName: 'inproc',
+            serverAddress: 'broker-1',
+            serverPort: 5672,
+        });
         await wrapped.publish('X', new Uint8Array(0));
         const spans = exporter.getFinishedSpans();
         expect(spans[0]?.attributes['messaging.system']).toBe('inmemory');
+        expect(spans[0]?.attributes['network.protocol.name']).toBe('inproc');
+        expect(spans[0]?.attributes['server.address']).toBe('broker-1');
+        expect(spans[0]?.attributes['server.port']).toBe(5672);
     });
 });

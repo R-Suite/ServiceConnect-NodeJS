@@ -1,8 +1,6 @@
 import {
-    type Meter,
     SpanKind,
     SpanStatusCode,
-    type Tracer,
     context,
     defaultTextMapSetter,
     propagation,
@@ -12,84 +10,107 @@ import type { ITransportProducer } from '@serviceconnect/core';
 import {
     ATTR_ERROR_TYPE,
     ATTR_MESSAGING_DESTINATION_NAME,
-    ATTR_MESSAGING_MESSAGE_BODY_SIZE,
+    ATTR_MESSAGING_DESTINATION_ROUTING_KEY,
     ATTR_MESSAGING_MESSAGE_CONVERSATION_ID,
     ATTR_MESSAGING_MESSAGE_ID,
-    ATTR_MESSAGING_OPERATION,
+    ATTR_MESSAGING_OPERATION_NAME,
+    ATTR_MESSAGING_OPERATION_TYPE,
     ATTR_MESSAGING_SYSTEM,
-    DEFAULT_MESSAGING_SYSTEM,
+    INSTRUMENTATION_SCOPE,
+    OPERATION_NAME_PUBLISH,
+    OPERATION_NAME_SEND,
+    OPERATION_TYPE_PUBLISH,
 } from './attributes.js';
+import {
+    type TelemetryOptions,
+    applySystemAttributes,
+    readHeader,
+    resolveSystem,
+} from './common.js';
 import { buildInstruments } from './metrics.js';
 
-export interface TelemetryOptions {
-    readonly tracer?: Tracer;
-    readonly meter?: Meter;
-    readonly messagingSystem?: string;
-}
+export type { TelemetryOptions };
 
 interface HeaderBearingOptions {
-    headers?: Record<string, string>;
-}
-
-function buildAttributes(
-    system: string,
-    operation: 'publish' | 'send',
-    destinationName: string,
-    body: Uint8Array,
-    headers: Record<string, string> | undefined,
-): Record<string, string | number> {
-    const attrs: Record<string, string | number> = {
-        [ATTR_MESSAGING_SYSTEM]: system,
-        [ATTR_MESSAGING_OPERATION]: operation,
-        [ATTR_MESSAGING_DESTINATION_NAME]: destinationName,
-        [ATTR_MESSAGING_MESSAGE_BODY_SIZE]: body.byteLength,
-    };
-    if (headers?.messageId) attrs[ATTR_MESSAGING_MESSAGE_ID] = headers.messageId;
-    if (headers?.correlationId)
-        attrs[ATTR_MESSAGING_MESSAGE_CONVERSATION_ID] = headers.correlationId;
-    return attrs;
+    headers?: Readonly<Record<string, string>>;
 }
 
 export function telemetryProducer(
     underlying: ITransportProducer,
     options?: TelemetryOptions,
 ): ITransportProducer {
-    const tracer = options?.tracer ?? trace.getTracer('@serviceconnect/telemetry');
-    const system = options?.messagingSystem ?? DEFAULT_MESSAGING_SYSTEM;
+    const tracer = options?.tracer ?? trace.getTracer(INSTRUMENTATION_SCOPE);
+    const sys = resolveSystem(options);
     const instruments = buildInstruments(options?.meter);
 
+    // Producer metrics carry a uniform (publish, publish) operation regardless of whether
+    // the call was a publish or a send — only the destination differs. This mirrors the C#
+    // producer, which funnels publish/send/request through one metric emitter. The span,
+    // however, records the real operation name so publish and send stay distinguishable.
+    function recordPublishMetrics(destination: string, seconds: number, errorType?: string): void {
+        const tags: Record<string, string> = {
+            [ATTR_MESSAGING_SYSTEM]: sys.system,
+            [ATTR_MESSAGING_OPERATION_TYPE]: OPERATION_TYPE_PUBLISH,
+            [ATTR_MESSAGING_OPERATION_NAME]: OPERATION_NAME_PUBLISH,
+            [ATTR_MESSAGING_DESTINATION_NAME]: destination,
+        };
+        instruments.publishDuration.record(
+            seconds,
+            errorType ? { ...tags, [ATTR_ERROR_TYPE]: errorType } : tags,
+        );
+        // published.messages counts successes only.
+        if (!errorType) {
+            instruments.publishedMessages.add(1, tags);
+        }
+    }
+
     async function withSpan<TOptions extends HeaderBearingOptions, TResult>(
-        operation: 'publish' | 'send',
-        destinationName: string,
-        body: Uint8Array,
+        operationName: typeof OPERATION_NAME_PUBLISH | typeof OPERATION_NAME_SEND,
+        destination: string,
         opts: TOptions | undefined,
+        routingKey: string | undefined,
+        includeMessageId: boolean,
         invoke: (next: TOptions) => Promise<TResult>,
     ): Promise<TResult> {
-        const span = tracer.startSpan(`${destinationName} ${operation}`, {
+        const attrs: Record<string, string | number | boolean> = {};
+        applySystemAttributes(attrs, sys);
+        attrs[ATTR_MESSAGING_OPERATION_TYPE] = OPERATION_TYPE_PUBLISH;
+        attrs[ATTR_MESSAGING_OPERATION_NAME] = operationName;
+        attrs[ATTR_MESSAGING_DESTINATION_NAME] = destination;
+        const correlationId = readHeader(opts?.headers, 'correlationId');
+        if (correlationId) {
+            attrs[ATTR_MESSAGING_MESSAGE_CONVERSATION_ID] = correlationId;
+        }
+        if (includeMessageId) {
+            const messageId = readHeader(opts?.headers, 'messageId');
+            if (messageId) {
+                attrs[ATTR_MESSAGING_MESSAGE_ID] = messageId;
+            }
+        }
+        if (routingKey) {
+            attrs[ATTR_MESSAGING_DESTINATION_ROUTING_KEY] = routingKey;
+        }
+
+        const span = tracer.startSpan(`${destination} ${operationName}`, {
             kind: SpanKind.PRODUCER,
-            attributes: buildAttributes(system, operation, destinationName, body, opts?.headers),
+            attributes: attrs,
         });
         const headers = { ...(opts?.headers ?? {}) };
         propagation.inject(trace.setSpan(context.active(), span), headers, defaultTextMapSetter);
         const nextOpts = { ...(opts ?? ({} as TOptions)), headers } as TOptions;
+        const start = performance.now();
         try {
             const result = await context.with(trace.setSpan(context.active(), span), () =>
                 invoke(nextOpts),
             );
             span.setStatus({ code: SpanStatusCode.OK });
-            instruments.publishCount.add(1, {
-                [ATTR_MESSAGING_DESTINATION_NAME]: destinationName,
-                [ATTR_MESSAGING_OPERATION]: operation,
-            });
+            recordPublishMetrics(destination, (performance.now() - start) / 1000);
             return result;
         } catch (err) {
             const error = err instanceof Error ? err : new Error(String(err));
             span.recordException(error);
             span.setStatus({ code: SpanStatusCode.ERROR, message: error.message });
-            instruments.errorCount.add(1, {
-                [ATTR_MESSAGING_OPERATION]: operation,
-                [ATTR_ERROR_TYPE]: error.name,
-            });
+            recordPublishMetrics(destination, (performance.now() - start) / 1000, error.name);
             throw error;
         } finally {
             span.end();
@@ -103,17 +124,17 @@ export function telemetryProducer(
         supportsRoutingKey: underlying.supportsRoutingKey,
         maxMessageSize: underlying.maxMessageSize,
         async publish(typeName, body, opts) {
-            await withSpan('publish', typeName, body, opts, (next) =>
+            await withSpan(OPERATION_NAME_PUBLISH, typeName, opts, opts?.routingKey, true, (next) =>
                 underlying.publish(typeName, body, next),
             );
         },
         async send(endpoint, typeName, body, opts) {
-            await withSpan('send', endpoint, body, opts, (next) =>
+            await withSpan(OPERATION_NAME_SEND, endpoint, opts, undefined, false, (next) =>
                 underlying.send(endpoint, typeName, body, next),
             );
         },
         async sendBytes(endpoint, typeName, body, opts) {
-            await withSpan('send', endpoint, body, opts, (next) =>
+            await withSpan(OPERATION_NAME_SEND, endpoint, opts, undefined, false, (next) =>
                 underlying.sendBytes(endpoint, typeName, body, next),
             );
         },

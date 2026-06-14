@@ -69,7 +69,7 @@ const fail: ConsumeResult = {
 };
 
 describe('telemetry metrics', () => {
-    it('records publish.count + consume.count + duration histogram', async () => {
+    it('records the C# messaging.* instruments, tagged per OTel convention', async () => {
         const producer = telemetryProducer(fakeProducer());
         await producer.publish('OrderCreated', new Uint8Array(4), {
             headers: { correlationId: 'c' },
@@ -78,19 +78,47 @@ describe('telemetry metrics', () => {
         const consume = telemetryConsumeWrapper();
         await consume(async () => ok)(
             {
-                headers: { messageType: 'OrderCreated', correlationId: 'c' },
+                headers: {
+                    messageType: 'OrderCreated',
+                    correlationId: 'c',
+                    destinationAddress: 'order-queue',
+                },
                 body: new Uint8Array(4),
             },
             new AbortController().signal,
         );
 
         const got = await collectMetrics();
-        expect(got.get('serviceconnect.publish.count')?.length).toBeGreaterThanOrEqual(1);
-        expect(got.get('serviceconnect.consume.count')?.length).toBeGreaterThanOrEqual(1);
-        expect(got.get('serviceconnect.processing.duration')?.length).toBeGreaterThanOrEqual(1);
+        expect(got.get('messaging.client.published.messages')?.length).toBeGreaterThanOrEqual(1);
+        expect(got.get('messaging.process.duration')?.length).toBeGreaterThanOrEqual(1);
+        expect(got.get('messaging.publish.duration')?.length).toBeGreaterThanOrEqual(1);
+
+        // Legacy serviceconnect.* names must no longer be emitted.
+        expect(got.get('serviceconnect.publish.count')).toBeUndefined();
+        expect(got.get('serviceconnect.processing.duration')).toBeUndefined();
+
+        const published = got.get('messaging.client.published.messages') ?? [];
+        expect(
+            published.some(
+                (d) =>
+                    d.attrs['messaging.operation.type'] === 'publish' &&
+                    d.attrs['messaging.operation.name'] === 'publish' &&
+                    d.attrs['messaging.destination.name'] === 'OrderCreated',
+            ),
+        ).toBe(true);
+
+        const consumed = got.get('messaging.client.consumed.messages') ?? [];
+        expect(
+            consumed.some(
+                (d) =>
+                    d.attrs['messaging.operation.type'] === 'process' &&
+                    d.attrs['messaging.outcome'] === 'success' &&
+                    d.attrs['messaging.destination.name'] === 'order-queue',
+            ),
+        ).toBe(true);
     });
 
-    it('records error.count on producer + consume failure', async () => {
+    it('tags consumed=error and records publish.duration with error.type on failure', async () => {
         const badProducer = telemetryProducer({
             get isHealthy() {
                 return true;
@@ -118,7 +146,19 @@ describe('telemetry metrics', () => {
         );
 
         const got = await collectMetrics();
-        const errors = got.get('serviceconnect.error.count') ?? [];
-        expect(errors.length).toBeGreaterThanOrEqual(1);
+
+        // No standalone error counter exists; failure is carried on the existing instruments.
+        expect(got.get('serviceconnect.error.count')).toBeUndefined();
+
+        const consumed = got.get('messaging.client.consumed.messages') ?? [];
+        expect(
+            consumed.some(
+                (d) =>
+                    d.attrs['messaging.outcome'] === 'error' && d.attrs['error.type'] === 'Error',
+            ),
+        ).toBe(true);
+
+        const publishDuration = got.get('messaging.publish.duration') ?? [];
+        expect(publishDuration.some((d) => d.attrs['error.type'] === 'Error')).toBe(true);
     });
 });
