@@ -78,23 +78,27 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      # The tag is the single source of truth for the version, so stamp it onto every workspace
-      # package. pnpm rewrites the internal `workspace:*` dependencies to this version on publish.
-      - name: Set package versions from tag
-        run: pnpm -r exec -- npm pkg set version="${{ steps.version.outputs.version }}"
-
       - name: Build
         run: pnpm build
 
       # Re-run the full suite against the exact tagged commit before publishing. CI already gates
       # merges to master, but a tag can point at any commit and npm versions cannot be unpublished
-      # after 72h — a green run here is the last line of defence.
+      # after 72h — a green run here is the last line of defence. Lint/test run on the pristine
+      # tree *before* the version stamp: `npm pkg set` rewrites package.json (expanding single-line
+      # arrays/objects), which biome's formatter rejects — so stamping first would fail lint.
       - name: Lint
         run: pnpm lint
       - name: Tests
         run: pnpm test
       - name: RabbitMQ end-to-end tests
         run: pnpm --filter @serviceconnect/rabbitmq test:e2e
+
+      # The tag is the single source of truth for the version, so stamp it onto every workspace
+      # package immediately before publish. pnpm rewrites the internal `workspace:*` dependencies
+      # to this version on publish. Nothing embeds its own package.json version at build time, so
+      # building before the stamp (above) is safe.
+      - name: Set package versions from tag
+        run: pnpm -r exec -- npm pkg set version="${{ steps.version.outputs.version }}"
 
       - name: Publish to npm
         # --no-git-checks because the version stamp above leaves the tree dirty.
