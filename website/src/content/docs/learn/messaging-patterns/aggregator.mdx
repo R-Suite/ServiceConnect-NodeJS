@@ -1,0 +1,75 @@
+---
+title: Aggregator
+description: Batch incoming messages by count or time window — flush as one batch.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+An **aggregator** buffers incoming messages of one type and processes them as a batch rather than one at a time. It exposes two thresholds — a maximum batch size and a maximum wait window — and flushes whichever comes first. The buffered messages survive restarts via an `IAggregatorStore`, and a lease ensures that only one consumer flushes any given batch even when several instances are racing.
+
+## When to use
+
+Aggregation pays off whenever the downstream work has **per-call overhead**: a bulk database insert, a vectorised HTTP API, a warehouse-pick request that takes a list of line items. Trading N round-trips for one batched call usually wins on throughput, on cost, and on backend pressure. A 100ms flush window adds bounded latency but lets you amortise that overhead across the whole window's traffic.
+
+It is also the right shape for **rate-smoothing**. If your downstream is happier with one call every 60 seconds carrying 200 items than with 200 calls in a burst, the aggregator gives you that smoothing without your producer changing a line.
+
+## When not to use
+
+Don't aggregate when each message is independently latency-sensitive — adding even a 250ms flush window to a request/reply path will hurt. Don't aggregate when the downstream expects strict per-message ordering and processing, or when failure of one item must roll back the batch but the API doesn't support that semantic.
+
+<Aside type="caution">
+  The `execute` callback receives a `readonly` slice of messages and an `AbortSignal`. Long-running batch work should respect the signal; if the lease expires, the framework will let another consumer pick up the batch and your stale flush should bail out cleanly.
+</Aside>
+
+## Example
+
+```ts
+import { Aggregator, type Message, createBus } from '@serviceconnect/core';
+import { memoryAggregatorStore } from '@serviceconnect/persistence-memory';
+import { createRabbitMQTransport } from '@serviceconnect/rabbitmq';
+
+interface OrderLine extends Message {
+  orderId: string;
+  sku: string;
+  qty: number;
+}
+
+class BatchOrderLines extends Aggregator<OrderLine> {
+  batchSize(): number {
+    return 100;
+  }
+  timeout(): number {
+    return 60_000;
+  }
+  async execute(messages: readonly OrderLine[], _signal: AbortSignal): Promise<void> {
+    await warehouse.bulkPick(messages);
+  }
+}
+
+const bus = createBus({
+  transport: createRabbitMQTransport({ url: 'amqp://localhost' }),
+  queue: { name: 'warehouse' },
+  aggregatorFlushIntervalMs: 250,
+});
+
+bus.registerAggregator<OrderLine>('OrderLine', new BatchOrderLines(), {
+  store: memoryAggregatorStore(),
+});
+```
+
+`BatchOrderLines` accumulates `OrderLine` messages on the `warehouse` queue. It flushes whenever it has buffered 100 lines, or 60 seconds have passed since the oldest still-buffered line arrived, whichever happens first. The flush calls `warehouse.bulkPick(messages)` once with the whole array — replacing what would otherwise be one round-trip per line.
+
+## Behind the scenes
+
+- `batchSize()` and `timeout()` define the flush thresholds: whichever comes first triggers `execute`.
+- Persistent state in `IAggregatorStore` holds the buffered messages across restarts, so a crash mid-window does not lose the in-flight batch.
+- A lease prevents two consumers from both flushing the same batch — the first to acquire wins, the second skips it.
+- `aggregatorFlushIntervalMs` controls how often the bus checks for timed-out batches; tighten it for low-latency flushes, loosen it to reduce store traffic.
+
+## See also
+
+- Runnable example: [`examples/aggregator/`](https://github.com/R-Suite/ServiceConnect-NodeJS/tree/v3/examples/aggregator)
+- [`Aggregator`](/ServiceConnect-NodeJS/reference/process-managers/aggregator/)
+- [`IAggregatorStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/iaggregatorstore/)

@@ -1,0 +1,30 @@
+{
+    "name": "@serviceconnect/persistence-memory",
+    "version": "0.0.0",
+    "type": "module",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
+        }
+    },
+    "files": ["dist"],
+    "scripts": {
+        "build": "tsup",
+        "test": "vitest run",
+        "lint": "biome check ."
+    },
+    "dependencies": {
+        "@serviceconnect/core": "workspace:*"
+    },
+    "engines": { "node": ">=22" },
+    "publishConfig": { "access": "public" },
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/twatson83/ServiceConnect-NodeJS",
+        "directory": "packages/persistence-memory"
+    }
+}

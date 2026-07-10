@@ -1,0 +1,67 @@
+---
+title: Filter
+description: Predicate that decides whether to continue processing a message.
+---
+
+## Overview
+
+A `Filter` is a predicate that runs at a pipeline stage and returns `Continue` to let the message proceed or `Stop` to short-circuit. Filters receive the [`Envelope`](/ServiceConnect-NodeJS/reference/messages/envelope/) directly — not a wrapping context — so they see the headers map and the raw body bytes exactly as they are on the wire. Use [`asFilter(fn)`](#parameters) to wrap a filter function in a `FilterRegistration` that [`bus.use(...)`](/ServiceConnect-NodeJS/reference/bus/bus/#use) accepts.
+
+## Import
+
+```ts
+import { FilterAction, asFilter } from '@serviceconnect/core';
+import type { Filter, FilterRegistration } from '@serviceconnect/core';
+```
+
+## Signature
+
+```ts
+export const FilterAction = {
+  Continue: 'Continue',
+  Stop: 'Stop',
+} as const;
+export type FilterAction = (typeof FilterAction)[keyof typeof FilterAction];
+
+export type Filter = (
+  envelope: Envelope,
+  signal: AbortSignal,
+) => Promise<FilterAction> | FilterAction;
+
+export interface FilterRegistration {
+  readonly kind: 'filter';
+  readonly run: Filter;
+}
+
+export function asFilter(fn: Filter): FilterRegistration;
+```
+
+## Parameters
+
+- **`FilterAction.Continue`** — let pipeline processing proceed.
+- **`FilterAction.Stop`** — short-circuit. Subsequent filters in the stage are skipped and stage middleware never runs for this message.
+- **`Filter`** — a sync or async function `(envelope, signal) => FilterAction | Promise<FilterAction>`. On the inbound consume stages (`beforeConsuming`, `afterConsuming`, `onConsumedSuccessfully`) the `signal` aborts when the bus is shutting down. On the `outgoing` stage the `signal` comes from a fresh `AbortController` that is never aborted, so it does not fire on shutdown.
+- **`FilterRegistration`** — the typed wrapper `bus.use(...)` accepts. `kind` is the discriminant against `MiddlewareRegistration`; `run` is the wrapped filter function.
+- **`asFilter(fn)`** — convenience factory that returns `{ kind: 'filter', run: fn }`.
+
+## Example
+
+```ts
+import { FilterAction, asFilter } from '@serviceconnect/core';
+
+bus.use(
+  'beforeConsuming',
+  asFilter((envelope) => {
+    return envelope.headers.tenant ? FilterAction.Continue : FilterAction.Stop;
+  }),
+);
+```
+
+A filter accepts the raw `Envelope` — its `headers` map and `body` bytes — rather than a higher-level wrapper. That gives it access to header values stamped by other filters (or by the transport) and to the on-the-wire body without paying for deserialisation.
+
+## See also
+
+- [`Middleware`](/ServiceConnect-NodeJS/reference/filters/middleware/)
+- [`Pipeline`](/ServiceConnect-NodeJS/reference/filters/pipeline/)
+- [`Envelope`](/ServiceConnect-NodeJS/reference/messages/envelope/)
+- [Filters](/ServiceConnect-NodeJS/learn/messaging-patterns/filters/)

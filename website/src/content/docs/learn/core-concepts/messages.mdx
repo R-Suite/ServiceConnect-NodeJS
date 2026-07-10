@@ -1,0 +1,60 @@
+---
+title: Messages
+description: Plain TypeScript types, mapped to type strings via the message type registry.
+---
+
+## Overview
+
+In ServiceConnect a **message** is a plain TypeScript value. An interface, a `type` alias, or a class — whichever you prefer. There is no required decorator and no runtime base class to extend; if it serialises to JSON, it can travel on the bus. The one contract is the `Message` interface exported from `@serviceconnect/core`: every message carries a `correlationId`, and the bus generics (`register<T>`, `publish<T>`, `send<T>`, `handle<T>`) all constrain `T extends Message`. So your message types should `extends Message` to satisfy that bound.
+
+What the framework needs from you is a **type string** to put on the wire. The mapping from your TypeScript type to that string lives in the **message type registry** — an `IMessageTypeRegistry` built by `createMessageTypeRegistry()`. The registry is the single source of truth for "what does this type call itself when it leaves the process", and it is shared between the bus and the transport so that the transport can declare exchanges and bind queues for every type you care about.
+
+The on-the-wire shape is the **envelope**: your payload plus a standard set of headers (message id, correlation id, message type, source, sent time, etc.). The envelope is what makes ServiceConnect messages portable across runtimes.
+
+## Why it matters
+
+Two services agree on a type string, not on a TypeScript file. That is what lets a Node.js publisher talk to a .NET consumer (and vice versa) without sharing code: as long as both sides register the same name and the same shape, the envelope is portable.
+
+The registry also opens the door to **polymorphic delivery**. If you declare that `OrderPlaced` has a parent of `DomainEvent`, the producer publishes each `OrderPlaced` to both the `OrderPlaced` exchange and the `DomainEvent` exchange — so anyone subscribed to `DomainEvent` also receives every `OrderPlaced`. This is opt-in: you register relationships explicitly, the framework never invents them by reflecting on your prototype chain.
+
+A few practical consequences:
+
+- **Type strings need not match TypeScript names.** `OrderPlaced` and `MyCompany.Sales.OrderPlaced` are both fine. Pick what your other services use.
+- **Registration order does not matter** for parents — declare children first or last; the registry stores the parent list verbatim and the producer applies it (publishing to parent exchanges) when messages are published.
+- **One registry per process.** You hand the same `IMessageTypeRegistry` to both `createBus` and to your transport factory. That is how they stay in sync.
+- **Schema evolution is your responsibility.** ServiceConnect does not enforce versioning; it carries whatever fields are on your payload. Adding optional fields is safe; removing or renaming them is a coordinated change.
+
+## API touch-point
+
+```ts
+import { createMessageTypeRegistry, type Message } from '@serviceconnect/core';
+
+interface DomainEvent extends Message {
+  occurredAt: string;
+}
+
+interface OrderPlaced extends DomainEvent {
+  orderId: string;
+}
+
+const registry = createMessageTypeRegistry();
+registry.register<DomainEvent>('DomainEvent');
+registry.register<OrderPlaced>('OrderPlaced', { parents: ['DomainEvent'] });
+```
+
+Note that the parent relationship is declared on the **registration**, not in TypeScript. The `extends DomainEvent` clause is purely for editor support — the registry takes the parent list verbatim. That lets you express polymorphism that crosses module boundaries, including types you do not own.
+
+At runtime the bus uses the registry to:
+
+- Resolve a type string to a TypeScript type when dispatching to a handler.
+- Stamp the message's type identity onto every outbound message (the `TypeName` wire header).
+- Tell the transport which exchanges to declare and which to bind.
+
+If a message arrives with a type string the registry does not know, no handler runs — the dispatcher classifies it as `notHandled`. By default the RabbitMQ transport then **acks** that message (so it is effectively dropped), unless you enable `deadLetterUnhandled` with an error queue configured, in which case the unknown message is routed to the error queue instead. There is no implicit polymorphism. That is the trade-off for the small amount of boilerplate up front.
+
+## See also
+
+- [`Message`](/ServiceConnect-NodeJS/reference/messages/message/)
+- [`IMessageTypeRegistry`](/ServiceConnect-NodeJS/reference/extension-points/serialization/imessagetyperegistry/)
+- [Polymorphic Messages](/ServiceConnect-NodeJS/learn/messaging-patterns/polymorphic-messages/)
+- [Content-Based Routing](/ServiceConnect-NodeJS/learn/messaging-patterns/content-based-routing/)

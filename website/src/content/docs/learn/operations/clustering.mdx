@@ -1,0 +1,73 @@
+---
+title: Clustering
+description: Connect to a RabbitMQ cluster and choose queue arguments that survive node failure.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+Production RabbitMQ runs as a cluster of three or more nodes so that a single VM failure doesn't take the bus down. Point the transport at a stable endpoint (a load balancer or DNS name that fronts the cluster), pick the right queue type, and let `rabbitmq-client` deal with reconnect after a disconnect.
+
+## The problem
+
+A single-node broker is a single point of failure. The moment that one box reboots for a kernel patch, every consumer disconnects, every publisher errors, and your service-to-service traffic stops. Running multiple nodes is necessary but not sufficient — classic mirrored queues are now deprecated, default queues are not replicated, and a high `prefetch` against a single connection concentrates load on whichever node the consumer happens to land on. Without thinking about all three, you end up with a "cluster" that still has unavailability windows hidden inside it.
+
+## The solution
+
+Front the cluster with one stable endpoint, replicate state with **quorum queues**, and tune `prefetch` and `heartbeat` so failover is detected and rebalanced quickly.
+
+```ts
+import { rabbitMQWithRegistry } from '@serviceconnect/rabbitmq';
+import { createMessageTypeRegistry } from '@serviceconnect/core';
+
+const registry = createMessageTypeRegistry();
+const transport = rabbitMQWithRegistry(
+  {
+    url: 'amqp://app:secret@rabbit-lb:5672/%2F?heartbeat=10',
+    connectionName: 'orders-service',
+    consumer: {
+      prefetch: 32,
+      queueArguments: { 'x-queue-type': 'quorum' },
+    },
+  },
+  registry,
+);
+```
+
+A few things are happening in that snippet:
+
+- **Single stable endpoint.** `RabbitMQTransportOptions` exposes only a single `url`, which is forwarded verbatim to `rabbitmq-client` (it is parsed with Node's `new URL()`, so a comma-separated hostname becomes one literal, un-resolvable host — not a cluster). Point `url` at a load balancer or DNS name that fronts the cluster nodes; `rabbitmq-client` automatically reconnects through that endpoint after a disconnect. `rabbitmq-client`'s own multi-node failover lives behind its `hosts: string[]` option, which the transport does not currently surface.
+- **`heartbeat=10` query param.** AMQP heartbeats are how a partitioned client notices the broker has gone away. The transport's default `heartbeat` is `0` — heartbeats **disabled** (`buildConnectionOptions` passes `heartbeat: opts.heartbeat ?? 0`), so you must opt in. Set it via the URL `?heartbeat=N` query param (which wins) or the `heartbeat` option on `RabbitMQTransportOptions`; drop it to 10 in a load-balanced production cluster so a hung node is detected inside the next handler latency budget.
+- **Quorum queue.** Setting `x-queue-type: quorum` in `queueArguments` makes the queue Raft-replicated across the cluster. Messages survive a single node failure, and consumers are automatically reattached when their queue's leader moves.
+
+When the broker drops a consumer because the underlying node is shutting down, `bus.consumer.isCancelledByBroker` flips to `true` and the `consumerConnectivity` healthcheck reports unhealthy until the consumer reattaches on another node. Both signals are useful in liveness probes that gate traffic during planned failovers.
+
+`prefetch` interacts with cluster fairness. A high value (say 256) concentrates work onto whichever node the consumer connected to; a low value (1) spreads it but kills throughput on fast handlers. The framework default is `100`; the `prefetch: 32` shown above is a chosen value, not the default — a defensible starting point for a cluster, but benchmark before tuning further.
+
+### Failover behaviour
+
+When the node holding a queue's quorum leader is restarted, the cluster elects a new leader from the remaining replicas. From the consumer's perspective: the channel is cancelled by the broker, `isCancelledByBroker` flips true, the healthcheck reports unhealthy, and within seconds the transport reconnects to the new leader and the queue starts delivering again. The window between cancel and re-establish is typically sub-second — assuming `heartbeat` is low and the cluster has at least one healthy replica. A handler that was mid-flight when the cancellation arrived will not be acked; the broker will redeliver the message to whoever picks it up next, so designing handlers to be **idempotent** (see the linked page) is mandatory in any clustered deployment.
+
+### Connection naming
+
+`connectionName` shows up in the RabbitMQ management UI's connections panel and is the single most useful debugging knob. Set it to a stable identifier per service (and ideally per pod, if you have host info handy) so that when a node misbehaves you can match the connection to your workload immediately instead of guessing from IPs.
+
+### Choosing queue type
+
+Quorum queues are the right default for durable workloads in a cluster — they replicate via Raft, are HA by default, and have predictable behaviour during partitions. Stream queues (`x-queue-type: stream`) are a different beast for log-replay workloads; classic queues are fine for transient, non-replicated use cases like ephemeral reply queues. Don't mix types per-queue inside the same logical pipeline.
+
+## Common pitfalls
+
+<Aside type="caution">
+  - The default queue type is `classic` (single-node). If you need clustered durability, set `x-queue-type: quorum` explicitly — there is no auto-upgrade.
+  - Mirrored queues (`x-ha-policy`) are deprecated in modern RabbitMQ. Don't carry them forward from old deployments; migrate to quorum.
+  - Forgetting `heartbeat`: TCP keepalives alone do not detect a network partition fast enough. Without an AMQP heartbeat, a dead node can look healthy for minutes.
+  - `prefetch: 1` is overly conservative for most workloads. Pick a value that keeps your handlers fed without monopolising one broker node.
+</Aside>
+
+## See also
+
+- [Configuration](/ServiceConnect-NodeJS/learn/operations/configuration/)
+- [Competing Consumers](/ServiceConnect-NodeJS/learn/messaging-patterns/competing-consumers/)
+- [`RabbitMQTransportOptions`](/ServiceConnect-NodeJS/reference/configuration/transport/)

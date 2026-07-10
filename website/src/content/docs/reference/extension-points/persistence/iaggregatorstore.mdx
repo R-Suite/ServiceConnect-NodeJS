@@ -1,0 +1,58 @@
+---
+title: IAggregatorStore
+description: Buffered-message store with lease-based flush coordination.
+---
+
+## Overview
+
+`IAggregatorStore` is the persistence interface backing an [aggregator](/ServiceConnect-NodeJS/learn/messaging-patterns/aggregator/). Aggregators buffer inbound messages and release a batch when either the buffer reaches `batchSize` or a timeout elapses; the store is what holds the buffer and coordinates the flush so two concurrent consumers can't both fire the same batch.
+
+The store leases each claim it hands out. While a claim is leased, no other consumer will see the same messages — even if the same aggregator runs on another host. `releaseSnapshot` clears the lease on success; `expireDueLeases` returns claims whose lease aged out so another consumer can pick them up.
+
+## Import
+
+```ts
+import type {
+  AggregatorClaim,
+  IAggregatorStore,
+} from '@serviceconnect/core';
+```
+
+## Signature
+
+```ts
+export interface AggregatorClaim<T extends Message> {
+  readonly snapshotId: string;
+  readonly messages: readonly T[];
+  readonly aggregatorType: string;
+}
+
+export interface IAggregatorStore {
+  appendAndClaim<T extends Message>(
+    aggregatorType: string,
+    message: T,
+    batchSize: number,
+    leaseMs: number,
+  ): Promise<AggregatorClaim<T> | undefined>;
+
+  releaseSnapshot(snapshotId: string): Promise<void>;
+
+  expireDueLeases(
+    aggregatorTimeouts: ReadonlyMap<string, number>,
+    leaseMs: number,
+  ): Promise<readonly AggregatorClaim<Message>[]>;
+}
+```
+
+## Members
+
+- **`appendAndClaim(aggregatorType, message, batchSize, leaseMs)`** — append `message` to the buffer for `aggregatorType` and, if the buffer has reached `batchSize`, atomically claim the buffered messages and return them as an `AggregatorClaim` with a freshly minted `snapshotId` and a lease that expires after `leaseMs`. Otherwise return `undefined`. The append and the claim must be atomic — two concurrent appends that both push the buffer to the threshold must result in exactly one claim.
+- **`releaseSnapshot(snapshotId)`** — called after the aggregator successfully processes the batch. Implementations remove the claimed messages and clear the lease so future appends start with an empty buffer. Safe to no-op if the snapshot no longer exists (an aged-out lease, etc.).
+- **`expireDueLeases(aggregatorTimeouts, leaseMs)`** — called periodically by the flush timer. Returns one claim per aggregator whose buffered messages have aged past the per-type timeout in `aggregatorTimeouts` — i.e. the oldest eligible message is older than that timeout — so it's time to flush a partial batch that never reached `batchSize`. An expired lease (e.g. from a crashed worker) makes its messages eligible again, but those messages are still subject to the same per-type timeout gate before they are re-claimed; a batch whose lease aged out is not returned purely because the lease expired. The returned claims hold fresh leases of `leaseMs`.
+
+## See also
+
+- [`Aggregator`](/ServiceConnect-NodeJS/reference/process-managers/aggregator/)
+- [`AggregatorRegistry`](/ServiceConnect-NodeJS/reference/extension-points/registry/aggregator-registry/)
+- [Persistence configuration](/ServiceConnect-NodeJS/reference/configuration/persistence/)
+- [Aggregator](/ServiceConnect-NodeJS/learn/messaging-patterns/aggregator/)

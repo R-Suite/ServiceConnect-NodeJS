@@ -1,0 +1,57 @@
+---
+title: Queue configuration
+description: The bus queue name and where queue tuning actually lives.
+---
+
+## Overview
+
+`BusOptions.queue` is intentionally tiny: just `{ name: string }`. The queue **name** is fixed at bus construction — it is both the queue the bus consumes from and the `sourceAddress` stamped on every outgoing envelope. Everything else you might think of as "queue settings" — per-consumer prefetch, the error queue, retry policy, retry delay, audit mirroring, dead-lettering, custom queue arguments — lives on the **transport's `consumer.*` block**, not on `BusOptions.queue`.
+
+If you reach for `queue.prefetch` and the type-checker pushes back, you want [`transport.consumer.prefetch`](/ServiceConnect-NodeJS/reference/configuration/transport/#consumer) instead.
+
+## Signature
+
+```ts
+queue: { name: string };
+```
+
+- **`name`** (required) — `string`. The logical service name. Used as the queue/endpoint name and as the `sourceAddress` on every outgoing envelope.
+
+## Where to tune queue behaviour
+
+| Behaviour | Config location |
+|---|---|
+| Per-consumer parallelism (prefetch) | `transport.consumer.prefetch` (default `100`) |
+| Error queue name (or disable routing) | `transport.consumer.errorQueue` (default `'errors'`, `null` to disable) |
+| Max retries before error queue | `transport.consumer.maxRetries` (default `3`) |
+| Delay between retries | `transport.consumer.retryDelay` ms (default `3000`) |
+| Audit queue / mirroring | `transport.consumer.auditQueue` + `auditEnabled` |
+| Dead-letter unhandled messages | `transport.consumer.deadLetterUnhandled` |
+| Custom queue arguments (TTL, quorum, etc.) | `transport.consumer.queueArguments` |
+| Connection name in management UI | `transport.connectionName` |
+
+## Example
+
+```ts
+import { createBus } from '@serviceconnect/core';
+import { createRabbitMQTransport } from '@serviceconnect/rabbitmq';
+
+const bus = createBus({
+  queue: { name: 'orders' },
+  transport: createRabbitMQTransport({
+    url: 'amqp://localhost',
+    consumer: {
+      prefetch: 32,
+      maxRetries: 5,
+      errorQueue: 'orders.errors',
+      queueArguments: { 'x-queue-type': 'quorum' },
+    },
+  }),
+});
+```
+
+## See also
+
+- [Transport configuration](/ServiceConnect-NodeJS/reference/configuration/transport/)
+- [`BusOptions`](/ServiceConnect-NodeJS/reference/bus/bus-options/)
+- [Error Handling](/ServiceConnect-NodeJS/learn/operations/error-handling/)

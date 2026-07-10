@@ -1,0 +1,97 @@
+---
+title: ProcessRegistry
+description: Saga handler registry — process names, data types, message-type bindings.
+---
+
+## Overview
+
+`ProcessRegistry` is the index the bus uses to look up which process manager (saga) should run for an inbound message. It tracks three things: the set of registered data-type names, the process-name to data-type mapping, and the per-message-type list of `ProcessRegistration` entries flagged as either start or continue.
+
+Most users do not construct or call methods on `ProcessRegistry` directly. The fluent DSL on the bus is the canonical API:
+
+```ts
+bus
+  .registerProcessData<OrderState>('OrderState')
+  .registerProcess('OrderProcess', { dataType: 'OrderState', store })
+  .startsWith('OrderPlaced', new OnOrderPlaced())
+  .handles('OrderPaid', new OnOrderPaid());
+```
+
+The registry is exposed via [`bus.processRegistry`](/ServiceConnect-NodeJS/reference/bus/bus/) for inspection — tests, diagnostics, and tooling that needs to enumerate registered processes.
+
+## Import
+
+```ts
+import { ProcessRegistry } from '@serviceconnect/core';
+```
+
+`ProcessRegistration` is not exported from the package barrel. Its shape, for
+reference:
+
+```ts
+interface ProcessRegistration {
+  readonly processName: string;
+  readonly dataType: string;
+  readonly messageType: string;
+  readonly isStart: boolean;
+  readonly handler: ProcessHandler<ProcessData, Message>;
+  readonly store?: ISagaStore;             // per-process saga store
+  readonly timeoutStore?: ITimeoutStore;   // per-process timeout store
+}
+```
+
+## Signature
+
+```ts
+export class ProcessRegistry {
+  registerDataType(dataType: string): void;
+  isDataTypeRegistered(dataType: string): boolean;
+  lastRegisteredDataType(): string | undefined;
+
+  registerProcess(
+    processName: string,
+    options: { dataType: string; store?: ISagaStore; timeoutStore?: ITimeoutStore },
+  ): void;
+
+  hasAny(): boolean;
+  distinctTimeoutStores(): readonly ITimeoutStore[];
+
+  startsWith<TData extends ProcessData, TMessage extends Message>(
+    processName: string,
+    messageType: string,
+    handler: ProcessHandler<TData, TMessage>,
+  ): void;
+
+  handles<TData extends ProcessData, TMessage extends Message>(
+    processName: string,
+    messageType: string,
+    handler: ProcessHandler<TData, TMessage>,
+  ): void;
+
+  registrationsFor(messageType: string): readonly ProcessRegistration[];
+  allMessageTypes(): readonly string[];
+  processDataType(processName: string): string | undefined;
+}
+```
+
+## Members
+
+- **`registerDataType(dataType)`** — declare a saga data type name. Forwarded from `bus.registerProcessData`. Records the value and remembers it as the most-recent data type so subsequent `registerProcess` calls can bind to it implicitly.
+- **`isDataTypeRegistered(dataType)`** — `true` if `dataType` was previously declared via `registerDataType`. Used by `registerProcess` to fail fast if you forget the data-type declaration.
+- **`lastRegisteredDataType()`** — the most recent value passed to `registerDataType`, or `undefined` if none has been declared. The fluent bus DSL uses this when `registerProcess` is called without an explicit `dataType` option.
+- **`registerProcess(processName, options)`** — register a process manager under `processName`, bound to `options.dataType`. Throws `InvalidOperationError` if the data type was not previously declared. Optionally accepts a per-process `store?: ISagaStore` and `timeoutStore?: ITimeoutStore` to bind this process to dedicated saga and timeout stores instead of the bus-wide defaults.
+- **`hasAny()`** — `true` if at least one process is registered. The bus consults this during `start()` to decide whether to wire the saga branch.
+- **`distinctTimeoutStores()`** — the unique-by-reference set of `ITimeoutStore` instances across all registered processes. The bus starts one `TimeoutPoller` per distinct store.
+- **`startsWith(processName, messageType, handler)`** — bind `handler` as a saga-starting handler for `messageType`. The bus invokes this handler with a fresh saga-state object when no row exists for the correlation id.
+- **`handles(processName, messageType, handler)`** — bind `handler` as a continue handler for `messageType`. The bus only invokes this handler when a saga row already exists for the correlation id.
+- **`registrationsFor(messageType)`** — list every `ProcessRegistration` (across all processes) that fires for `messageType`. Returns an empty array when no process is interested in that type.
+- **`allMessageTypes()`** — every message-type name some process has registered against. The bus uses this to add subscriptions on the consumer.
+- **`processDataType(processName)`** — the data-type name a previously-registered process was bound to, or `undefined` if `processName` was never registered.
+
+## See also
+
+- [`Bus.registerProcess`](/ServiceConnect-NodeJS/reference/bus/bus/)
+- [`ProcessHandler`](/ServiceConnect-NodeJS/reference/process-managers/process-handler/)
+- [`ProcessData`](/ServiceConnect-NodeJS/reference/process-managers/process-data/)
+- [`ISagaStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/isagastore/)
+- [Process Manager](/ServiceConnect-NodeJS/learn/messaging-patterns/process-manager/)

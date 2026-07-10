@@ -1,69 +1,27 @@
 {
-    "name": "service-connect",
-    "version": "2.0.0",
-    "description": "Asynchronous messaging framework for Node.js over RabbitMQ (AMQP)",
-    "main": "index.js",
-    "types": "lib/index.d.ts",
-    "files": [
-        "lib/",
-        "index.js",
-        "README.md"
-    ],
+    "name": "service-connect-monorepo",
+    "private": true,
+    "type": "module",
+    "packageManager": "pnpm@9.15.9",
+    "engines": { "node": ">=22", "pnpm": ">=9" },
     "scripts": {
-        "build": "tsc",
-        "typecheck": "tsc --noEmit",
-        "test": "cross-env TS_NODE_TRANSPILE_ONLY=true mocha --require ts-node/register test/**/*.spec.ts",
-        "prepublishOnly": "npm run build && npm test",
-        "rabbitmq": "cross-env RABBITMQ_PLUGINS=rabbitmq_management docker run -p 5672:5672 -p 15672:15672 --name rabbitmq bitnami/rabbitmq:4.1.0",
-        "integration-test": "cross-env TS_NODE_TRANSPILE_ONLY=true mocha --require ts-node/register integration-test/**/*.spec.ts  --timeout 60000",
-        "auto-integration-test": "cross-env TS_NODE_TRANSPILE_ONLY=true mocha --require ts-node/register --require ./integration-test/setupDocker.ts integration-test/**/*.spec.ts  --timeout 60000"
+        "build": "turbo run build",
+        "test": "turbo run test",
+        "lint": "turbo run lint"
     },
-    "author": {
-        "name": "Tim Watson",
-        "email": "tswatson123@gmail.com",
-        "url": "https://github.com/twatson83"
-    },
-    "license": "MIT",
     "devDependencies": {
-        "@types/amqplib": "^0.10.8",
-        "@types/chai": "^5.0.0",
-        "@types/mocha": "^10.0.10",
-        "@types/node": "^25.5.2",
-        "@types/sinon": "^17.0.3",
-        "@types/uuid": "^10.0.0",
-        "chai": "^6.2.2",
-        "cross-env": "^7.0.3",
-        "mocha": "^11.7.5",
-        "sinon": "^21.0.3",
-        "ts-node": "^10.9.2",
-        "typescript": "^6.0.2"
+        "@biomejs/biome": "^1.9.0",
+        "@types/node": "^22.10.0",
+        "tsup": "^8.3.0",
+        "turbo": "^2.3.0",
+        "typescript": "^5.6.0",
+        "vitest": "^3.2.6"
     },
-    "dependencies": {
-        "amqp-connection-manager": "^5.0.0",
-        "amqplib": "^1.0.3",
-        "deepmerge": "^4.3.1",
-        "uuid": "^13.0.0"
-    },
-    "engines": {
-        "node": ">=18"
-    },
-    "repository": {
-        "type": "git",
-        "url": "https://github.com/R-Suite/ServiceConnect-NodeJS"
-    },
-    "keywords": [
-        "service",
-        "bus",
-        "message",
-        "messaging",
-        "rabbitmq",
-        "event",
-        "publish",
-        "subscribe",
-        "listen",
-        "dispatch",
-        "service connect",
-        "service-connect",
-        "connect"
-    ]
+    "pnpm": {
+        "overrides": {
+            "esbuild": ">=0.28.1",
+            "tmp": ">=0.2.6",
+            "yaml": ">=2.8.3"
+        }
+    }
 }

@@ -1,0 +1,93 @@
+---
+title: Scatter-Gather
+description: Fan out a request to N endpoints — collect every reply that arrives before the timeout.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+Scatter-Gather fans a single request out to a list of named endpoints and gathers their replies into a single array. It is the natural multi-responder generalisation of [Request/Reply](/ServiceConnect-NodeJS/learn/messaging-patterns/request-reply/): one outgoing question, many possible answers, one `await` at the call site.
+
+## When to use
+
+Use Scatter-Gather when you have **multiple candidate responders for the same question** and you want to compare their answers — price quotes from competing providers, search across shards, health checks across a cluster. Each responder works independently; the caller composes the results.
+
+It is also useful for **best-effort polling**: a status query that should accept whatever replies arrive within a deadline and move on, rather than wait for every responder to be reachable. The timeout becomes a budget, not a failure threshold.
+
+## When not to use
+
+If you have **one logical responder**, use plain [Request/Reply](/ServiceConnect-NodeJS/learn/messaging-patterns/request-reply/) — Scatter-Gather over a single endpoint is just a slower request with worse error semantics.
+
+If you need **every** responder's reply or none at all, this pattern is the wrong choice. Scatter-Gather is partial-reply tolerant by design; consider a coordinator or a saga instead when you need all-or-nothing.
+
+## Example
+
+`bus.sendRequestMulti` sends to a **single endpoint** and gathers up to `expectedReplyCount` replies, which means the typical scatter-gather shape is one request queue serviced by N competing consumers, each replying independently. Use this when your N responders are interchangeable workers (price shards, search shards) sitting on a shared queue:
+
+```ts
+interface PriceQuoteRequest extends Message {
+  sku: string;
+  qty: number;
+}
+interface PriceQuoteReply extends Message {
+  unitPrice: number;
+}
+
+try {
+  const quotes = await bus.sendRequestMulti<PriceQuoteRequest, PriceQuoteReply>(
+    'PriceQuoteRequest',
+    { correlationId: 'c-1', sku: 'SKU-1', qty: 3 },
+    { endpoint: 'pricing', expectedReplyCount: 3, timeoutMs: 5_000 },
+  );
+  quotes.forEach((q, i) => console.log(`reply ${i}`, q.unitPrice));
+} catch (err) {
+  if (err instanceof RequestTimeoutError) {
+    // Shortfall: fewer than expectedReplyCount arrived before the deadline.
+    // The partial set is attached to the error.
+    const partial = err.partialReplies as PriceQuoteReply[];
+    partial.forEach((q, i) => console.log(`reply ${i}`, q.unitPrice));
+  } else {
+    throw err;
+  }
+}
+```
+
+With `expectedReplyCount` set, the promise **resolves** only if the full count arrives before the deadline. If `timeoutMs` elapses with fewer replies, the promise **rejects** with `RequestTimeoutError` — the partial set is attached to the error's `partialReplies` property. To "take whatever arrives by the deadline" instead, **omit `expectedReplyCount`**: the gather then always resolves at the timeout with whatever replies landed.
+
+If your responders sit on **different** queues (heterogeneous services that should all see the question), use `bus.publishRequest` for a true broadcast-then-gather over the type's fanout exchange:
+
+```ts
+const replies: PriceQuoteReply[] = [];
+await bus.publishRequest<PriceQuoteRequest, PriceQuoteReply>(
+  'PriceQuoteRequest',
+  { correlationId: 'c-1', sku: 'SKU-1', qty: 3 },
+  (reply) => replies.push(reply),
+  { expectedReplyCount: 3, timeoutMs: 5_000 },
+);
+```
+
+`publishRequest` delivers a single request to every subscriber of the type's exchange and invokes `onReply` for each reply that arrives before the timeout. With `expectedReplyCount` set, the promise resolves once that many replies have landed; if the deadline passes with fewer, it **rejects** with `RequestTimeoutError` (the partial set is on `err.partialReplies`). Wrap the call in `try/catch` to handle a shortfall, or omit `expectedReplyCount` to resolve with whatever arrived by the deadline. It never accepts an `endpoint`.
+
+<Aside type="caution">
+  Partial-reply semantics can hide silent responder failures. With `expectedReplyCount` set, a shortfall surfaces as a rejected `RequestTimeoutError` — catch it and inspect `err.partialReplies` for the partial set. With `expectedReplyCount` omitted, a short set resolves silently: one or more responders dropped the request and the caller will never know unless it checks the array length. Log the discrepancy at minimum; for critical flows, treat a short reply set as an error and surface it.
+</Aside>
+
+## Behind the scenes
+
+The gather is keyed by a generated **`requestMessageId`** (via `newMessageId()`), not by `correlationId`. That is the entire mechanism: the request-reply manager registers one pending entry against that id, configured to expect up to `expectedReplyCount` replies and to resolve when the timeout elapses. Each responder echoes the id back as the `responseMessageId` header, and replies are demultiplexed onto the pending entry by matching `responseMessageId` — `correlationId` is shared across the copies for business correlation but plays no part in routing replies. With `sendRequestMulti` the request is delivered point-to-point to one endpoint queue (where competing consumers pick it up); with `publishRequest` the request fans out to every queue bound to the type's exchange. Each responder replies on the requester's private reply queue.
+
+**Multiple responders, replies collected up to the timeout.** Each reply is appended to the result set as it arrives. If `expectedReplyCount` is reached, the promise resolves early with that many replies. Otherwise the gather runs until `timeoutMs` elapses; what happens then depends on whether `expectedReplyCount` was set.
+
+The behaviour at the deadline splits on `expectedReplyCount`:
+
+- **`expectedReplyCount` set:** a shortfall (fewer than expected by the deadline) **rejects** with `RequestTimeoutError`, with the partial set attached to `err.partialReplies`. The same holds for the `publishRequest`/`onReply` form.
+- **`expectedReplyCount` omitted:** the gather chooses progress over completeness — it always **resolves** at the timeout with whatever arrived, including an empty array if nothing did. This is the case where `timeoutMs` is a budget rather than a deadline.
+
+Either way, pick `timeoutMs` carefully: it directly bounds the worst-case wall-clock cost of the operation, and there is no built-in retry.
+
+## See also
+
+- Runnable example: [`examples/request-reply/`](https://github.com/R-Suite/ServiceConnect-NodeJS/tree/v3/examples/request-reply)
+- [Request/Reply](/ServiceConnect-NodeJS/learn/messaging-patterns/request-reply/)
+- [`RequestOptions`](/ServiceConnect-NodeJS/reference/messages/options/)

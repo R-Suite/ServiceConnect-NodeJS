@@ -1,0 +1,65 @@
+---
+title: BusOptions
+description: The configuration surface for createBus — transport, queue, registry, logger, polling intervals.
+---
+
+## Overview
+
+`BusOptions` is the single argument to [`createBus`](/ServiceConnect-NodeJS/reference/bus/create-bus/). It is a plain object: two required fields (`transport`, `queue`) plus a handful of optional collaborators and tuning knobs. Process managers, aggregators, and stores are not configured here — they wire up via the `Bus` instance after construction using `registerProcessData`, `registerProcess`, and `registerAggregator`.
+
+## Import
+
+```ts
+import type { BusOptions } from '@serviceconnect/core';
+```
+
+## Signature
+
+```ts
+export interface BusOptions {
+  transport: { producer: ITransportProducer; consumer: ITransportConsumer };
+  serializer?: IMessageSerializer;
+  registry?: IMessageTypeRegistry;
+  queue: { name: string };
+  logger?: Logger;
+  defaultRequestTimeout?: number;
+  readonly timeoutPollIntervalMs?: number;
+  readonly aggregatorFlushIntervalMs?: number;
+  readonly consumeWrapper?: (cb: ConsumeCallback) => ConsumeCallback;
+}
+```
+
+## Parameters
+
+- **`transport`** (required) — `{ producer: ITransportProducer; consumer: ITransportConsumer }`. The wire-level send/receive pair. Pass the value returned by your transport package's factory, e.g. `createRabbitMQTransport({ url })` from `@serviceconnect/rabbitmq`.
+- **`queue`** (required) — `{ name: string }`. The logical service name. This is both the queue/endpoint name the bus consumes from and the `sourceAddress` stamped on every outgoing envelope.
+- **`serializer`** (optional) — `IMessageSerializer`. Defaults to `jsonSerializer(registry)`. Override to plug in MessagePack, Protobuf, or a schema-aware encoder.
+- **`registry`** (optional) — `IMessageTypeRegistry`. Defaults to a fresh `createMessageTypeRegistry()`. Pass an explicit registry when you need to share message-type registrations between the bus and a transport that needs them up-front (e.g. for exchange bindings).
+- **`logger`** (optional) — `Logger`. Defaults to `consoleLogger('info')`. Replace with your application's logger (pino, winston, OpenTelemetry-bound) for structured output.
+- **`defaultRequestTimeout`** (optional) — `number` (ms). Currently declared on `BusOptions` but **not consumed** by the bus — it is effectively inert/reserved. `sendRequest` and `sendRequestMulti` require a positive per-call `RequestOptions.timeoutMs` and throw `ArgumentOutOfRangeError` if it is missing or non-positive; they do not fall back to this option. `publishRequest` applies a hardcoded `10000` ms default when `timeoutMs` is omitted. Setting this field has no runtime effect today.
+- **`timeoutPollIntervalMs`** (optional) — `number` (ms). How often the saga timeout poller wakes to fire due timeouts. Only relevant if you have registered process managers with scheduled timeouts.
+- **`aggregatorFlushIntervalMs`** (optional) — `number` (ms). How often the aggregator flush timer wakes to flush time-windowed aggregators. Only relevant if you have registered aggregators.
+- **`consumeWrapper`** (optional) — `(cb: ConsumeCallback) => ConsumeCallback`. A pass-through around the inbound consume callback. Used by `@serviceconnect/telemetry` to start an OpenTelemetry span per message; you rarely set this yourself.
+
+## Example
+
+```ts
+import { createBus, consoleLogger, createMessageTypeRegistry } from '@serviceconnect/core';
+import { createRabbitMQTransport } from '@serviceconnect/rabbitmq';
+
+const registry = createMessageTypeRegistry();
+const bus = createBus({
+  queue: { name: 'orders' },
+  transport: createRabbitMQTransport({ url: 'amqp://localhost' }),
+  registry,
+  logger: consoleLogger('debug'),
+  timeoutPollIntervalMs: 1_000,
+});
+```
+
+## See also
+
+- [`createBus`](/ServiceConnect-NodeJS/reference/bus/create-bus/)
+- [`Bus`](/ServiceConnect-NodeJS/reference/bus/bus/)
+- [The Bus](/ServiceConnect-NodeJS/learn/core-concepts/the-bus/)
+- [Configuration](/ServiceConnect-NodeJS/learn/operations/configuration/)

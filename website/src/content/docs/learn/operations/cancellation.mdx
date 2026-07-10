@@ -1,0 +1,101 @@
+---
+title: Cancellation
+description: Stop in-flight work cleanly when the bus shuts down or a request times out.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+Cancellation in v3 is built on the platform's `AbortSignal`. Every handler gets `ctx.signal`, every outbound request accepts `{ signal }`, and `bus.stop()` stops the consumer, which aborts the handler signals so in-flight work can unwind without being killed mid-byte. (Note: any `AbortSignal` you pass to `bus.stop()` itself is currently ignored — see below.)
+
+## The problem
+
+A worker that takes thirty seconds to finish a request is fine — until the orchestrator sends SIGTERM and waits ten seconds before pulling the plug. If the handler is asleep inside a `fetch` call that does not know it has been cancelled, that work is lost: the socket eventually times out, the connection is dropped, the message is redelivered, and the side effect may have committed on the remote end without the caller knowing. The same shape appears with request/reply: the caller has stopped waiting, but the responder is still chugging through expensive work that nobody will read.
+
+The fix is not "harder timeouts" — it is **propagating cancellation** into every layer of I/O that the handler triggers, so the moment shutdown begins, every outstanding socket, query, and child process gets a chance to abort.
+
+## The solution
+
+`ConsumeContext` exposes a `signal: AbortSignal`. Forward it to anything that accepts one — `fetch`, `pg.Client.query` (via `AbortController` wiring), the MongoDB driver's `Aborted` option, child processes. When the bus stops, it stops the consumer, which aborts every active handler signal, and well-behaved I/O resolves quickly with an `AbortError`.
+
+```ts
+import type { ConsumeContext } from '@serviceconnect/core';
+
+interface DownloadImage { url: string; sha: string }
+
+bus.handle<DownloadImage>('DownloadImage', async (msg, ctx) => {
+  const resp = await fetch(msg.url, { signal: ctx.signal });
+  if (!resp.ok) throw new Error(`download failed: ${resp.status}`);
+  await persist(await resp.arrayBuffer(), { signal: ctx.signal });
+});
+```
+
+For outbound requests, `bus.sendRequest` takes `{ signal }` in its `RequestOptions`. A `sendRequest`/`sendRequestMulti` caller sees two distinct failure shapes: an aborted `signal` — whether it aborts before the publish lands or after dispatch — rejects with `AbortError`, and a missed deadline rejects with `RequestTimeoutError`. Handle them apart if you care about the difference between "I gave up" and "they never answered". (If the underlying transport send itself fails before the message reaches the broker, the original transport error is what the caller catches — `RequestSendCancelledError` is only used internally as the pending-request cancellation reason and is never surfaced to the `sendRequest` caller.)
+
+```ts
+import {
+  AbortError,
+  RequestTimeoutError,
+} from '@serviceconnect/core';
+
+const controller = new AbortController();
+setTimeout(() => controller.abort(), 250);
+
+try {
+  const reply = await bus.sendRequest<PriceQuoteRequest, PriceQuoteReply>(
+    'PriceQuoteRequest',
+    { correlationId: 'c-1', sku: 'SKU-1', qty: 3 },
+    { endpoint: 'pricing', timeoutMs: 5_000, signal: controller.signal },
+  );
+} catch (err) {
+  if (err instanceof AbortError) { /* signal aborted, before or after dispatch */ }
+  else if (err instanceof RequestTimeoutError) { /* no reply within timeoutMs */ }
+  else throw err; // e.g. a transport send failure surfaces the underlying error
+}
+```
+
+At the process boundary, wire OS signals to `bus.stop()`. Note that `bus.stop()` accepts an `AbortSignal` parameter but currently **ignores it** — there is no signal-bounded wait and nothing is force-aborted at a deadline. `stop()` waits for in-flight handlers to drain after aborting their `ctx.signal`s; if a handler ignores its signal, `stop()` will wait for it rather than killing it at a deadline. The parameter is reserved for a future hard-deadline implementation, so passing one is harmless but has no effect today.
+
+```ts
+const shutdown = new AbortController();
+process.once('SIGTERM', () => shutdown.abort());
+process.once('SIGINT', () => shutdown.abort());
+
+await bus.start();
+await new Promise((resolve) => shutdown.signal.addEventListener('abort', resolve, { once: true }));
+await bus.stop(AbortSignal.timeout(10_000));
+```
+
+### Composing signals
+
+A common pattern is to combine the handler's signal with a local deadline — for example, "abort if the bus stops **or** if this DB query has been running for more than two seconds". Use `AbortSignal.any([...])` (Node 20+) to merge them:
+
+```ts
+bus.handle<RunReport>('RunReport', async (msg, ctx) => {
+  const deadline = AbortSignal.timeout(2_000);
+  const composed = AbortSignal.any([ctx.signal, deadline]);
+  const rows = await db.query(reportSql, { signal: composed });
+  await emit(rows, { signal: ctx.signal });
+});
+```
+
+The composed signal fires as soon as either source aborts; the rest of the handler sees a normal `AbortError` and can decide whether to rethrow (causing a retry) or swallow.
+
+### What `bus.stop()` actually does
+
+`bus.stop()` runs in three phases. First it stops the broker consumer so no new deliveries arrive. Second it aborts every active handler signal so in-flight work can wind down. Third it waits for handlers to finish — this wait is currently *unbounded* (the `AbortSignal` argument to `stop()` is ignored, so there is no deadline) — then closes channels and connections. Handlers that ignore `ctx.signal` will be cancelled at the connection close, not gracefully. That's why threading the signal through every async call matters: the difference between "5ms shutdown" and "10s shutdown" is whether your I/O is signal-aware.
+
+## Common pitfalls
+
+<Aside type="caution">
+  - Forgetting to thread `ctx.signal` into long-running I/O — the handler will keep running past `bus.stop()`, the broker eventually redelivers, and you may double-process.
+  - Confusing timeout with cancellation: `timeoutMs` raises `RequestTimeoutError`; cancellation via `signal` raises `AbortError`. Catch them separately if the distinction matters to your business logic.
+  - Swallowing `AbortError` inside a handler and resolving normally — the framework will ack the message even though the work didn't finish. If cancellation should be retryable, rethrow.
+</Aside>
+
+## See also
+
+- [Hosting](/ServiceConnect-NodeJS/learn/operations/hosting/)
+- [`ConsumeContext`](/ServiceConnect-NodeJS/reference/handlers/consume-context/)
+- [Request/Reply](/ServiceConnect-NodeJS/learn/messaging-patterns/request-reply/)

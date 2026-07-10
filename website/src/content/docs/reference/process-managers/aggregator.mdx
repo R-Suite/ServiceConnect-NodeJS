@@ -1,0 +1,80 @@
+---
+title: Aggregator
+description: Abstract base class for batching consumed messages and executing them as a single unit.
+---
+
+## Overview
+
+`Aggregator<T>` is the abstract base class you subclass to batch inbound messages of one type and execute them together. The bus claims a window's worth of messages into an [`IAggregatorStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/iaggregatorstore/), and when either the batch reaches the configured size or the timeout elapses it calls `execute(messages, signal)` with the buffered batch. Three abstract members drive the behaviour: `batchSize()`, `timeout()`, and `execute(...)`.
+
+Two flush paths exist, with different lease windows. The size-triggered path runs inline as messages arrive and claims the batch under a lease of `timeout()` × 5. The time-based path is a periodic flush timer that runs every `aggregatorFlushIntervalMs` (default `250` ms) and uses the bus's configured lease of `30_000` ms to expire batches whose oldest message has aged past `timeout()`. A thrown `execute(...)` leaves whichever lease is in place until it expires, then the batch is re-claimed and re-processed.
+
+## Import
+
+```ts
+import { Aggregator } from '@serviceconnect/core';
+```
+
+## Signature
+
+```ts
+export abstract class Aggregator<T extends Message> {
+  abstract batchSize(): number;
+  abstract timeout(): number;
+  abstract execute(messages: readonly T[], signal: AbortSignal): Promise<void>;
+}
+```
+
+## Required overrides
+
+- **`batchSize(): number`** — the maximum number of messages to buffer before flushing. Must be a positive integer; registration throws `AggregatorConfigurationError` otherwise.
+- **`timeout(): number`** — the maximum age in milliseconds of the oldest buffered message before a partial batch is flushed. Must be a positive finite number; registration throws `AggregatorConfigurationError` otherwise.
+- **`execute(messages, signal): Promise<void>`** — the business logic. `messages` is a `readonly` array of the buffered messages, in the order the bus received them. `signal` aborts when the bus is stopping; pass it into long-running awaits to participate in graceful shutdown. Throwing from `execute` does not revert the claim: the lease on the batch in the [`IAggregatorStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/iaggregatorstore/) is left in place, and the batch is re-claimed and re-processed only after that lease expires.
+
+## Registration
+
+```ts
+bus.registerAggregator<T extends Message>(
+  messageType: string,
+  aggregator: Aggregator<T>,
+  options: { store: IAggregatorStore },
+): Bus;
+```
+
+- **`messageType`** — the type-name to aggregate. The bus calls `bus.registerMessage(messageType)` for you internally so a separate `registerMessage` call is not required.
+- **`aggregator`** — your `Aggregator<T>` subclass instance.
+- **`options.store`** — the [`IAggregatorStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/iaggregatorstore/) backing this aggregator. Registration throws `AggregatorConfigurationError` if `store` is missing.
+
+## Example
+
+```ts
+import { Aggregator, type Message, createBus } from '@serviceconnect/core';
+import { memoryAggregatorStore } from '@serviceconnect/persistence-memory';
+
+interface OrderLine extends Message {
+  orderId: string;
+  sku: string;
+}
+
+class BatchOrderLines extends Aggregator<OrderLine> {
+  batchSize(): number {
+    return 100;
+  }
+  timeout(): number {
+    return 60_000;
+  }
+  async execute(messages: readonly OrderLine[], _signal: AbortSignal): Promise<void> {
+    await warehouse.bulkPick(messages);
+  }
+}
+
+bus.registerAggregator<OrderLine>('OrderLine', new BatchOrderLines(), {
+  store: memoryAggregatorStore(),
+});
+```
+
+## See also
+
+- [`Bus`](/ServiceConnect-NodeJS/reference/bus/bus/)
+- [`IAggregatorStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/iaggregatorstore/)
+- [Aggregator](/ServiceConnect-NodeJS/learn/messaging-patterns/aggregator/)

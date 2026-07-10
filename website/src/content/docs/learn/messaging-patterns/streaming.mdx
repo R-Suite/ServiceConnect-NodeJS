@@ -1,0 +1,91 @@
+---
+title: Streaming
+description: Chunked publish — send a large payload as ordered chunks, consume as an async iterable.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+Streaming carves a large payload into a sequence of small, ordered **chunks** and ships them as individual messages on the bus. The sender opens a stream to a target queue, awaits each `sendChunk(...)` call, and finally signals `complete()` (or `fault(reason)` on error). The receiver registers a handler that exposes the stream as an `AsyncIterable<T>`, so application code consumes it with a plain `for await` loop — no buffering, no manual reassembly.
+
+Every chunk is a real message that flows through the same exchange, queue, and middleware pipeline as any other typed message. Streaming is not a side-channel; it is a small framing convention layered on top of the normal wire format.
+
+## When to use
+
+Reach for streaming whenever a payload is **too large for a single message** but naturally decomposes into independent pieces: file uploads, CSV rows, query result pages, image tiles, append-only event chunks. The sender keeps memory bounded, the broker keeps messages small, and the receiver can start work as soon as the first chunk lands instead of waiting for the whole payload.
+
+It also helps when the producer is **rate-limited by I/O** — reading a file from disk or an upstream API — and you want the receiver to make incremental progress in parallel. `await stream.sendChunk(...)` provides natural backpressure: the sender will not get ahead of the broker's ability to enqueue.
+
+## When not to use
+
+If the payload fits comfortably in one message (kilobytes, not megabytes), just call `bus.send` or `bus.publish` — streaming adds bookkeeping you do not need. If the receiver needs random access to the data, streaming is the wrong shape; ship a reference to object storage instead. And if chunks are independently meaningful events the rest of the system cares about — say, individual `OrderPlaced` messages — those are events, not a stream, and belong on [Pub/Sub](/ServiceConnect-NodeJS/learn/messaging-patterns/pub-sub/).
+
+<Aside type="caution">
+  A faulted stream surfaces as a `StreamFaultedError` thrown from the `for await` loop on the receiver — that is the only error the loop can ever reject with, so the receiver handler must let it propagate (or catch it deliberately); silently swallowing it will hide real data loss. An ordinary sequence gap does **not** throw — the receiver simply waits for the missing chunk. `StreamSequenceError` is a separate buffer-overflow guard raised inside the dispatch path (when more than `maxBufferedChunks` out-of-order chunks pile up) and is handled there, not surfaced to the `for await` loop.
+</Aside>
+
+## Example
+
+The sender opens a stream to the `uploads` queue and writes chunks until the source is exhausted.
+
+```ts
+import { type Message, createBus } from '@serviceconnect/core';
+import { createRabbitMQTransport } from '@serviceconnect/rabbitmq';
+
+interface Chunk extends Message {
+  index: number;
+  data: string;
+}
+
+const sender = createBus({
+  transport: createRabbitMQTransport({ url: 'amqp://localhost' }),
+  queue: { name: 'uploader' },
+}).registerMessage<Chunk>('Chunk');
+
+await sender.start();
+
+const stream = await sender.openStream<Chunk>('uploads', 'Chunk');
+for (const part of source) {
+  await stream.sendChunk({ correlationId: 'c-1', index: part.index, data: part.body });
+}
+await stream.complete();
+```
+
+The receiver registers a stream handler for `Chunk` and consumes the chunks as an async iterable — every chunk arrives in sequence, even if the broker delivered them out of order.
+
+```ts
+import { type Message, createBus } from '@serviceconnect/core';
+import { createRabbitMQTransport } from '@serviceconnect/rabbitmq';
+
+interface Chunk extends Message {
+  index: number;
+  data: string;
+}
+
+const receiver = createBus({
+  transport: createRabbitMQTransport({ url: 'amqp://localhost' }),
+  queue: { name: 'uploads' },
+})
+  .registerMessage<Chunk>('Chunk')
+  .handleStream<Chunk>('Chunk', async (stream) => {
+    for await (const chunk of stream) {
+      await sink.write(chunk.data);
+    }
+  });
+
+await receiver.start();
+```
+
+## Behind the scenes
+
+- Each chunk carries headers from `StreamHeaders`: `StreamId` ties chunks together, `SequenceNumber` orders them, `IsStartOfStream` and `IsEndOfStream` mark the boundaries, and `StreamFault` carries the reason string when the sender aborts via `stream.fault(...)`.
+- The receiver buffers out-of-order chunks internally and yields them to the `for await` loop in sequence — the application code never sees the reordering work.
+- An ordinary sequence gap does not surface as an error — the receiver waits for the missing chunk. If too many out-of-order chunks accumulate (more than `maxBufferedChunks`, default 1000), the dispatch path raises `StreamSequenceError`. Faults sent by `stream.fault(reason)` surface as `StreamFaultedError` when the loop consumes them. Both errors are exported from `@serviceconnect/core`.
+- Backpressure is built in: the sender awaits each `sendChunk(...)`, so it never gets ahead of the broker. If the broker slows down, the sender slows down too — no unbounded in-memory queue.
+
+## See also
+
+- Runnable example: [`examples/streaming/`](https://github.com/R-Suite/ServiceConnect-NodeJS/tree/v3/examples/streaming)
+- [`StreamHeaders`](/ServiceConnect-NodeJS/reference/handlers/stream-handler/)
+- [`StreamReceiver`](/ServiceConnect-NodeJS/reference/handlers/stream-handler/)

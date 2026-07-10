@@ -1,0 +1,67 @@
+---
+title: Polymorphic Messages
+description: Bind handlers to base types and have a single publish fan out to every concrete-type consumer.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+Polymorphic messages let you model an inheritance hierarchy in your event schema and have the bus respect it on the wire. Declare that `OrderPlaced` is a `DomainEvent`, register a handler against `DomainEvent`, and that handler will fire for **every** subtype — `OrderPlaced`, `OrderCancelled`, `RefundIssued` — without any per-type wiring. One publish of an `OrderPlaced` fans out to every queue bound to `OrderPlaced` **and** every queue bound to a declared parent.
+
+## When to use
+
+Reach for polymorphism when you have an open-ended family of events and a cross-cutting consumer that doesn't care which specific variant arrived. Audit logs, outbox forwarders, search indexers, and metrics collectors all benefit: they want every `DomainEvent` that passes through the system, and they should keep working when you add a new subtype tomorrow.
+
+It is also the right shape when a downstream context truly only needs the **base** contract. A reporting service that records `{ correlationId, occurredAt }` does not need to know about discriminator-specific fields — by handling `DomainEvent` it stays decoupled from the producer's catalogue.
+
+## When not to use
+
+Avoid polymorphism when each subtype carries materially different semantics that demand bespoke handling. If your `DomainEvent` handler has to `switch` on `messageType` and branch into wildly different logic, you have lost the win — register concrete handlers via [Pub/Sub](/ServiceConnect-NodeJS/learn/messaging-patterns/pub-sub/) instead.
+
+<Aside type="caution">
+  Base-type fanout depends on the **producing** side. A producer that is **not** built with `rabbitMQWithRegistry` (or whose registry lacks the `parents` declaration) does not know `OrderPlaced` is a `DomainEvent`, so it publishes `OrderPlaced` only to the `OrderPlaced` exchange and never to the `DomainEvent` exchange — `DomainEvent` subscribers never see it, even when they are correctly bound to the `DomainEvent` exchange. Wire the producer with `rabbitMQWithRegistry` and keep the registry's `parents` definitions consistent across services.
+</Aside>
+
+## Example
+
+```ts
+import { type Message, createBus, createMessageTypeRegistry } from '@serviceconnect/core';
+import { rabbitMQWithRegistry } from '@serviceconnect/rabbitmq';
+
+interface DomainEvent extends Message {
+  occurredAt: string;
+}
+interface OrderPlaced extends DomainEvent {
+  orderId: string;
+}
+
+const registry = createMessageTypeRegistry();
+registry.register<DomainEvent>('DomainEvent');
+registry.register<OrderPlaced>('OrderPlaced', { parents: ['DomainEvent'] });
+
+const bus = createBus({
+  transport: rabbitMQWithRegistry({ url: 'amqp://localhost' }, registry),
+  queue: { name: 'audit' },
+})
+  .registerMessage<DomainEvent>('DomainEvent')
+  .handle<DomainEvent>('DomainEvent', async (e, ctx) => {
+    await audit.log(e.occurredAt, ctx.messageType);
+  });
+```
+
+The `audit` queue handles `DomainEvent`. When a producer somewhere else in the topology publishes `OrderPlaced`, the audit consumer receives it — because `OrderPlaced` was registered with `DomainEvent` as a parent. The handler still gets the full payload; it just sees it through the `DomainEvent` lens. `ctx.messageType` (equivalently `ctx.headers.messageType`) carries the **concrete** type string, so downstream code can disambiguate when needed.
+
+## Behind the scenes
+
+- The parents-of mapping is captured at registration time on the registry: `registry.register<OrderPlaced>('OrderPlaced', { parents: ['DomainEvent'] })` records that `OrderPlaced` is-a `DomainEvent`.
+- A consumer binds its queue only to the exchanges for the types it actually **consumes** (handlers, sagas, aggregators) — register and handle `DomainEvent` and the queue binds to the `DomainEvent` exchange. Consumers do **not** add parent-exchange bindings; binding a queue to both a type and its ancestor would deliver a multi-published message twice.
+- The fanout happens on the **producing** side, by multi-publish. When a producer built with `rabbitMQWithRegistry` publishes `OrderPlaced`, it resolves the ancestor closure via `registry.parentsOf` — `OrderPlaced` plus `DomainEvent` (transitively) — and publishes a copy of the message to **each** of those type exchanges: the `OrderPlaced` exchange and the `DomainEvent` exchange.
+- A `DomainEvent` subscriber receives the copy published to the `DomainEvent` exchange; an `OrderPlaced` subscriber receives the copy published to the `OrderPlaced` exchange. Each exchange fans its own copy out to the queues bound to it. There are **no** exchange-to-exchange bindings — the producer addresses every ancestor exchange directly.
+- This is why the producer uses `rabbitMQWithRegistry`: it threads the registry's `parentsOf` lookup into the transport so the producer can resolve and publish to ancestor exchanges. The plain `createRabbitMQTransport` factory has no view of inheritance, so a published `OrderPlaced` reaches only the `OrderPlaced` exchange.
+
+## See also
+
+- Runnable example: [`examples/polymorphic/`](https://github.com/R-Suite/ServiceConnect-NodeJS/tree/v3/examples/polymorphic)
+- [`IMessageTypeRegistry`](/ServiceConnect-NodeJS/reference/extension-points/serialization/imessagetyperegistry/)
+- [Pub/Sub](/ServiceConnect-NodeJS/learn/messaging-patterns/pub-sub/)

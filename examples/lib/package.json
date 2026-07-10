@@ -1,0 +1,14 @@
+{
+    "name": "@serviceconnect/example-lib",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "main": "./src/index.ts",
+    "exports": {
+        ".": "./src/index.ts"
+    },
+    "scripts": {
+        "lint": "biome check ."
+    },
+    "engines": { "node": ">=22" }
+}

@@ -1,0 +1,31 @@
+{
+    "name": "@serviceconnect/core",
+    "version": "0.0.0",
+    "type": "module",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
+        },
+        "./testing": {
+            "types": "./dist/testing/index.d.ts",
+            "default": "./dist/testing/index.js"
+        }
+    },
+    "files": ["dist"],
+    "scripts": {
+        "build": "tsup",
+        "test": "vitest run",
+        "lint": "biome check ."
+    },
+    "engines": { "node": ">=22" },
+    "publishConfig": { "access": "public" },
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/twatson83/ServiceConnect-NodeJS",
+        "directory": "packages/core"
+    }
+}

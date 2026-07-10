@@ -1,0 +1,66 @@
+---
+title: Handlers
+description: Functions or classes that consume typed messages with a ConsumeContext.
+---
+
+## Overview
+
+A **handler** is the unit of work ServiceConnect runs when a message arrives. It is just a function — or a class with a `handle` method — that takes two arguments: the deserialised message and a `ConsumeContext`. You register handlers against type strings; the bus matches the incoming `MessageType` header and dispatches.
+
+Function handlers are the common case:
+
+```ts
+bus.handle<OrderPlaced>('OrderPlaced', async (msg, ctx) => { /* ... */ });
+```
+
+Class-based handlers (a `HandlerClass` with a `HandlerFactory`) exist for cases where you want per-message construction — useful when you are wiring through a DI container that builds a scope per consume, so that scoped services (database units of work, request loggers) are fresh for every message.
+
+## Why it matters
+
+A handler is the only place where messaging meets business logic. Everything else — exchanges, queues, retries, headers — is plumbing. ServiceConnect's contract is therefore narrow on purpose: take a typed payload, take a context, do work, signal the outcome. There is no `IConsumer<T>` ceremony, no required interface beyond the handler signature itself.
+
+The `ConsumeContext` is what makes a handler more than a function. It carries:
+
+- The flattened message metadata — `ctx.headers`, plus `ctx.messageId`, `ctx.correlationId`, `ctx.messageType` lifted onto the context directly (there is no nested `envelope` object).
+- `ctx.reply<TRep>(typeName, payload, options?)` — replies to the sender's queue (the inbound `sourceAddress`; it throws if that header is absent), with an optional `ReplyOptions` third argument. The only outbound primitive on `ConsumeContext` itself.
+- `ctx.bus` — the same bus instance that dispatched the message. Reach through it (`ctx.bus.publish(...)`, `ctx.bus.send(...)`) when a handler needs to emit follow-up traffic.
+- The active `AbortSignal` (`ctx.signal`) — so long-running work can be cancelled when the bus stops.
+
+How the handler ends matters too:
+
+- **Return normally** — the message is acked and removed from the queue. This is the success path. Handlers return `Promise<void>`; there is no return-value sentinel.
+- **Throw** — the framework redelivers, then routes the message to an error queue. Throw when you have hit a transient fault and want another attempt, or when the message is poison and belongs in the error queue. The retry count is visible to the handler via `ctx.headers.RetryCount` if you need to gate behaviour on it (the runtime header is the capitalised AMQP key `RetryCount`; the typed `MessageHeaders.retryCount` field is not populated by the transport). Retries are a transport concern, not a core `BusOptions` field: with `@serviceconnect/rabbitmq`, `consumer.maxRetries` (default `3`) is the total delivery budget — that default gives the initial delivery plus 2 redeliveries before the message lands in `consumer.errorQueue` (default `'errors'`).
+
+There is no "soft retry" sentinel — throw is the only signal for both transient retry and permanent failure. The distinction is in your error type and the transport's `consumer.maxRetries`, not in the return value.
+
+The bus also guarantees ordering inside a single handler invocation: any awaits inside your handler complete before the message is acked. There is no fire-and-forget unless you explicitly write it.
+
+## API touch-point
+
+```ts
+bus.handle<OrderPlaced>('OrderPlaced', async (msg, ctx) => {
+  if (await alreadyProcessed(msg.orderId)) {
+    return;
+  }
+  await charge(msg.orderId, msg.total);
+  await ctx.bus.publish<OrderCharged>('OrderCharged', {
+    correlationId: msg.correlationId,
+    orderId: msg.orderId,
+  });
+});
+```
+
+Three things to note:
+
+- `bus.handle<T>(typeName, fn)` is fully typed — the `T` parameter ties the runtime string to the TypeScript shape. Mismatches surface as compile errors at the call site.
+- The early `return` short-circuits to ack without further work. That is the idempotency hook: check, return, done. (See the [Idempotency](/ServiceConnect-NodeJS/learn/operations/idempotency/) guide for the pattern in full.)
+- Publishing follow-up traffic uses `ctx.bus.publish(...)` (or `ctx.bus.send(...)`). Carry `msg.correlationId` forward on the new payload so the whole conversation traces back to the same id — there is no implicit correlation copy. The narrow `ConsumeContext` surface (only `ctx.reply` for direct outbound) is deliberate: see the [`ConsumeContext` reference](/ServiceConnect-NodeJS/reference/handlers/consume-context/).
+
+You can register more than one handler for a type — they run sequentially per message — but the common case is one handler per type per service.
+
+## See also
+
+- [`Handler`](/ServiceConnect-NodeJS/reference/handlers/handler/)
+- [`ConsumeContext`](/ServiceConnect-NodeJS/reference/handlers/consume-context/)
+- [`ConsumeResult`](/ServiceConnect-NodeJS/reference/handlers/consume-result/)
+- [Error Handling](/ServiceConnect-NodeJS/learn/operations/error-handling/)

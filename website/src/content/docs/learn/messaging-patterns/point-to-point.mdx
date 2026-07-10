@@ -1,0 +1,56 @@
+---
+title: Point-to-Point
+description: Send a command to a single named queue — exactly one consumer receives it.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+Point-to-Point is the **command** pattern: a producer **sends** a typed message addressed to a specific queue, and exactly one consumer reading from that queue picks it up. Where [Pub/Sub](/ServiceConnect-NodeJS/learn/messaging-patterns/pub-sub/) broadcasts a fact to anyone interested, `bus.send` directs an instruction at a named recipient.
+
+## When to use
+
+Use Point-to-Point for **commands** — messages whose name is an imperative verb: `ChargeCard`, `ReserveStock`, `SendWelcomeEmail`. The publisher has a clear intent and a clear owner; the message envelope names the queue that owns that capability.
+
+It is also the right pattern for **work distribution**. Run multiple processes consuming from the same queue and RabbitMQ load-balances delivery between them — each message is handled by exactly one worker. This is the [Competing Consumers](/ServiceConnect-NodeJS/learn/messaging-patterns/competing-consumers/) pattern, and `send` is how you produce work for it.
+
+## When not to use
+
+If multiple unrelated services need to react to the event, you want [Pub/Sub](/ServiceConnect-NodeJS/learn/messaging-patterns/pub-sub/), not Point-to-Point. Sending the same command to two queues "to make sure they both get it" is a code smell — the intent is no longer a command, it is an event, and the framework has a better idiom for that.
+
+<Aside type="caution">
+  Unlike publish, only one consumer receives the message even if several processes are running. If a second service quietly starts consuming from the same queue, it will steal half the traffic. Queue names are part of your deployment contract — pick them deliberately and treat them as load-bearing.
+</Aside>
+
+## Example
+
+```ts
+interface ChargeCard extends Message {
+  orderId: string;
+  total: number;
+}
+
+await bus.send<ChargeCard>(
+  'ChargeCard',
+  { correlationId: 'c-1', orderId: 'o-1', total: 49.99 },
+  { endpoint: 'payments' },
+);
+```
+
+The `endpoint` field on the options object — `'payments'` — is the queue you are sending to. The producer does not need to know whether one process or twenty are consuming that queue; RabbitMQ handles dispatch. The receiving service registers a handler for `ChargeCard` exactly the same way it would for any other typed message.
+
+## Behind the scenes
+
+`send` **skips the fanout exchange entirely**. The producer publishes to the AMQP default exchange with the endpoint name as the routing key, which RabbitMQ routes directly to the queue of that name. No type-named exchange is involved on the outbound side — the envelope still carries the `MessageType` header (`ChargeCard`), but the routing decision is made by queue name, not by type.
+
+If multiple processes consume from `payments`, **RabbitMQ load-balances message delivery** across the active consumers using basic round-robin (with prefetch). Each message is delivered to exactly one consumer; if that consumer crashes before acking, the broker redelivers to another. This is the foundation of the [Competing Consumers](/ServiceConnect-NodeJS/learn/messaging-patterns/competing-consumers/) pattern: horizontal scale-out costs you a process, not a code change.
+
+Because `send` writes directly to a known queue, it is also the lowest-overhead path on the wire — one exchange hop fewer than publish.
+
+## See also
+
+- Runnable example: [`examples/send/`](https://github.com/R-Suite/ServiceConnect-NodeJS/tree/v3/examples/send)
+- [Competing Consumers](/ServiceConnect-NodeJS/learn/messaging-patterns/competing-consumers/)
+- [`bus.send`](/ServiceConnect-NodeJS/reference/bus/bus/)
+- [`SendOptions`](/ServiceConnect-NodeJS/reference/messages/options/)

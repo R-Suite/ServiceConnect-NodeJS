@@ -1,0 +1,128 @@
+---
+title: Telemetry
+description: OpenTelemetry producer wrapper and consume wrapper from @serviceconnect/telemetry.
+---
+
+## Overview
+
+`@serviceconnect/telemetry` adds OpenTelemetry tracing and metrics to a ServiceConnect bus without baking OTel into the core. It declares `@opentelemetry/api` as its only **peer dependency** so the caller controls the OTel API/SDK version and brings the SDK (`@opentelemetry/sdk-trace-node`, a context manager, a propagator, etc.); its only direct runtime dependencies are `@serviceconnect/core` and `@opentelemetry/semantic-conventions`. Two exports do all the work — `telemetryProducer` wraps an `ITransportProducer` to emit producer spans, and `telemetryConsumeWrapper` returns a function suitable for [`BusOptions.consumeWrapper`](/ServiceConnect-NodeJS/reference/bus/bus-options/) that wraps consumer dispatch in a consumer span. W3C trace context flows automatically through the envelope headers.
+
+Spans follow OTel semantic conventions: producer spans are named `<destination> publish` (or `<endpoint> send`) and consumer spans are named `<messageType> process`. Both carry standard `messaging.*` attributes — `messaging.system`, `messaging.operation`, `messaging.destination.name`, `messaging.message.id`, `messaging.message.conversation_id`, `messaging.message.body.size`.
+
+## Import
+
+```ts
+import {
+  telemetryConsumeWrapper,
+  telemetryProducer,
+} from '@serviceconnect/telemetry';
+import type { TelemetryOptions } from '@serviceconnect/telemetry';
+```
+
+## TelemetryOptions
+
+```ts
+import type { Meter, Tracer } from '@opentelemetry/api';
+
+export interface TelemetryOptions {
+  readonly tracer?: Tracer;
+  readonly meter?: Meter;
+  readonly messagingSystem?: string;
+}
+```
+
+- **`tracer`** (optional) — a `Tracer` from `@opentelemetry/api`. When omitted the wrappers call `trace.getTracer('@serviceconnect/telemetry')` and pick up whichever provider you registered globally.
+- **`meter`** (optional) — a `Meter`. When omitted the wrappers fall back to the global meter and create the counters and histograms lazily.
+- **`messagingSystem`** (optional) — the value to use for the `messaging.system` attribute. Defaults to `'rabbitmq'`. Set this to the appropriate identifier for non-RabbitMQ transports.
+
+Both `telemetryProducer` and `telemetryConsumeWrapper` accept the same `TelemetryOptions`; pass the same object to both if you want them to share a tracer / meter.
+
+## telemetryProducer
+
+```ts
+import type { ITransportProducer } from '@serviceconnect/core';
+
+export function telemetryProducer(
+  underlying: ITransportProducer,
+  options?: TelemetryOptions,
+): ITransportProducer;
+```
+
+Wraps an [`ITransportProducer`](/ServiceConnect-NodeJS/reference/extension-points/transport/itransportproducer/) and returns a new producer that:
+
+- Starts a `SpanKind.PRODUCER` span around each `publish`, `send`, and `sendBytes` call. Span name is `<destination> publish` for `publish` and `<endpoint> send` for `send`/`sendBytes`.
+- Stamps the producer attributes (`messaging.system`, `messaging.operation`, `messaging.destination.name`, `messaging.message.body.size`, plus `messaging.message.id` / `messaging.message.conversation_id` when present in `opts.headers`).
+- Injects the W3C trace context (`traceparent` / `tracestate`) into the outgoing `opts.headers` so the downstream consumer can extract it.
+- Records the `messaging.publish.duration` histogram for every call (tagged with `error.type` from the thrown error's name on failure), and increments the `messaging.client.published.messages` counter on success.
+- Re-throws after recording the exception and ending the span so calling code still sees the original failure.
+
+The returned producer transparently forwards `isHealthy`, `supportsRoutingKey`, `maxMessageSize`, and `Symbol.asyncDispose` to the underlying producer.
+
+Wrap the producer at bus construction (the transport's `producer` / `consumer` are readonly, so wrap them in the `transport` you pass to `createBus` rather than mutating the transport object):
+
+```ts
+const transport = createRabbitMQTransport({ url: 'amqp://localhost' });
+const bus = createBus({
+  transport: {
+    producer: telemetryProducer(transport.producer),
+    consumer: transport.consumer,
+  },
+  // ...rest of your bus options
+});
+```
+
+## telemetryConsumeWrapper
+
+```ts
+import type { ConsumeCallback } from '@serviceconnect/core';
+
+export function telemetryConsumeWrapper(
+  options?: TelemetryOptions,
+): (cb: ConsumeCallback) => ConsumeCallback;
+```
+
+Returns a function suitable for [`BusOptions.consumeWrapper`](/ServiceConnect-NodeJS/reference/bus/bus-options/). When the bus dispatches an inbound envelope the wrapped callback:
+
+- Extracts the W3C trace context from `envelope.headers` using the configured propagator.
+- Starts a `SpanKind.CONSUMER` span named `<messageType> process` as a child of the extracted context (so it joins the producer's trace).
+- Stamps the same `messaging.*` attributes the producer side stamps, plus `messaging.message.id` and `messaging.message.conversation_id` when those headers are present.
+- Runs the inner consume callback under the new span via `context.with(...)` so user handlers see the right active span.
+- Sets the span status to `OK` when the inner result is `{ success: true }`, or to `ERROR` (recording the exception) when `{ success: false, error }`.
+- Records the `messaging.process.duration` histogram and increments the `messaging.client.consumed.messages` counter (tagged with `messaging.outcome` — `success`, `error`, or `retry`) before ending the span.
+
+## Wiring example
+
+The snippet below wires both wrappers into a bus, using the Node SDK and async-hooks context manager.
+
+```ts
+import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import { AsyncHooksContextManager } from '@opentelemetry/context-async-hooks';
+import { context, propagation } from '@opentelemetry/api';
+import { W3CTraceContextPropagator } from '@opentelemetry/core';
+import { telemetryProducer, telemetryConsumeWrapper } from '@serviceconnect/telemetry';
+import { createBus } from '@serviceconnect/core';
+import { createRabbitMQTransport } from '@serviceconnect/rabbitmq';
+
+context.setGlobalContextManager(new AsyncHooksContextManager().enable());
+propagation.setGlobalPropagator(new W3CTraceContextPropagator());
+const tracer = new NodeTracerProvider();
+tracer.register();
+
+const transport = createRabbitMQTransport({ url: 'amqp://localhost' });
+
+const bus = createBus({
+  transport: {
+    producer: telemetryProducer(transport.producer),
+    consumer: transport.consumer,
+  },
+  queue: { name: 'orders' },
+  consumeWrapper: telemetryConsumeWrapper(),
+});
+```
+
+## See also
+
+- [`Bus`](/ServiceConnect-NodeJS/reference/bus/bus/)
+- [`BusOptions`](/ServiceConnect-NodeJS/reference/bus/bus-options/)
+- [`ITransportProducer`](/ServiceConnect-NodeJS/reference/extension-points/transport/itransportproducer/)
+- [Observability](/ServiceConnect-NodeJS/learn/operations/observability/)

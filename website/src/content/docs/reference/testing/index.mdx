@@ -1,0 +1,104 @@
+---
+title: Testing
+description: In-memory transport doubles and store contract suites from @serviceconnect/core/testing.
+---
+
+## Overview
+
+`@serviceconnect/core/testing` is a subpath of the core package containing test
+helpers: an in-memory transport double so you can exercise a bus without a live
+broker, and shared contract suites that a new persistence backend runs against
+its store implementations to prove conformance. None of these helpers are
+included in the main `@serviceconnect/core` entry point — import them from the
+`/testing` subpath so they stay out of production bundles.
+
+## Import
+
+```ts
+import { fakeTransport, runSagaStoreContract } from '@serviceconnect/core/testing';
+import type {
+  FakeTransport,
+  FakeTransportOptions,
+  OutboxEntry,
+} from '@serviceconnect/core/testing';
+```
+
+## Transport doubles
+
+```ts
+export function fakeTransport(opts?: FakeTransportOptions): FakeTransport;
+export function fakeProducer(opts?: FakeTransportOptions): ITransportProducer;
+export function fakeConsumer(opts?: FakeTransportOptions): ITransportConsumer;
+```
+
+- **`fakeTransport(opts?)`** — build an in-memory transport double for bus tests
+  with no broker required. Returns `{ producer, consumer }` plus an `outbox`
+  array of [`OutboxEntry`](#outboxentry) capturing everything that was published
+  or sent. The returned object also exposes `deliver(envelope)` to feed an
+  inbound message to the consumer, and `cancelByBroker()` / `disconnect()` /
+  `reconnect()` to simulate connection state for health-check tests.
+- **`fakeProducer(opts?)`** — convenience accessor returning just the `producer`
+  from a fresh `fakeTransport`.
+- **`fakeConsumer(opts?)`** — convenience accessor returning just the `consumer`
+  from a fresh `fakeTransport`.
+
+`FakeTransportOptions` lets you toggle transport capabilities the bus probes:
+
+```ts
+export interface FakeTransportOptions {
+  readonly supportsRoutingKey?: boolean;   // default false
+  readonly maxMessageSize?: number;        // default Number.POSITIVE_INFINITY
+}
+```
+
+### OutboxEntry
+
+Each outbound operation appends one entry to `transport.outbox`:
+
+```ts
+export interface OutboxEntry {
+  readonly operation: 'publish' | 'send' | 'sendBytes';
+  readonly typeName: string;
+  readonly endpoint?: string;
+  readonly body: Uint8Array;
+  readonly headers: Readonly<Record<string, string>>;
+  readonly routingKey?: string;
+  readonly routingSlipHopsCompleted?: number;
+}
+```
+
+Assert against `transport.outbox` to verify what your handlers published or sent
+without round-tripping through a real broker.
+
+## Store contract suites
+
+```ts
+export function runSagaStoreContract(...): void;
+export function runAggregatorStoreContract(...): void;
+export function runTimeoutStoreContract(...): void;
+```
+
+Shared [Vitest](https://vitest.dev/) suites that a new persistence backend runs
+against its store implementations to prove conformance:
+
+- **`runSagaStoreContract`** — the conformance suite for an
+  [`ISagaStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/isagastore/)
+  implementation (optimistic concurrency, load/save/delete semantics).
+- **`runAggregatorStoreContract`** — the conformance suite for an
+  [`IAggregatorStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/iaggregatorstore/)
+  implementation (buffering, lease-based flush, timeout expiry).
+- **`runTimeoutStoreContract`** — the conformance suite for an
+  [`ITimeoutStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/itimeoutstore/)
+  implementation (scheduling and due-timeout dispatch).
+
+Call the relevant suite from your backend's test file, handing it a factory for
+your store, and it asserts the same behaviour the in-tree memory and MongoDB
+backends are held to.
+
+## See also
+
+- [`ITransportProducer`](/ServiceConnect-NodeJS/reference/extension-points/transport/itransportproducer/)
+- [`ITransportConsumer`](/ServiceConnect-NodeJS/reference/extension-points/transport/itransportconsumer/)
+- [`ISagaStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/isagastore/)
+- [`IAggregatorStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/iaggregatorstore/)
+- [`ITimeoutStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/itimeoutstore/)

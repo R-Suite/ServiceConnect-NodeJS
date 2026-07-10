@@ -1,0 +1,57 @@
+---
+title: Envelope
+description: The wire-format envelope — headers map plus serialised body bytes.
+---
+
+## Overview
+
+`Envelope` is the on-the-wire shape of every message. It has exactly two fields: a free-form `headers` map and a `body` byte array. The serializer produces the body bytes; the bus and pipeline stamp the headers. Filters in the outgoing and inbound pipelines see and can mutate the envelope before it goes to the transport or after it comes off.
+
+## Import
+
+```ts
+import type { Envelope } from '@serviceconnect/core';
+```
+
+## Signature
+
+```ts
+export interface Envelope {
+  headers: Record<string, unknown>;
+  body: Uint8Array;
+}
+```
+
+## Parameters
+
+- **`headers`** — `Record<string, unknown>`. The in-process headers map — the internal camelCase [`MessageHeaders`](/ServiceConnect-NodeJS/reference/messages/message/) bag that the pipeline filters see. Carries keys such as `messageId`, `messageType`, `sourceAddress`, `destinationAddress`, and `timeSent`, plus any custom headers the caller passed via `SendOptions.headers` / `PublishOptions.headers`. At the transport boundary the bus rewrites these to the PascalCase wire names (see below). Values are typed `unknown` because they survive a round-trip through the transport — assume `string` for anything you set yourself.
+- **`body`** — `Uint8Array`. The serialised payload bytes. With the default serializer this is UTF-8 JSON; with a custom serializer it can be anything.
+
+### C# wire-format compatibility
+
+`@serviceconnect/core` is wire-compatible with the .NET ServiceConnect (`master`) stack, so Node.js and .NET services interoperate on the same RabbitMQ bus. The bus translates between its internal camelCase headers and .NET's PascalCase wire headers at the transport boundary:
+
+- **Outgoing** (`encodeWireHeaders`) — internal keys are stamped as PascalCase wire headers: `messageType` becomes `TypeName` (the .NET type identity), `messageId` → `MessageId`, `sourceAddress` → `SourceAddress`, and so on. A separate `MessageType` header carries the **operation** (`Publish` or `Send`), and every message is tagged `ConsumerType: 'RabbitMQ'` and `Language: 'Node'`. `correlationId` is **not** sent as a header — it is a property of the serialised message body, matching .NET.
+- **Incoming** (`decodeWireHeaders`) — PascalCase wire headers map back to camelCase. The message type is resolved from `FullTypeName` (an assembly-qualified name, reduced to its FullName) when present, otherwise from `TypeName`. `FullTypeName` is optional, and Node never sets it on outgoing messages.
+
+A message arriving from a .NET service with only PascalCase headers is therefore resolved correctly. This interop is exercised by the repository's `interop/` harness against a real C# `master` fixture.
+
+## Example
+
+```ts
+import type { Envelope } from '@serviceconnect/core';
+import { asFilter, FilterAction } from '@serviceconnect/core';
+
+const stampTenant = asFilter(async (envelope: Envelope) => {
+  envelope.headers.tenantId = process.env.TENANT_ID ?? 'default';
+  return FilterAction.Continue;
+});
+
+bus.use('outgoing', stampTenant);
+```
+
+## See also
+
+- [`Message`](/ServiceConnect-NodeJS/reference/messages/message/)
+- [Send / Publish / Request / Reply Options](/ServiceConnect-NodeJS/reference/messages/options/)
+- [Filters](/ServiceConnect-NodeJS/learn/messaging-patterns/filters/)

@@ -1,0 +1,161 @@
+---
+title: Persistence configuration
+description: In-memory and MongoDB-backed saga, aggregator, and timeout stores.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+Process managers, aggregators, and the saga timeout poller all delegate state and scheduled-work persistence to three small interfaces — `ISagaStore`, `IAggregatorStore`, and `ITimeoutStore`. Two implementations ship: an in-memory pair for tests and a MongoDB pair for production.
+
+You construct the stores yourself and pass them to the bus when you register process managers (`registerProcess`, `registerProcessData`) and aggregators (`registerAggregator`); they are not wired through `BusOptions`.
+
+## In-memory stores
+
+<Aside type="caution">
+  In-memory stores are for tests and local development only. State is lost on process restart and is not shared between processes — sagas, aggregator claims, and scheduled timeouts will be silently dropped if the service is recycled.
+</Aside>
+
+### `memorySagaStore`
+
+```ts
+import { memorySagaStore } from '@serviceconnect/persistence-memory';
+
+export function memorySagaStore(): ISagaStore;
+```
+
+Volatile saga-state store keyed by `(dataType, correlationId)`. Suitable for unit and integration tests against `fakeTransport`.
+
+```ts
+const sagaStore = memorySagaStore();
+```
+
+### `memoryAggregatorStore`
+
+```ts
+import { memoryAggregatorStore } from '@serviceconnect/persistence-memory';
+
+export function memoryAggregatorStore(): IAggregatorStore;
+```
+
+Volatile aggregator store for count- and time-windowed aggregators. Holds in-flight claims and buffered messages in memory.
+
+```ts
+const aggregatorStore = memoryAggregatorStore();
+```
+
+### `memoryTimeoutStore`
+
+```ts
+import { memoryTimeoutStore } from '@serviceconnect/persistence-memory';
+
+export interface MemoryTimeoutStoreOptions {
+  leaseMs?: number;
+}
+
+export function memoryTimeoutStore(options?: MemoryTimeoutStoreOptions): ITimeoutStore;
+```
+
+Volatile timeout store used by the saga timeout poller.
+
+- **`leaseMs`** (optional, default `60_000`) — the per-record visibility lease applied by `claimDue`. A claimed record stays invisible to other claims for this long; if the poller crashes before deleting it, it becomes claimable again after the lease expires.
+
+```ts
+const timeoutStore = memoryTimeoutStore();
+```
+
+## MongoDB stores
+
+The MongoDB stores live in `@serviceconnect/persistence-mongodb`. You own the `MongoClient` lifecycle — the stores only need a `Db` reference.
+
+### `MongoStoreOptions`
+
+```ts
+export interface MongoStoreOptions {
+  db: Db;
+  collectionName?: string;
+}
+```
+
+- **`db`** (required) — a `Db` instance from the `mongodb` driver. Construct the `MongoClient` yourself, connect, select a database, and pass the `Db` here.
+- **`collectionName`** (optional) — override the default collection. Useful when running multiple services against a single shared database.
+
+Each Mongo factory returns a typed extension of the corresponding store interface that adds an `ensureIndexes(): Promise<void>` method. Call it once at boot — typically in parallel with the other stores. The aggregator and timeout stores create the indexes they rely on for performance; the saga store's `ensureIndexes()` is a safe no-op because its compound `_id` (`{ dataType, correlationId }`) is auto-indexed and uniqueness-enforced by MongoDB.
+
+### `mongoSagaStore`
+
+```ts
+import { mongoSagaStore, type MongoSagaStore } from '@serviceconnect/persistence-mongodb';
+
+export interface MongoSagaStore extends ISagaStore {
+  ensureIndexes(): Promise<void>;
+}
+
+export function mongoSagaStore(options: MongoStoreOptions): MongoSagaStore;
+```
+
+Persists saga state. Default collection: `'serviceconnect.sagas'`.
+
+### `mongoAggregatorStore`
+
+```ts
+import { mongoAggregatorStore, type MongoAggregatorStore } from '@serviceconnect/persistence-mongodb';
+
+export interface MongoAggregatorStore extends IAggregatorStore {
+  ensureIndexes(): Promise<void>;
+}
+
+export function mongoAggregatorStore(options: MongoStoreOptions): MongoAggregatorStore;
+```
+
+Persists aggregator buffers and claim leases. Default collection: `'serviceconnect.aggregators'`.
+
+### `mongoTimeoutStore`
+
+```ts
+import { mongoTimeoutStore, type MongoTimeoutStore } from '@serviceconnect/persistence-mongodb';
+
+export interface MongoTimeoutStore extends ITimeoutStore {
+  ensureIndexes(): Promise<void>;
+}
+
+export function mongoTimeoutStore(options: MongoStoreOptions): MongoTimeoutStore;
+```
+
+Persists scheduled saga timeouts. Default collection: `'serviceconnect.timeouts'`.
+
+In addition to `db` and `collectionName`, the timeout store's options accept:
+
+- **`leaseMs`** (optional, default `60_000`) — the visibility lease applied by `claimDue`. Concurrent pollers sharing this collection will not both claim the same record within the lease window; if the claiming poller dies before deleting the record, it becomes claimable again after the lease expires.
+
+## Wiring example
+
+```ts
+import { MongoClient } from 'mongodb';
+import {
+  mongoSagaStore,
+  mongoAggregatorStore,
+  mongoTimeoutStore,
+} from '@serviceconnect/persistence-mongodb';
+
+const client = await MongoClient.connect('mongodb://localhost:27017');
+const db = client.db('serviceconnect');
+
+const sagaStore = mongoSagaStore({ db });
+const aggregatorStore = mongoAggregatorStore({ db });
+const timeoutStore = mongoTimeoutStore({ db });
+
+await Promise.all([
+  sagaStore.ensureIndexes(),
+  aggregatorStore.ensureIndexes(),
+  timeoutStore.ensureIndexes(),
+]);
+```
+
+## See also
+
+- [`ISagaStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/isagastore/)
+- [`IAggregatorStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/iaggregatorstore/)
+- [`ITimeoutStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/itimeoutstore/)
+- [Process Manager](/ServiceConnect-NodeJS/learn/messaging-patterns/process-manager/)

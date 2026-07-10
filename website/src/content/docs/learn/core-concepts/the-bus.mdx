@@ -1,0 +1,67 @@
+---
+title: The Bus
+description: The single entry point for publishing, sending, request/reply, and lifecycle.
+---
+
+## Overview
+
+The **bus** is the single object your application code talks to. It is what you call to publish events, send commands, issue requests, register handlers, and shut everything down on exit. Every other piece of ServiceConnect — the transport, the serialiser, the consume pipeline, the request-reply manager — sits behind it.
+
+Conceptually the bus is a thin facade. It owns a small set of collaborators, exposes a typed API on top of them, and guarantees that they start and stop in the right order. You construct it once, keep the reference at module scope (or in a DI container), and never reach past it in normal application code.
+
+A bus instance is tied to a single **logical service**: one queue name, one transport, one type registry. If you genuinely need two unrelated services in one process, build two buses. In practice that is rare — one process, one bus.
+
+## Why it matters
+
+A messaging framework lives or dies by the shape of its public surface. ServiceConnect's choice is that you never construct a producer, a consumer, or a connection by hand: you describe what you want via `BusOptions` and `createBus` wires the pieces together. That keeps lifecycle correct — connections open before consumers attach, consumers stop before connections close, in-flight handlers drain before shutdown completes — and it keeps your call sites stable. Swapping RabbitMQ for an in-memory transport in tests changes the `transport` field of `BusOptions` and nothing else.
+
+The bus composes:
+
+- A **transport** (`ITransportProducer` + `ITransportConsumer`) — the wire-level send/receive. Today that is `@serviceconnect/rabbitmq`; tomorrow it could be anything you can implement those two interfaces against.
+- A **producer** — the outbound side: serialise the payload, set headers, hand the bytes to the transport.
+- A **consumer** — the inbound side: receive raw bytes, deserialise, dispatch through the pipeline to the right handler.
+- A **consume pipeline** — ordered filters that wrap every handler invocation (think logging, auth, correlation propagation).
+- A **request-reply manager** — correlates outbound requests with inbound replies, hands you back promises.
+- A **message type registry** — the runtime mapping from type strings to TypeScript types, shared with the transport.
+
+You will see those names in the reference docs; in day-to-day code you only ever touch the bus itself.
+
+## API touch-point
+
+```ts
+import { createBus, createMessageTypeRegistry } from '@serviceconnect/core';
+import { rabbitMQWithRegistry } from '@serviceconnect/rabbitmq';
+
+const registry = createMessageTypeRegistry();
+const bus = createBus({
+  queue: { name: 'orders' },
+  transport: rabbitMQWithRegistry(
+    { url: 'amqp://localhost' },
+    registry,
+  ),
+  registry,
+});
+
+await bus.start();
+// ...
+await bus.stop();
+```
+
+`createBus` returns a `Bus`. Its surface is small on purpose:
+
+- `bus.registerMessage<T>(typeName, options?)` — register a message type (the bus also exposes `route`, `use`, and the underlying `registry`). Registration is a prerequisite: `handle`, `publish`, and `send` all throw `MessageTypeNotRegisteredError` unless the type has been registered first, via `bus.registerMessage(...)` or directly on the shared `registry.register(...)`.
+- `bus.handle<T>(typeName, fn)` — register a typed handler for the given message type string.
+- `bus.publish<T>(typeName, payload, options?)` — fan out via the type's exchange.
+- `bus.send<T>(typeName, payload, { endpoint, headers? })` — point-to-point to a named queue.
+- `bus.sendRequest<Req, Rep>(typeName, payload, { endpoint, timeoutMs, signal? })` — one request, one reply, returned as a promise.
+- `bus.sendRequestMulti<Req, Rep>(typeName, payload, { endpoint, expectedReplyCount, timeoutMs })` — gather N replies from a single endpoint with competing consumers; use `bus.publishRequest` for true broadcast-then-gather.
+- `bus.start()` / `bus.stop()` — lifecycle. Repeated calls are safe to await: a second `start()` while running and a second `stop()` are no-ops. Note a bus cannot be restarted after `stop()` — `start()` throws if the bus has already been stopped (create a new instance to resume).
+
+The bus is also `AsyncDisposable`, so `await using bus = createBus(...)` is idiomatic in scripts and tests. In long-lived services you usually call `await bus.start()` once at boot and hook `bus.stop()` into your process's shutdown signal handler.
+
+## See also
+
+- [`createBus`](/ServiceConnect-NodeJS/reference/bus/create-bus/)
+- [`Bus`](/ServiceConnect-NodeJS/reference/bus/bus/)
+- [Hosting](/ServiceConnect-NodeJS/learn/operations/hosting/)
+- [Configuration](/ServiceConnect-NodeJS/learn/operations/configuration/)

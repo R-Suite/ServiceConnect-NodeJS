@@ -1,0 +1,149 @@
+---
+title: Transport configuration
+description: RabbitMQ transport options and entry points.
+---
+
+## Overview
+
+The transport is the wire-level pair (`ITransportProducer` + `ITransportConsumer`) the bus uses to send and receive envelopes. It is pluggable: any object that satisfies those interfaces will work. The supported, batteries-included implementation lives in [`@serviceconnect/rabbitmq`](https://www.npmjs.com/package/@serviceconnect/rabbitmq) and is configured via `RabbitMQTransportOptions`.
+
+This page documents the RabbitMQ transport. Replacing the transport (in-memory test double, NATS, Kafka, etc.) is covered under [extension points](/ServiceConnect-NodeJS/reference/extension-points/transport/itransportproducer/).
+
+## Import
+
+```ts
+import { createRabbitMQTransport, rabbitMQWithRegistry } from '@serviceconnect/rabbitmq';
+```
+
+## Signatures
+
+```ts
+export function createRabbitMQTransport(opts: RabbitMQTransportOptions): RabbitMQTransport;
+
+export function rabbitMQWithRegistry(
+  opts: Omit<RabbitMQTransportOptions, 'parentsOf'>,
+  registry: IMessageTypeRegistry,
+): RabbitMQTransport;
+```
+
+`rabbitMQWithRegistry` is a convenience wrapper: it wires `parentsOf` from an `IMessageTypeRegistry` so polymorphic publishes fan out to every registered ancestor exchange. Reach for it whenever you have polymorphic messages registered on a registry; otherwise `createRabbitMQTransport` is enough.
+
+## `RabbitMQTransportOptions`
+
+```ts
+export interface RabbitMQTransportOptions {
+  url: string;
+  tls?: boolean | import('node:tls').ConnectionOptions;
+  onConnectionError?: (error: Error, role: 'producer' | 'consumer') => void;
+  acquireTimeout?: number;
+  heartbeat?: number;
+  retryLow?: number;
+  retryHigh?: number;
+  connectionName?: string;
+  parentsOf?: (typeName: string) => readonly string[];
+  producer?: {
+    publishConfirmTimeoutMs?: number;
+    maxAttempts?: number;
+    maxMessageSize?: number;
+  };
+  consumer?: {
+    concurrency?: number;
+    prefetch?: number;
+    retryDelay?: number;
+    maxRetries?: number;
+    errorQueue?: string | null;
+    auditQueue?: string;
+    auditEnabled?: boolean;
+    deadLetterUnhandled?: boolean;
+    queueArguments?: Record<string, unknown>;
+    retryQueueArguments?: Record<string, unknown>;
+  };
+}
+```
+
+### Connection
+
+- **`url`** (required) — `string`. AMQP connection string. Supports the standard `amqp://user:pass@host:port/vhost` form and the comma-separated cluster shorthand `amqp://user:pass@host-1,host-2,host-3:5672/vhost`.
+- **`tls`** (optional) — `boolean | import('node:tls').ConnectionOptions`. When `true`, connect over TLS (`amqps`) with defaults. Pass an object to forward custom settings to Node's TLS layer (`ca` / `cert` / `key` / `pfx`, etc.) for mutual-TLS or private-CA brokers.
+- **`onConnectionError`** (optional) — `(error: Error, role: 'producer' | 'consumer') => void`. Callback invoked on a connection-level error; `role` tells you whether the failing connection is the producer's or the consumer's.
+- **`acquireTimeout`** (optional) — `number` (ms). How long the underlying client will wait for a channel or connection before throwing.
+- **`heartbeat`** (optional) — `number` (s). AMQP heartbeat interval. Smaller values detect dead peers faster at the cost of more idle traffic.
+- **`retryLow`** (optional) — `number` (ms). Lower bound for connect-retry backoff.
+- **`retryHigh`** (optional) — `number` (ms). Upper bound for connect-retry backoff.
+- **`connectionName`** (optional) — `string`. A base name for the connections shown in the RabbitMQ management UI. The transport opens two connections and appends a per-role suffix, so the labels actually shown are `<connectionName>.producer` and `<connectionName>.consumer`. When unset the base defaults to `serviceconnect`. Set it to the service name so operators can tell connections apart.
+- **`parentsOf`** (optional) — `(typeName: string) => readonly string[]`. Returns the ancestor message-type names for a given type name. Used for polymorphic publishes. Set this manually only if you are not using `rabbitMQWithRegistry`.
+
+### `producer.*`
+
+- **`publishConfirmTimeoutMs`** (optional) — `number` (ms). Reserved / currently dormant. The option is accepted and resolved (default `30_000`) but is not wired into the publish path: the publisher is created with publisher-confirms enabled (`confirm: true`) and `maxAttempts` only, and the underlying client uses its own confirm timeout. Setting this value has no effect today.
+- **`maxAttempts`** (optional) — `number`. How many times the producer retries a publish on transient failures. Default `3`.
+- **`maxMessageSize`** (optional) — `number` (bytes). Hard cap on a single serialised envelope. Default `134_217_728` (128 MiB).
+
+### `consumer.*`
+
+- **`concurrency`** (optional) — `number`. Maximum number of messages this consumer processes simultaneously. Default unset/unbounded — `rabbitmq-client` processes up to `prefetch` messages at once. This is distinct from `prefetch`: `prefetch` governs how many unacknowledged messages the broker delivers, while `concurrency` caps how many are handled in parallel. Set it to `1` for strict, one-at-a-time, in-order processing — e.g. ordered saga handling where a message and its follow-ups must run in publish order.
+- **`prefetch`** (optional) — `number`. Per-channel prefetch count — the maximum number of unacknowledged messages the broker will deliver to this consumer at once. Default `100`.
+- **`retryDelay`** (optional) — `number` (ms). Delay before a failed message is redelivered to the main queue. Default `3000`.
+- **`maxRetries`** (optional) — `number`. The total number of delivery attempts before routing the message to the error queue (the initial delivery plus `maxRetries - 1` redeliveries). The boundary is strict, so `maxRetries=3` means 3 attempts in total — 1 initial delivery plus 2 redeliveries — and the message is dead-lettered on the 3rd failure; `maxRetries=1` means no retries. Default `3`.
+- **`errorQueue`** (optional) — `string | null`. Name of the error queue that exhausted messages are routed to. Default `'errors'`. Set to `null` to disable error-queue routing entirely (failed messages will be dead-lettered or dropped per `deadLetterUnhandled`).
+- **`auditQueue`** (optional) — `string`. Name of the audit queue that mirrors every successfully-handled message when auditing is on. Not-handled, retried, and errored messages are not audited. Default `'audit'`.
+- **`auditEnabled`** (optional) — `boolean`. Whether to mirror consumed messages to `auditQueue`. Default `false`.
+- **`deadLetterUnhandled`** (optional) — `boolean`. When `true`, messages with no registered handler are dead-lettered instead of acked-and-dropped. Default `false`.
+- **`queueArguments`** (optional) — `Record<string, unknown>`. Extra arguments passed when the consumer declares its main queue (e.g. `{ 'x-queue-type': 'quorum' }`, `{ 'x-message-ttl': 60_000 }`).
+- **`retryQueueArguments`** (optional) — `Record<string, unknown>`. Extra arguments passed when the consumer declares its retry queue.
+
+## Example
+
+```ts
+import { rabbitMQWithRegistry } from '@serviceconnect/rabbitmq';
+import { createMessageTypeRegistry } from '@serviceconnect/core';
+
+const registry = createMessageTypeRegistry();
+const transport = rabbitMQWithRegistry(
+  {
+    url: 'amqp://app:secret@rabbit-1,rabbit-2,rabbit-3:5672/%2F?heartbeat=10',
+    connectionName: 'orders-service',
+    consumer: {
+      prefetch: 32,
+      maxRetries: 5,
+      retryDelay: 2000,
+      auditEnabled: true,
+    },
+    producer: {
+      maxMessageSize: 8 * 1024 * 1024,
+    },
+  },
+  registry,
+);
+```
+
+## Runtime introspection
+
+The transport returns objects rather than raw plumbing, so health checks and dashboards can read live state without reaching into the AMQP client:
+
+- **`RabbitMQProducer`** — the wire-level producer the bus uses for `publish` / `send`. Exposes `isHealthy: boolean` (used by [`producerConnectivity`](/ServiceConnect-NodeJS/reference/healthchecks/) ) and `snapshot(): ProducerSnapshot` for diagnostics.
+- **`ProducerSnapshot`** — point-in-time view of producer state: connection status, last publish-confirm latency, in-flight publish count. Stable shape, safe to log on every health probe.
+- **`RabbitMQConsumer`** — the wire-level consumer. Exposes `isConnected`, `isStopped`, `isCancelledByBroker`, and `snapshot(): ConsumerSnapshot`. The last-consume timestamp (`lastConsumedAt`) is not a property on the consumer itself; it is a field on the `ConsumerSnapshot` returned by `snapshot()`.
+- **`ConsumerSnapshot`** — point-in-time view of consumer state: connection status, prefetch counters, last-consume timestamps. Same observability contract as the producer.
+
+Application code rarely names these types; they are useful when you are writing a transport-aware health check or custom telemetry adapter.
+
+## Transport-specific errors
+
+The RabbitMQ producer raises a small set of typed errors that callers can catch by class:
+
+- **`RabbitMQPayloadTooLargeError`** — thrown by any producer write path (`producer.publish`, `producer.send`, and `producer.sendBytes`) when the serialised envelope exceeds `producer.maxMessageSize`. The error message includes both the actual byte count and the configured cap, so the caller can either chunk via streaming or raise the limit. This is a producer-side guard; the broker does not validate the size.
+- **`RabbitMQPublishConfirmTimeoutError`** — exported for forward-compatibility but not currently thrown by the transport. Publish-confirm timeouts are not surfaced as this error today (the option that would drive it, `producer.publishConfirmTimeoutMs`, is itself dormant — see above).
+- **`RabbitMQTopologyMismatchError`** — exported for forward-compatibility but not currently thrown by the transport. On a topology conflict (a `PRECONDITION_FAILED` / inequivalent-arguments declare), the consumer does not throw: it silently falls back to a passive queue declare that just asserts the existing queue is present.
+
+The inbound side exposes one legacy type alias:
+
+- **`RabbitMQMessage`** — a deprecated alias of the core `Message` type (`export type RabbitMQMessage = Message`), kept only for legacy probe/smoke tests. It is not a distinct wire-level envelope type and is not yielded by `RabbitMQConsumer`: the consumer maps AMQP messages to the framework's `Envelope` via its internal `toEnvelope` mapping, and ordinary handlers receive that `Envelope`.
+
+## See also
+
+- [`createBus`](/ServiceConnect-NodeJS/reference/bus/create-bus/)
+- [Clustering](/ServiceConnect-NodeJS/learn/operations/clustering/)
+- [Error Handling](/ServiceConnect-NodeJS/learn/operations/error-handling/)
+- [`ITransportProducer`](/ServiceConnect-NodeJS/reference/extension-points/transport/itransportproducer/)
+- [`ITransportConsumer`](/ServiceConnect-NodeJS/reference/extension-points/transport/itransportconsumer/)

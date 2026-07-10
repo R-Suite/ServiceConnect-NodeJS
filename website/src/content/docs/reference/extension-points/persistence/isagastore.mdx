@@ -1,0 +1,72 @@
+---
+title: ISagaStore
+description: Saga state store with optimistic concurrency.
+---
+
+## Overview
+
+`ISagaStore` is the persistence interface for saga state. The bus calls into it whenever a saga is loaded, created, updated, or completed. Implementations are responsible for serialising the saga-data object to whatever underlying store they wrap (in-memory `Map`, MongoDB collection, SQL table, etc.) and for enforcing optimistic-concurrency semantics via a `ConcurrencyToken`.
+
+The two error types `ConcurrencyError` and `DuplicateSagaError` are exported from `@serviceconnect/core`. Implementations should throw them at the documented points so the bus can apply the correct retry/poison-handling behaviour.
+
+## Import
+
+```ts
+import type {
+  ConcurrencyToken,
+  FoundSaga,
+  ISagaStore,
+  ProcessData,
+} from '@serviceconnect/core';
+import { ConcurrencyError, DuplicateSagaError } from '@serviceconnect/core';
+```
+
+## Signature
+
+```ts
+export interface ProcessData {
+  correlationId: string;
+}
+
+export type ConcurrencyToken = string;
+
+export interface FoundSaga<TData extends ProcessData> {
+  readonly data: TData;
+  readonly concurrencyToken: ConcurrencyToken;
+}
+
+export interface ISagaStore {
+  findByCorrelationId<TData extends ProcessData>(
+    dataType: string,
+    correlationId: string,
+  ): Promise<FoundSaga<TData> | undefined>;
+
+  insert<TData extends ProcessData>(
+    dataType: string,
+    data: TData,
+  ): Promise<ConcurrencyToken>;
+
+  update<TData extends ProcessData>(
+    dataType: string,
+    data: TData,
+    expectedToken: ConcurrencyToken,
+  ): Promise<ConcurrencyToken>;
+
+  delete(dataType: string, correlationId: string): Promise<void>;
+}
+```
+
+## Members
+
+- **`findByCorrelationId(dataType, correlationId)`** — look up an existing saga by its `dataType` (the registered data-type name) and `correlationId`. Returns `{ data, concurrencyToken }` when a row exists, `undefined` otherwise. The returned `data` should be the freshly deserialised state — handlers will mutate it in place — and `concurrencyToken` is whatever opaque value lets `update` detect a concurrent write.
+- **`insert(dataType, data)`** — create a new saga row. Returns the initial `ConcurrencyToken`. Implementations must throw `DuplicateSagaError` if a row already exists for `(dataType, data.correlationId)`. A `DuplicateSagaError` — like any insert failure — surfaces as a non-terminal failure, so the message is retried by the normal retry policy; on redelivery `findByCorrelationId` finds the now-existing row and the bus takes the update path. There is no immediate in-process load-and-update fallback within a single delivery.
+- **`update(dataType, data, expectedToken)`** — write a new version of the saga row. Implementations must throw `ConcurrencyError` if `expectedToken` does not match the token currently in storage (optimistic concurrency). On success, return the new token for the next round-trip.
+- **`delete(dataType, correlationId)`** — remove the row. Called when a saga marks itself complete. Safe to no-op if the row no longer exists.
+
+## See also
+
+- [`ProcessData`](/ServiceConnect-NodeJS/reference/process-managers/process-data/)
+- [`ProcessHandler`](/ServiceConnect-NodeJS/reference/process-managers/process-handler/)
+- [Persistence configuration](/ServiceConnect-NodeJS/reference/configuration/persistence/)
+- [`ITimeoutStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/itimeoutstore/)
+- [Process Manager](/ServiceConnect-NodeJS/learn/messaging-patterns/process-manager/)

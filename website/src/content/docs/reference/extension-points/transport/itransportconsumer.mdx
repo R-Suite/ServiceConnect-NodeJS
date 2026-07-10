@@ -1,0 +1,75 @@
+---
+title: ITransportConsumer
+description: Inbound transport interface — start, stop, delivery callback.
+---
+
+## Overview
+
+`ITransportConsumer` is the inbound half of the wire-level transport. The bus owns one and calls `start` once during `bus.start()`, handing in a queue name, the list of message types it's interested in, and a `ConsumeCallback`. The consumer is then responsible for declaring the queue, binding any subscriptions it needs, running the delivery loop, and invoking the callback for each message until `stop` is called.
+
+`ITransportConsumer` extends `AsyncDisposable`, so the bus can dispose it as part of shutdown and standalone scripts can `await using` the consumer directly.
+
+## Import
+
+```ts
+import type {
+  ConsumeCallback,
+  ConsumeResult,
+  ITransportConsumer,
+} from '@serviceconnect/core';
+```
+
+## Signature
+
+```ts
+export interface ConsumeResult {
+  readonly success: boolean;
+  readonly notHandled: boolean;
+  readonly error?: Error;
+  readonly terminalFailure: boolean;
+}
+
+export type ConsumeCallback = (
+  envelope: Envelope,
+  signal: AbortSignal,
+) => Promise<ConsumeResult>;
+
+export interface ITransportConsumer extends AsyncDisposable {
+  readonly isConnected: boolean;
+  readonly isStopped: boolean;
+  readonly isCancelledByBroker: boolean;
+
+  start(
+    queueName: string,
+    messageTypes: readonly string[],
+    callback: ConsumeCallback,
+    signal?: AbortSignal,
+  ): Promise<void>;
+
+  stop(signal?: AbortSignal): Promise<void>;
+}
+```
+
+## Members
+
+- **`isConnected`** — `boolean` getter. `true` once the consumer is bound to its queue and the delivery loop is running. Health checks read this to detect a disconnected consumer.
+- **`isStopped`** — `boolean` getter. `true` after `stop()` has been called (whether or not it has finished draining).
+- **`isCancelledByBroker`** — `boolean` getter. `true` when the broker cancelled the consumer mid-flight (e.g. queue redeclared, queue deleted, exclusive consumer pre-empted). Health checks read this so a cancelled consumer fails closed instead of looking healthy.
+- **`start(queueName, messageTypes, callback, signal?)`** — connect, declare the queue and any required bindings for `messageTypes`, and begin invoking `callback` for each delivery. Called exactly once per consumer lifetime. The promise resolves when the consumer is ready to receive messages. The `signal` parameter is an optional part of the contract that implementations MAY honour to abort a slow startup, but no shipped transport does so and the bus passes no signal here.
+- **`stop(signal?)`** — stop accepting new deliveries, wait for any in-flight callbacks to complete, then close the broker connection. Idempotent. The `signal` parameter is part of the interface but is currently ignored by every shipped implementation (and the bus calls `stop()` with no argument), so it does not bound the drain window today.
+
+## `ConsumeCallback` contract
+
+For each inbound delivery the consumer calls the callback with the wire `Envelope` (raw byte `body` plus untyped `headers` — deserialisation of the body happens later in the bus dispatcher, not in the consumer) and an `AbortSignal` that the consumer aborts when `stop()` is called. The callback resolves with a `ConsumeResult` describing what happened; the consumer uses that result to ack, nack, retry, or route to the error/audit queue.
+
+- **`success`** — `true` when at least one handler ran to completion (or there was nothing to do and the message is safe to ack).
+- **`notHandled`** — `true` when no handler was registered for the message type. The consumer typically acks-and-drops these unless `deadLetterUnhandled` is enabled.
+- **`error`** — optional `Error` carrying the failure that produced a non-success result. Implementations use this to log and to populate dead-letter headers.
+- **`terminalFailure`** — `true` when the failure is non-retryable (validation, deserialisation, poison message). The consumer skips retry and routes straight to the error queue.
+
+## See also
+
+- [`ITransportProducer`](/ServiceConnect-NodeJS/reference/extension-points/transport/itransportproducer/)
+- [Transport configuration](/ServiceConnect-NodeJS/reference/configuration/transport/)
+- [`ConsumeContext`](/ServiceConnect-NodeJS/reference/handlers/consume-context/)
+- [`ConsumeResult`](/ServiceConnect-NodeJS/reference/handlers/consume-result/)

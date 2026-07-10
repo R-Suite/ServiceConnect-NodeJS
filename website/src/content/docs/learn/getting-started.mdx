@@ -1,0 +1,112 @@
+---
+title: Getting Started
+description: From zero to a running publisher and consumer in about ten minutes.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+This walkthrough installs `@serviceconnect/core` + `@serviceconnect/rabbitmq`, defines a typed message, attaches a handler, publishes a message, and shuts the bus down cleanly. By the end you have a working publisher and consumer running against a local RabbitMQ.
+
+## Prerequisites
+
+- Node.js 22 LTS or later.
+- npm 10+ (bundled with Node; pnpm or yarn work too).
+- Docker (for a one-line RabbitMQ).
+
+## 1. Start RabbitMQ
+```bash
+docker run --rm -d --name rabbit -p 5672:5672 -p 15672:15672 rabbitmq:3.13-management
+```
+
+Management UI: [http://localhost:15672](http://localhost:15672) — username `guest`, password `guest`.
+
+## 2. Create a project
+
+```bash
+mkdir hello-serviceconnect && cd hello-serviceconnect
+npm init -y
+npm install @serviceconnect/core @serviceconnect/rabbitmq
+npm install -D typescript tsx @types/node
+```
+
+In `package.json` set `"type": "module"`. In `tsconfig.json` use `"moduleResolution": "nodenext"` and `"module": "nodenext"`.
+
+## 3. Define a message and a handler
+
+`src/index.ts`:
+
+```ts
+import { createBus, createMessageTypeRegistry, type Message } from '@serviceconnect/core';
+import { rabbitMQWithRegistry } from '@serviceconnect/rabbitmq';
+
+interface OrderPlaced extends Message {
+  orderId: string;
+  total: number;
+}
+
+const registry = createMessageTypeRegistry();
+registry.register<OrderPlaced>('OrderPlaced');
+
+const bus = createBus({
+  queue: { name: 'hello-serviceconnect' },
+  transport: rabbitMQWithRegistry(
+    { url: 'amqp://localhost' },
+    registry,
+  ),
+  registry,
+});
+
+bus.handle<OrderPlaced>('OrderPlaced', async (msg, ctx) => {
+  console.log('received', msg.orderId, msg.total);
+});
+
+await bus.start();
+await bus.publish<OrderPlaced>('OrderPlaced', {
+  correlationId: 'c-1',
+  orderId: 'o-1',
+  total: 19.99,
+});
+
+await new Promise((r) => setTimeout(r, 500));
+await bus.stop();
+```
+
+## 4. Run
+
+```bash
+node --import tsx src/index.ts
+```
+
+Expected output:
+
+```
+received o-1 19.99
+```
+
+<Aside type="tip">
+  The bus is `AsyncDisposable`. In a long-lived process you can use `await using bus = createBus(...)` and the bus will stop automatically when the scope exits.
+</Aside>
+
+## What just happened?
+
+- `createMessageTypeRegistry()` builds a type registry — the bus uses it to map message type strings to TypeScript types at runtime.
+- `rabbitMQWithRegistry` constructs a RabbitMQ transport pre-wired with the registry's polymorphic relationships.
+- `createBus(...)` returns a bus that owns the consumer, the producer, the pipeline, and the request-reply manager.
+- `bus.handle<OrderPlaced>('OrderPlaced', ...)` registers a typed handler. The string identifies the message type at runtime; the type parameter gives you compile-time typing of the handler's payload. The bus throws `MessageTypeNotRegisteredError` at `handle()` time if the string was never registered (generics are erased at runtime, so a string/type-parameter disagreement is not — and cannot be — caught).
+- `bus.publish<OrderPlaced>('OrderPlaced', payload)` publishes a message. The bus serialises the payload, sets headers, and delivers to the exchange.
+- `await bus.start()` opens connections and begins consumption. `await bus.stop()` drains in-flight work and closes the transport.
+
+## Next steps
+
+- [The Bus](/ServiceConnect-NodeJS/learn/core-concepts/the-bus/) — the conceptual tour.
+- [Messages](/ServiceConnect-NodeJS/learn/core-concepts/messages/) — type registration and polymorphism.
+- [Pub/Sub](/ServiceConnect-NodeJS/learn/messaging-patterns/pub-sub/) — the canonical event-driven pattern.
+- [Request/Reply](/ServiceConnect-NodeJS/learn/messaging-patterns/request-reply/) — synchronous-style RPC over the bus.
+
+## See also
+
+- [`createBus`](/ServiceConnect-NodeJS/reference/bus/create-bus/)
+- [`BusOptions`](/ServiceConnect-NodeJS/reference/bus/bus-options/)
+- [Configuration](/ServiceConnect-NodeJS/learn/operations/configuration/)

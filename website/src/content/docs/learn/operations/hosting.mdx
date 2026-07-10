@@ -1,0 +1,123 @@
+---
+title: Hosting
+description: Integrate ServiceConnect with Fastify, NestJS, standalone workers, and container lifecycles.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+A bus is a long-lived component: it owns broker connections, channels, prefetch budgets, and in-flight handler signals. Hosting is the small set of decisions that tie its lifecycle to your process — when it starts, when it stops, and how the platform learns whether it's healthy. The bus exposes three primitives — `bus.start()`, `bus.stop(signal?)`, and `Symbol.asyncDispose` — and the host framework's job is to call them in the right places.
+
+## The problem
+
+Production Node services have a lifecycle — startup, readiness, ongoing health, graceful shutdown. The bus needs to participate cleanly. A common failure mode is holding open AMQP connections without draining mid-flight handlers: the orchestrator pulls the container, the broker eventually times out the channel, and any handler that was halfway through a database write either commits without acking or rolls back and gets redelivered after the next pod restart. Either way, the next deploy ships with a tail of duplicates and partial writes.
+
+The fix is to wire the bus into whatever framework owns process startup and shutdown, so `start` happens after the framework is ready to serve and `stop` happens before the framework tears the rest down.
+
+## The solution
+
+The bus is framework-agnostic. It needs a place to call `start()` after boot, a place to `await stop()` on shutdown, and — if you want platform health checks — a place to expose the probes from `@serviceconnect/healthchecks`.
+
+### Fastify
+
+Fastify's `onListen` and `onClose` hooks line up cleanly with `bus.start` and `bus.stop`. The bus is constructed once at module scope, started when the HTTP server is ready, and stopped on close.
+
+```ts
+import Fastify from 'fastify';
+import { createBus } from '@serviceconnect/core';
+import { createRabbitMQTransport } from '@serviceconnect/rabbitmq';
+import { consumerConnectivity, producerConnectivity } from '@serviceconnect/healthchecks';
+
+const app = Fastify();
+const bus = createBus({
+  queue: { name: 'orders' },
+  transport: createRabbitMQTransport({ url: process.env.AMQP_URL! }),
+});
+
+app.get('/healthz', async (_req, reply) => {
+  const consumer = await consumerConnectivity(bus)();
+  const producer = await producerConnectivity(bus)();
+  const overall = consumer.status === 'healthy' && producer.status === 'healthy' ? 'healthy' : 'unhealthy';
+  reply.code(overall === 'healthy' ? 200 : 503).send({ consumer, producer });
+});
+
+app.addHook('onListen', async () => { await bus.start(); });
+app.addHook('onClose', async () => { await bus.stop(); });
+
+await app.listen({ port: 8080 });
+```
+
+### NestJS
+
+Nest already has lifecycle hooks designed for this exact problem. Hold the bus inside a provider and implement `OnApplicationBootstrap` and `OnApplicationShutdown`:
+
+```ts
+import { Injectable, OnApplicationBootstrap, OnApplicationShutdown } from '@nestjs/common';
+import { createBus, type Bus } from '@serviceconnect/core';
+import { createRabbitMQTransport } from '@serviceconnect/rabbitmq';
+
+@Injectable()
+export class BusProvider implements OnApplicationBootstrap, OnApplicationShutdown {
+  readonly bus: Bus = createBus({
+    queue: { name: 'orders' },
+    transport: createRabbitMQTransport({ url: process.env.AMQP_URL! }),
+  });
+
+  async onApplicationBootstrap(): Promise<void> { await this.bus.start(); }
+  async onApplicationShutdown(): Promise<void> { await this.bus.stop(); }
+}
+```
+
+Pair this with `app.enableShutdownHooks()` in `main.ts` so Nest actually fires the shutdown lifecycle on `SIGTERM`.
+
+### Standalone worker
+
+Some services have no HTTP surface at all — just a queue consumer. The bootstrap is short:
+
+```ts
+const bus = createBus({ /* ... */ });
+await bus.start();
+
+process.once('SIGTERM', () => void bus.stop());
+process.once('SIGINT', () => void bus.stop());
+
+await new Promise<void>(() => {}); // run forever
+```
+
+The bare `new Promise<void>(() => {})` keeps the event loop alive without burning CPU. `bus.stop()` resolves once handlers drain; once it does, Node exits naturally because no other handles remain.
+
+### `AsyncDisposable` for short-lived scopes
+
+`Bus` implements `Symbol.asyncDispose`, so in CLI scripts, integration tests, or one-shot jobs you can let the language own the lifecycle:
+
+```ts
+await using bus = createBus({ /* ... */ });
+await bus.start();
+await bus.send('PlaceOrder', { correlationId: 'c-1', orderId: 'o-1' }, { endpoint: 'orders' });
+// scope exit calls bus.stop() automatically
+```
+
+Useful for tests because forgetting to stop the bus leaks broker connections across the run.
+
+### Health probes
+
+`@serviceconnect/healthchecks` ships three probes; each returns a `HealthCheck` — a `() => Promise<HealthCheckResult>` with a `status` of `'healthy' | 'unhealthy' | 'degraded'`. Map them to your platform's endpoints:
+
+- `consumerConnectivity(bus)` to **liveness** — fast, returns unhealthy when the consumer has been cancelled by the broker or its connection has dropped.
+- `producerConnectivity(bus)` to **liveness** alongside the consumer check, so a half-open transport gets restarted.
+- `consumerBusy(bus, { graceMs })` to a slower-cadence **readiness** probe — it reports `degraded` when nothing has flowed for a while, useful for traffic shifting but a poor signal for "restart this pod".
+
+## Common pitfalls
+
+<Aside type="caution">
+  - `bus.start()` is idempotent — a second call while the bus is running is a no-op, so you do not need to guard double-bootstrap. It only throws (a plain `Error`) if you call `start()` after `stop()`; once stopped, a bus cannot be restarted and you must create a new instance.
+  - Forgetting `await` on `bus.stop()` during shutdown — handlers may not drain, and the next deploy ships with a tail of redeliveries.
+  - Mapping `consumerBusy` to liveness — it returns `degraded` when nothing's flowing, which can trip your orchestrator into restarting healthy idle pods. Keep it on readiness or a soft alert.
+</Aside>
+
+## See also
+
+- [Cancellation](/ServiceConnect-NodeJS/learn/operations/cancellation/)
+- [Health checks](/ServiceConnect-NodeJS/reference/healthchecks/)
+- [Configuration](/ServiceConnect-NodeJS/learn/operations/configuration/)

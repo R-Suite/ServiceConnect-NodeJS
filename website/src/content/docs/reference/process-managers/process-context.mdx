@@ -1,0 +1,79 @@
+---
+title: ProcessContext
+description: ConsumeContext extension passed to process-manager handlers — adds markComplete and requestTimeout.
+---
+
+## Overview
+
+`ProcessContext` is the third argument passed to a [`ProcessHandler.handle`](/ServiceConnect-NodeJS/reference/process-managers/process-handler/) call. It extends [`ConsumeContext`](/ServiceConnect-NodeJS/reference/handlers/consume-context/) with two saga-specific methods: `markComplete()` to terminate the saga and `requestTimeout(...)` to schedule a future tick. Every member of `ConsumeContext` — `bus`, `headers`, `messageId`, `correlationId`, `messageType`, `signal`, `logger`, `reply(...)` — is available unchanged.
+
+## Import
+
+```ts
+import type { ProcessContext } from '@serviceconnect/core';
+```
+
+## Signature
+
+```ts
+export interface ProcessContext extends ConsumeContext {
+  markComplete(): void;
+  requestTimeout(name: string, runAt: Date, payload?: Record<string, unknown>): Promise<void>;
+}
+```
+
+## Parameters
+
+- **`markComplete()`** — flags the saga as complete. After the current handler returns the bus deletes the row from the [`ISagaStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/isagastore/) instead of persisting the mutated state. Subsequent messages with the same `correlationId` will be treated as not-yet-started by the bus (a `startsWith` handler can create a fresh row; a `handles`-only message is ignored).
+- **`requestTimeout(name, runAt, payload?)`** — schedules a future tick driven by the [`ITimeoutStore`](/ServiceConnect-NodeJS/reference/extension-points/persistence/itimeoutstore/) configured on the process. `name` is the message-type that is dispatched back to the process when the timeout fires, so it must match a type the process handles (a type passed to `handles(...)` / registered); `runAt` is the absolute time the tick should fire; `payload` is an optional `Record<string, unknown>` whose fields are spread into the dispatched message body alongside `correlationId`. The bus polls the timeout store at the interval set by [`BusOptions.timeoutPollIntervalMs`](/ServiceConnect-NodeJS/reference/bus/bus-options/) and dispatches due timeouts back through the saga's handler chain.
+
+All other members are inherited from [`ConsumeContext`](/ServiceConnect-NodeJS/reference/handlers/consume-context/): `bus`, `headers`, `messageId`, `correlationId`, `messageType`, `signal`, `logger`, and `reply(...)`.
+
+## Example
+
+```ts
+import {
+  type Message,
+  type ProcessContext,
+  type ProcessData,
+  type ProcessHandler,
+} from '@serviceconnect/core';
+
+interface OrderState extends ProcessData {
+  status: 'pending' | 'paid';
+}
+interface PaymentReceived extends Message {
+  orderId: string;
+  amountCents: number;
+}
+
+class OnPaymentReceived implements ProcessHandler<OrderState, PaymentReceived> {
+  async handle(
+    msg: PaymentReceived,
+    data: OrderState,
+    ctx: ProcessContext,
+  ): Promise<void> {
+    data.status = 'paid';
+    ctx.logger.info('payment received', { orderId: msg.orderId });
+    // `name` must be a type the process handles (wired via `handles(...)`), and we must NOT
+    // markComplete() here: completing deletes the saga row, so the timeout could never be
+    // delivered back. A separate `handles('ShipDeadline', ...)` handler completes the saga
+    // when the timeout fires.
+    await ctx.requestTimeout(
+      'ShipDeadline',
+      new Date(Date.now() + 24 * 60 * 60 * 1000),
+      { orderId: msg.orderId },
+    );
+  }
+  correlate(msg: PaymentReceived): string {
+    return msg.orderId;
+  }
+}
+```
+
+## See also
+
+- [`ProcessHandler`](/ServiceConnect-NodeJS/reference/process-managers/process-handler/)
+- [`ProcessData`](/ServiceConnect-NodeJS/reference/process-managers/process-data/)
+- [`ConsumeContext`](/ServiceConnect-NodeJS/reference/handlers/consume-context/)
+- [Process Manager](/ServiceConnect-NodeJS/learn/messaging-patterns/process-manager/)

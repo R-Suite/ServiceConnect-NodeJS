@@ -1,0 +1,81 @@
+---
+title: Idempotency
+description: At-least-once delivery means handlers must be idempotent — patterns for safe retries.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+ServiceConnect over RabbitMQ delivers each message **at least once**. The framework will retry, the broker will redeliver, and at scale these aren't edge cases — they're traffic. Handlers therefore need to be idempotent: running the same delivery twice must have the same observable effect as running it once. The framework provides the building block — `ctx.messageId`, stable across redeliveries of the same publish (though it is `MessageId | undefined`, since it mirrors the inbound header and can be absent) — and the rest is application discipline.
+
+## The problem
+
+A network blip on ack, a manual requeue after a deploy, a poison-message recovery, or the bus simply being stopped mid-handler can all cause the same `messageId` to land in your handler twice. If your handler charges a card, sends an email, or increments a counter without checking, those side effects happen twice. "It usually works" stops being true the moment volume goes up: even a one-in-ten-thousand duplicate rate produces dozens of duplicate charges a day in a busy service.
+
+Worse, the duplicates show up randomly during incident windows — exactly when on-call has the least bandwidth to reconcile them. Treating idempotency as a first-class concern at the handler boundary is much cheaper than running reconciliation jobs forever.
+
+## The solution
+
+Two patterns cover almost all cases. Pick the one that fits the handler.
+
+### Dedup table keyed on `messageId`
+
+For handlers that produce a non-idempotent side effect (charging a card, sending an email via a third party, calling an external API that creates records), record the `messageId` in the same transaction as the side effect. If the row already exists, short-circuit.
+
+`ctx.messageId` is `MessageId | undefined` — it mirrors the inbound `MessageId` header, which can be absent. Guard the missing-id case before using it as a dedup key: a message with no id cannot be safely deduplicated, so decide deliberately what to do (here we proceed without a dedup row, but you may prefer to reject).
+
+```ts
+bus.handle<ChargeCard>('ChargeCard', async (msg, ctx) => {
+  if (ctx.messageId === undefined) {
+    // No id to dedup on — proceed (or reject, depending on your guarantees).
+    await db.payments.charge(msg.orderId, msg.total);
+    return;
+  }
+  const messageId = ctx.messageId;
+  const inserted = await db.tx(async (t) => {
+    const fresh = await t.processed.tryInsert(messageId);
+    if (!fresh) return false;
+    await t.payments.charge(msg.orderId, msg.total);
+    return true;
+  });
+  if (!inserted) {
+    ctx.logger.info('duplicate delivery — skipped', { messageId });
+  }
+});
+```
+
+The transaction is the load-bearing part. If `tryInsert` and `charge` are in two different transactions, there is a window where the insert commits and the charge fails (or vice versa), and you've either lost work or duplicated it on retry. Keep them together.
+
+### Stateless idempotency
+
+Where possible, design the side effect so that re-running it has no observable difference. `UPDATE orders SET status = 'paid' WHERE id = ?` is naturally idempotent — the second run is a no-op. `UPDATE orders SET total = total + ?` is not, and demands the dedup pattern above.
+
+This is the cheapest pattern when it fits, because it requires no extra storage and works correctly even if the dedup table is wiped. When you can model an operation as "set this state" rather than "do this action", do.
+
+### What `ctx.messageId` actually guarantees
+
+`ctx.messageId` is the framework-assigned identifier, unique per **publish**. A redelivery of the same publish carries the same `messageId`. A semantically equivalent re-send by the producer (e.g. the client retried because they thought their first attempt failed) is a **new** publish with a **new** id — dedup at the handler boundary won't catch it. If that matters, the producer needs to assign a business-level idempotency key and the handler needs to dedup on that instead.
+
+### Correlation id is not a dedup key
+
+`correlationId` is a business identifier: a saga id, a request id, a per-conversation thread. Many distinct messages legitimately share the same correlation id — a request, its reply, the saga timeouts, and any follow-up commands all live under one correlation. Using it for dedup will silently drop messages that should have been processed.
+
+### Sagas
+
+Process managers already have optimistic concurrency via the version token (`ConcurrencyToken`). If two redelivered messages try to mutate the same saga at the same version, the second commit fails and the framework retries — exactly the behaviour you want. Saga authors generally don't need an extra dedup table, but the handler that triggers an external side effect from within a saga step still does.
+
+## Common pitfalls
+
+<Aside type="caution">
+  - Doing the dedup check at the application layer outside the side-effect transaction — there's a race window where the check passes, then the duplicate arrives and passes too, and both side effects commit.
+  - Using `correlationId` for dedup — multiple distinct messages can legitimately share a correlation id, and you will silently drop the ones you needed to process.
+  - Treating at-least-once as exactly-once because "it usually works" — at any meaningful volume, duplicates are inevitable. Plan for them.
+  - Forgetting that a producer retry creates a **new** `messageId`. If that's the duplicate you care about, dedup on a business-level idempotency key set by the producer.
+</Aside>
+
+## See also
+
+- [Error Handling](/ServiceConnect-NodeJS/learn/operations/error-handling/)
+- [`ConsumeContext`](/ServiceConnect-NodeJS/reference/handlers/consume-context/)
+- [Process Manager](/ServiceConnect-NodeJS/learn/messaging-patterns/process-manager/)

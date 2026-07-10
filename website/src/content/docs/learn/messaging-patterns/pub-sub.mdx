@@ -1,0 +1,70 @@
+---
+title: Pub/Sub
+description: Fanout publish — every consumer that handles the type receives a copy.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+Pub/Sub is the canonical event-driven pattern: a producer **publishes** a typed message, and every consumer that has registered a handler for that type receives an independent copy. The producer does not know — and does not care — how many consumers exist, or which queues they read from. New subscribers can come and go without any change to the publisher.
+
+## When to use
+
+Use Pub/Sub when you are announcing that **something happened** and you want any interested service to react. Domain events (`OrderPlaced`, `PaymentCaptured`, `CustomerSignedUp`) are the textbook case: the publisher's job ends with the publish call, and downstream services pick up the work in their own time.
+
+Pub/Sub also shines for **decoupling**. Adding a new audit logger or analytics consumer is purely additive — bind a new queue to the exchange, register a handler, done. No publisher redeploys.
+
+## When not to use
+
+Reach for [Point-to-Point](/ServiceConnect-NodeJS/learn/messaging-patterns/point-to-point/) when you are issuing a **command** ("charge this card") rather than announcing a fact. Commands have a single intended recipient and a clear authority; publishing them invites surprising duplicate work when a second consumer joins.
+
+<Aside type="caution">
+  Avoid Pub/Sub for synchronous-style request flows. If your code calls `publish` and then needs an answer, you are fighting the pattern — use [Request/Reply](/ServiceConnect-NodeJS/learn/messaging-patterns/request-reply/) instead. Publishers should never block on subscriber side-effects.
+</Aside>
+
+## Example
+
+```ts
+interface OrderPlaced extends Message {
+  orderId: string;
+  total: number;
+}
+
+const registry = createMessageTypeRegistry();
+registry.register<OrderPlaced>('OrderPlaced');
+
+const bus = createBus({
+  queue: { name: 'inventory' },
+  transport: rabbitMQWithRegistry({ url }, registry),
+  registry,
+});
+
+bus.handle<OrderPlaced>('OrderPlaced', async (msg) => {
+  await reserveStock(msg.orderId);
+});
+
+await bus.start();
+await bus.publish<OrderPlaced>('OrderPlaced', {
+  correlationId: 'c-1',
+  orderId: 'o-1',
+  total: 49.99,
+});
+```
+
+The `inventory` service registers a handler for `OrderPlaced` and starts the bus. Any process — including this one — that publishes `OrderPlaced` will see the handler fire. A second consumer, say `analytics`, declaring its own queue with its own handler, would receive its own copy of every message without touching the publisher.
+
+## Behind the scenes
+
+Each message type gets a durable **fanout exchange** whose name is the type string with any dots removed — the .NET `FullName.Replace(".", "")` convention, so `OrderPlaced` stays `OrderPlaced` and `Sales.OrderCreated` becomes `SalesOrderCreated`. When you call `bus.publish<OrderPlaced>('OrderPlaced', payload)`, the producer serialises the payload, stamps the envelope headers, and routes the bytes to the `OrderPlaced` exchange. Fanout exchanges ignore routing keys — every queue bound to the exchange receives a copy.
+
+Each consumer queue **binds to the exchange for every message type the bus actually *consumes*** — the types it handles, plus those consumed by its sagas and aggregators — declared once when `bus.start()` runs. Calling `bus.handle<OrderPlaced>('OrderPlaced', ...)` is what binds the `inventory` queue to the `OrderPlaced` exchange at startup; a type you `register` only for serialization but never handle is **not** bound (binding it as well as a parent would double-deliver a polymorphic message). Topology is fixed at `start()` from that consumed set, so calling `handle()` after `start()` does not add a binding.
+
+This wire format **mirrors the C# version of ServiceConnect**, so a Node.js publisher and a .NET consumer (or vice versa) interoperate on the same exchange. The envelope headers and the exchange-per-type convention are identical across both runtimes — there is no Node-specific framing.
+
+## See also
+
+- Runnable example: [`examples/publish-subscribe/`](https://github.com/R-Suite/ServiceConnect-NodeJS/tree/v3/examples/publish-subscribe)
+- [Competing Consumers](/ServiceConnect-NodeJS/learn/messaging-patterns/competing-consumers/)
+- [Polymorphic Messages](/ServiceConnect-NodeJS/learn/messaging-patterns/polymorphic-messages/)
+- [`bus.publish`](/ServiceConnect-NodeJS/reference/bus/bus/)

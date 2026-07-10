@@ -1,0 +1,45 @@
+---
+title: IMessageSerializer
+description: Bytes to and from a typed message.
+---
+
+## Overview
+
+`IMessageSerializer` is the interface the bus uses to turn typed messages into wire bytes and back. The default implementation is `jsonSerializer(registry)` — JSON with optional schema validation on the inbound path — but any conforming implementation will do, so you can plug in protobuf, msgpack, Avro, or a domain-specific framing scheme.
+
+The serializer sits between the bus and the transport: the bus calls `serialize` before handing a body to the producer, and `deserialize` after the consumer hands an inbound envelope back. Failures on the inbound path are expected to throw `ValidationError` (schema validation failed) or `TerminalDeserializationError` (bad UTF-8 / bad JSON). The consume pipeline treats both identically: each marks the message as a terminal failure and dead-letters it to the error queue without retry. The distinction between the two is semantic (the cause of the failure), not behavioural.
+
+## Import
+
+```ts
+import type { IMessageSerializer } from '@serviceconnect/core';
+import { jsonSerializer } from '@serviceconnect/core';
+```
+
+## Signature
+
+```ts
+export interface IMessageSerializer {
+  serialize<T extends Message>(message: T): Uint8Array;
+  deserialize<T extends Message>(bytes: Uint8Array, typeName: string): T;
+}
+```
+
+## Members
+
+- **`serialize(message)`** — encode the typed message to a `Uint8Array` ready for the transport. Synchronous: implementations should not return a `Promise`. Throw if the message is structurally invalid (cycles, unrepresentable values, etc.); the bus will surface the error to the caller of `publish`/`send`.
+- **`deserialize(bytes, typeName)`** — decode a wire body into a typed message. The framework hands in the bytes and the `typeName` extracted from the envelope headers so the serializer can pick the right schema. Throw `TerminalDeserializationError` (bad UTF-8 / bad JSON) or `ValidationError` (schema validation failed) for messages that cannot be decoded; both error types are exported from `@serviceconnect/core` and are treated as terminal failures — the inbound pipeline dead-letters either to the error queue without retry.
+
+## Default implementation: `jsonSerializer`
+
+```ts
+export function jsonSerializer(registry: IMessageTypeRegistry): IMessageSerializer;
+```
+
+`jsonSerializer` is the batteries-included implementation used unless you pass your own. It JSON-encodes outbound messages and JSON-parses inbound payloads, transforming object keys to PascalCase on the way out and back to camelCase on the way in — so the body on the wire matches the .NET ServiceConnect format while your TypeScript code stays camelCase. When a type was registered with a [`StandardSchemaV1`](/ServiceConnect-NodeJS/reference/extension-points/serialization/imessagetyperegistry/) schema (Zod, Valibot, ArkType, …), `deserialize` runs the schema against the parsed value and throws `ValidationError` on schema failure or `TerminalDeserializationError` on invalid UTF-8 / invalid JSON. Schema validation is synchronous; async schemas raise `ValidationError` rather than blocking the consume loop.
+
+## See also
+
+- [`IMessageTypeRegistry`](/ServiceConnect-NodeJS/reference/extension-points/serialization/imessagetyperegistry/)
+- [`createBus`](/ServiceConnect-NodeJS/reference/bus/create-bus/)
+- [Messages](/ServiceConnect-NodeJS/learn/core-concepts/messages/)

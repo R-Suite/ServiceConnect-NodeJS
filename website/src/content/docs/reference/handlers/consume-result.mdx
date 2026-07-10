@@ -1,0 +1,65 @@
+---
+title: ConsumeResult
+description: Transport-facing outcome of consuming a message.
+---
+
+## Overview
+
+`ConsumeResult` is the value the inbound dispatcher resolves with for each consumed envelope. It is the **transport-facing** outcome — what the bus reports back to the transport's `ConsumeCallback` so the transport knows whether to ack, retry, or route to the error queue. Application handlers do not return `ConsumeResult` themselves; they return `Promise<void>` and the framework synthesises the result from how the handler resolved or threw.
+
+## Import
+
+```ts
+import type { ConsumeCallback, ConsumeResult } from '@serviceconnect/core';
+```
+
+## Signature
+
+```ts
+export interface ConsumeResult {
+  readonly success: boolean;
+  readonly notHandled: boolean;
+  readonly error?: Error;
+  readonly terminalFailure: boolean;
+}
+
+export type ConsumeCallback = (envelope: Envelope, signal: AbortSignal) => Promise<ConsumeResult>;
+```
+
+## Parameters
+
+- **`success`** — `boolean`. `true` if the handler chain ran to completion without throwing.
+- **`notHandled`** — `boolean`. `true` if the message type is not registered at all, or is registered but has no handler resolved at this endpoint. Transports typically log and ack `notHandled` envelopes (the message reached a queue we own, but nothing here cares about it).
+- **`error`** — `Error | undefined`. Set when a handler threw; carries the original exception so the transport can log it and decide its retry behaviour.
+- **`terminalFailure`** — `boolean`. `true` for unrecoverable errors raised during the deserialize step. Both [`TerminalDeserializationError`](/ServiceConnect-NodeJS/learn/operations/error-handling/) (the body could not be deserialised) and schema `ValidationError` (the payload failed its registered schema) are classified terminal — retrying will not help. Transports must skip retry and route the envelope directly to the error queue.
+
+## How dispatch outcomes map to `ConsumeResult`
+
+| Dispatch outcome | `success` | `notHandled` | `error` | `terminalFailure` |
+|---|---|---|---|---|
+| Handler resolves normally | `true` | `false` | `undefined` | `false` |
+| Handler throws (any error type) | `false` | `false` | the thrown error | `false` |
+| Deserialize throws `TerminalDeserializationError` | `false` | `false` | the thrown error | `true` |
+| Deserialize throws schema `ValidationError` | `false` | `false` | the thrown error | `true` |
+| No handler registered for type | `true` | `true` | `undefined` | `false` |
+
+`terminalFailure: true` is set **only** on the pre-handler deserialize step — when `serializer.deserialize` throws a `TerminalDeserializationError` or a schema `ValidationError`. An error thrown from a handler is **always** non-terminal (`terminalFailure: false`), even if it is one of those same types: the handler-error branch never marks a result terminal. So a handler that throws `TerminalDeserializationError` still takes the retry path.
+
+A `false` `success` with `terminalFailure: false` is the retry path: the transport may requeue with its retry policy. With `terminalFailure: true`, the transport bypasses retry entirely. A `true` `notHandled` always implies `success: true` — the envelope is acked, never retried (the message reached a queue we own, but nothing here handles its type).
+
+## `ConsumeCallback`
+
+`ConsumeCallback` is the function signature the bus hands to a transport consumer's `start(...)` method. The transport invokes it once per inbound envelope and decides what to do based on the resolved `ConsumeResult`.
+
+```ts
+export type ConsumeCallback = (envelope: Envelope, signal: AbortSignal) => Promise<ConsumeResult>;
+```
+
+The `signal` lets the transport cancel an in-flight consume during shutdown; the bus's inbound dispatcher propagates it down through the handler chain via `ConsumeContext.signal`.
+
+## See also
+
+- [`Handler`](/ServiceConnect-NodeJS/reference/handlers/handler/)
+- [`ConsumeContext`](/ServiceConnect-NodeJS/reference/handlers/consume-context/)
+- [`Envelope`](/ServiceConnect-NodeJS/reference/messages/envelope/)
+- [Error Handling](/ServiceConnect-NodeJS/learn/operations/error-handling/)

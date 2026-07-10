@@ -1,0 +1,29 @@
+{
+    "name": "@serviceconnect/stress-harness",
+    "version": "0.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "lint": "biome check .",
+        "test": "vitest run",
+        "smoke": "tsx src/index.ts --mode smoke",
+        "soak": "tsx src/index.ts --mode soak",
+        "throughput": "tsx src/index.ts --mode throughput"
+    },
+    "engines": {
+        "node": ">=22"
+    },
+    "dependencies": {
+        "@serviceconnect/core": "workspace:*",
+        "@serviceconnect/persistence-memory": "workspace:*",
+        "@serviceconnect/persistence-mongodb": "workspace:*",
+        "@serviceconnect/rabbitmq": "workspace:*",
+        "mongodb": "^6.0.0"
+    },
+    "devDependencies": {
+        "@testcontainers/mongodb": "^12.0.0",
+        "@testcontainers/rabbitmq": "^12.0.0",
+        "tsx": "^4.19.0",
+        "vitest": "^3.2.6"
+    }
+}

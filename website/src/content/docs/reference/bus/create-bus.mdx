@@ -1,0 +1,45 @@
+---
+title: createBus
+description: Construct a Bus from a transport, message registry, queue config, and optional pipeline.
+---
+
+## Overview
+
+`createBus` is the single entry point for building a `Bus`. You pass it a [`BusOptions`](/ServiceConnect-NodeJS/reference/bus/bus-options/) describing the transport, the queue name, and any optional collaborators (serializer, registry, logger, polling intervals, consume wrapper). It returns a fully wired [`Bus`](/ServiceConnect-NodeJS/reference/bus/bus/) ready for `registerMessage` / `handle` calls and a final `await bus.start()`.
+
+## Import
+
+```ts
+import { createBus } from '@serviceconnect/core';
+```
+
+## Signature
+
+```ts
+export function createBus(options: BusOptions): Bus;
+```
+
+## Example
+
+```ts
+import { createBus } from '@serviceconnect/core';
+import { createRabbitMQTransport } from '@serviceconnect/rabbitmq';
+
+const bus = createBus({
+  queue: { name: 'orders' },
+  transport: createRabbitMQTransport({ url: 'amqp://localhost' }),
+})
+  .registerMessage<OrderPlaced>('OrderPlaced')
+  .handle<OrderPlaced>('OrderPlaced', async (msg) => {
+    console.log('received', msg.orderId);
+  });
+
+await bus.start();
+```
+
+## See also
+
+- [`BusOptions`](/ServiceConnect-NodeJS/reference/bus/bus-options/)
+- [`Bus`](/ServiceConnect-NodeJS/reference/bus/bus/)
+- [The Bus](/ServiceConnect-NodeJS/learn/core-concepts/the-bus/)
+- [Getting Started](/ServiceConnect-NodeJS/learn/getting-started/)

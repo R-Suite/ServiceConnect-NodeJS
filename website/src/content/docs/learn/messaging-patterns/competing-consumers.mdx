@@ -1,0 +1,53 @@
+---
+title: Competing Consumers
+description: Multiple processes consuming the same queue — RabbitMQ load-balances delivery.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+Competing Consumers is **horizontal scale-out by deployment**, not by code change. Run N instances of the same service — each with the same `queue.name` — and RabbitMQ delivers each incoming message to exactly one of them. Throughput grows with the number of workers; failure of any single worker just means the broker redelivers its in-flight messages to a peer. The publisher does not know or care how many consumers exist.
+
+## When to use
+
+Use competing consumers for **command processing where work can be parallelised**: charging cards, sending emails, generating thumbnails, dispatching webhooks. Each message is independent of the others, and the work behind the handler is the bottleneck — not the broker.
+
+It is also the right shape for **smoothing bursty traffic**. Five workers can drain a queue five times faster than one; if traffic is spiky, the queue absorbs the burst and the worker pool drains it. You scale by adding processes, not by rewriting the consumer.
+
+## When not to use
+
+If every interested party should see every message, you want [Pub/Sub](/ServiceConnect-NodeJS/learn/messaging-patterns/pub-sub/), not competing consumers — sharing a queue with another service will silently steal half its traffic. If processing must be **strictly ordered**, competing consumers break that guarantee at the message level: RabbitMQ preserves per-channel order, but two workers will interleave. And if a message's effects depend on state from the message immediately before it, partition the work by key (one queue per partition) or run a single consumer for that partition.
+
+<Aside type="caution">
+  Two services accidentally consuming the same queue name is the most common production surprise here. Queue names are part of your deployment contract — pick them deliberately and treat them as load-bearing.
+</Aside>
+
+## Example
+
+```ts
+import { createBus } from '@serviceconnect/core';
+import { createRabbitMQTransport } from '@serviceconnect/rabbitmq';
+
+const bus = createBus({
+  transport: createRabbitMQTransport({
+    url: 'amqp://localhost',
+    consumer: { prefetch: 16 },
+  }),
+  queue: { name: 'orders' },
+});
+```
+
+There is no special API — you are running the same service code in multiple processes, each with the same `queue.name`. The broker handles dispatch. `prefetch` is a transport-level consumer option (`consumer.prefetch`, default `100`); `16` tells RabbitMQ how many unacknowledged messages this consumer is willing to hold at once.
+
+## Behind the scenes
+
+- Run N instances of the same service, each calling `createBus` with the same `queue.name`. RabbitMQ delivers each message to exactly one consumer; if that consumer crashes before acking, the broker redelivers to another worker.
+- `prefetch` (a transport-level consumer option, `consumer.prefetch` on `createRabbitMQTransport`, **not** a `queue` field) controls how many unacknowledged messages a single consumer will hold at once. The default is `100`. Higher values = more parallelism per process, at the cost of less even load distribution — a fast worker can grab a chunk of the queue and slow peers will idle. Lower it toward a modest value if you want more even distribution across workers; tune to your handler's latency profile.
+- Use this for command processing where work can be done in parallel across many workers. For events that every interested party should see, use pub/sub instead — there a fanout exchange gives each subscriber its own queue, and competing consumers within a subscriber pool the work for that subscriber alone.
+
+## See also
+
+- [Point-to-Point](/ServiceConnect-NodeJS/learn/messaging-patterns/point-to-point/)
+- [Clustering](/ServiceConnect-NodeJS/learn/operations/clustering/)
+- [`BusOptions`](/ServiceConnect-NodeJS/reference/bus/bus-options/)

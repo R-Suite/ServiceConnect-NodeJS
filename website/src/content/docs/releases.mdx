@@ -1,0 +1,39 @@
+---
+title: Releases
+description: Release notes and changelog for @serviceconnect/* and the legacy service-connect v2.
+---
+
+## v3 (current)
+
+v3 packages are published as `@serviceconnect/*`. Install the core packages with:
+
+```bash
+npm install @serviceconnect/core @serviceconnect/rabbitmq
+```
+
+Each release surfaces on the [GitHub Releases page](https://github.com/R-Suite/ServiceConnect-NodeJS/releases).
+
+### How releases work
+
+Releases are **tag-driven** — there is no Changesets setup and no version to bump in the source tree. Pushing a `v*` git tag to `master` triggers the [release workflow](https://github.com/R-Suite/ServiceConnect-NodeJS/blob/master/.github/workflows/release.yml), which stamps the tag's version onto every package and publishes them to npm:
+
+- A plain version tag (e.g. `v1.0.0`) publishes to the npm **`latest`** dist-tag — what a normal `npm install @serviceconnect/core` picks up.
+- A pre-release tag (any hyphenated SemVer, e.g. `v1.0.0-rc.1`) publishes to the **`next`** dist-tag instead, so `npm install` never picks it up by accident. Consumers opt into pre-releases explicitly:
+
+  ```bash
+  npm install @serviceconnect/core@next
+  ```
+
+Highlights of the v3 rewrite:
+
+- Typed bus + handler API.
+- Pluggable transport — `@serviceconnect/rabbitmq` is the only transport that ships today.
+- Sagas, aggregators, routing slips, streaming, polymorphic dispatch — all first-class.
+- OpenTelemetry integration via `@serviceconnect/telemetry`.
+- Production-grade health checks via `@serviceconnect/healthchecks`.
+- MongoDB-backed persistence via `@serviceconnect/persistence-mongodb`.
+- ESM-only, Node 22 LTS.
+
+## Legacy v2
+
+The legacy `service-connect` package on the [`master` branch](https://github.com/R-Suite/ServiceConnect-NodeJS/tree/master) is unchanged. v2.0.0 is the latest release. Bug fixes will be considered case-by-case; no new feature work is planned. See the [migration guide](/ServiceConnect-NodeJS/migrating-v2-to-v3/) when you're ready to move.
