@@ -17,7 +17,7 @@
     "devDependencies": {
         "@opentelemetry/api": "^1.7.0",
         "@opentelemetry/context-async-hooks": "^1.27.0",
-        "@opentelemetry/core": "^1.27.0",
+        "@opentelemetry/core": "^2.8.0",
         "@opentelemetry/sdk-trace-base": "^1.27.0",
         "tsx": "^4.19.0"
     }
