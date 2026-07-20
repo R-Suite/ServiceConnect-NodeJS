@@ -49,6 +49,8 @@ export interface RabbitMQTransportOptions {
         deadLetterUnhandled?: boolean;
         queueArguments?: Record<string, unknown>;
         retryQueueArguments?: Record<string, unknown>;
+        errorQueueArguments?: Record<string, unknown>;
+        auditQueueArguments?: Record<string, unknown>;
     };
 }
 
@@ -70,6 +72,8 @@ export interface ResolvedConsumerOptions {
     readonly deadLetterUnhandled: boolean;
     readonly queueArguments: Readonly<Record<string, unknown>>;
     readonly retryQueueArguments: Readonly<Record<string, unknown>>;
+    readonly errorQueueArguments: Readonly<Record<string, unknown>>;
+    readonly auditQueueArguments: Readonly<Record<string, unknown>>;
 }
 
 export function resolveProducerOptions(opts: RabbitMQTransportOptions): ResolvedProducerOptions {
@@ -94,5 +98,7 @@ export function resolveConsumerOptions(opts: RabbitMQTransportOptions): Resolved
         deadLetterUnhandled: c.deadLetterUnhandled ?? false,
         queueArguments: c.queueArguments ?? {},
         retryQueueArguments: c.retryQueueArguments ?? {},
+        errorQueueArguments: c.errorQueueArguments ?? {},
+        auditQueueArguments: c.auditQueueArguments ?? {},
     };
 }

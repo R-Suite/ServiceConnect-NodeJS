@@ -39,6 +39,8 @@ describe('resolveConsumerOptions', () => {
         expect(resolved.deadLetterUnhandled).toBe(false);
         expect(resolved.queueArguments).toEqual({});
         expect(resolved.retryQueueArguments).toEqual({});
+        expect(resolved.errorQueueArguments).toEqual({});
+        expect(resolved.auditQueueArguments).toEqual({});
     });
 
     it('caller overrides win', () => {
@@ -51,6 +53,8 @@ describe('resolveConsumerOptions', () => {
                 errorQueue: 'my-errors',
                 auditEnabled: true,
                 queueArguments: { 'x-max-priority': 10 },
+                errorQueueArguments: { 'x-queue-type': 'quorum' },
+                auditQueueArguments: { 'x-queue-type': 'quorum' },
             },
         };
         const resolved = resolveConsumerOptions(opts);
@@ -60,6 +64,8 @@ describe('resolveConsumerOptions', () => {
         expect(resolved.errorQueue).toBe('my-errors');
         expect(resolved.auditEnabled).toBe(true);
         expect(resolved.queueArguments).toEqual({ 'x-max-priority': 10 });
+        expect(resolved.errorQueueArguments).toEqual({ 'x-queue-type': 'quorum' });
+        expect(resolved.auditQueueArguments).toEqual({ 'x-queue-type': 'quorum' });
     });
 
     it('errorQueue: null opts out of error-queue routing', () => {
