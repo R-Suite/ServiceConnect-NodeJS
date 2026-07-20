@@ -60,7 +60,7 @@ describe('retry/error/audit topology (master parity)', () => {
             type: 'direct',
             durable: false,
         });
-        expect(topo.queues).toContainEqual({ queue: 'errors', durable: true });
+        expect(topo.queues).toContainEqual({ queue: 'errors', durable: true, arguments: {} });
         expect(topo.queueBindings).toContainEqual({
             exchange: 'errors',
             queue: 'errors',
@@ -142,6 +142,32 @@ describe('buildConsumerTopology (general)', () => {
         );
         const main = t.queues.find((q) => q.queue === 'q-self');
         expect(main?.arguments?.['x-max-priority']).toBe(10);
+    });
+
+    it('merges caller errorQueueArguments into the error queue', () => {
+        const t = buildConsumerTopology(
+            'q-self',
+            [],
+            resolveConsumerOptions({
+                url: '',
+                consumer: { errorQueueArguments: { 'x-queue-type': 'quorum' } },
+            }),
+        );
+        const error = t.queues.find((q) => q.queue === 'errors');
+        expect(error?.arguments?.['x-queue-type']).toBe('quorum');
+    });
+
+    it('merges caller auditQueueArguments into the audit queue', () => {
+        const t = buildConsumerTopology(
+            'q-self',
+            [],
+            resolveConsumerOptions({
+                url: '',
+                consumer: { auditEnabled: true, auditQueueArguments: { 'x-queue-type': 'quorum' } },
+            }),
+        );
+        const audit = t.queues.find((q) => q.queue === 'audit');
+        expect(audit?.arguments?.['x-queue-type']).toBe('quorum');
     });
 });
 

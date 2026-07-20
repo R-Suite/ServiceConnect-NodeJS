@@ -84,12 +84,20 @@ export function buildConsumerTopology(
 
     if (opts.errorQueue !== null) {
         exchanges.push({ exchange: opts.errorQueue, type: 'direct', durable: false });
-        queues.push({ queue: opts.errorQueue, durable: true });
+        queues.push({
+            queue: opts.errorQueue,
+            durable: true,
+            arguments: { ...opts.errorQueueArguments },
+        });
         queueBindings.push({ exchange: opts.errorQueue, queue: opts.errorQueue, routingKey: '' });
     }
     if (opts.auditEnabled) {
         exchanges.push({ exchange: opts.auditQueue, type: 'direct', durable: false });
-        queues.push({ queue: opts.auditQueue, durable: true });
+        queues.push({
+            queue: opts.auditQueue,
+            durable: true,
+            arguments: { ...opts.auditQueueArguments },
+        });
         queueBindings.push({ exchange: opts.auditQueue, queue: opts.auditQueue, routingKey: '' });
     }
 
