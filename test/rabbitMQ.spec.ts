@@ -922,7 +922,7 @@ describe("RabbitMQ Client", function() {
             } as any;
             await client.close();
 
-            assert.isTrue(closeStub.called, "channel cancelled");
+            assert.isTrue((closeStub as sinon.SinonStub).calledWith("amq.ctag-1"), "consumer cancelled by its tag");
             assert.isTrue((client.connection as any).close.called, "connection closed");
 
             (fakeChannel as any)._channel.cancel.restore();
