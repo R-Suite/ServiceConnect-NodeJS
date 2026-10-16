@@ -33,6 +33,10 @@ A simple, easy to use asynchronous messaging framework for Node.JS.  It provides
 
     npm test
 
+The integration tests need a running RabbitMQ. They connect to `amqp://user:bitnami@localhost` unless `RABBITMQ_URL` is set:
+
+    RABBITMQ_URL=amqp://user:password@localhost:5672 npm run integration-test
+
 ## Simple example
 
 In this example we simply send a message from one endpoint and consume the same message on another endpoint.

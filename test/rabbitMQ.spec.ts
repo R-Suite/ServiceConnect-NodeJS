@@ -25,7 +25,7 @@ describe("RabbitMQ Client", function() {
         _channel: {
             cancel: () => {},
             deleteQueue: () => {},
-            consumers: {},
+            consumers: new Map([["amq.ctag-1", () => {}]]),
             close: () => {}
         },
         consumers: []
@@ -922,10 +922,38 @@ describe("RabbitMQ Client", function() {
             } as any;
             await client.close();
 
-            assert.isTrue(closeStub.called, "channel cancelled");
+            assert.isTrue((closeStub as sinon.SinonStub).calledWith("amq.ctag-1"), "consumer cancelled by its tag");
             assert.isTrue((client.connection as any).close.called, "connection closed");
 
             (fakeChannel as any)._channel.cancel.restore();
+        });
+
+        it("should cancel every consumer the channel tracks", async function(){
+            var cancel = sinon.stub();
+            var client = new Client(settings() as any, async () =>{});
+            client.channel = {
+                _channel: { cancel, consumers: new Map([["amq.ctag-1", () => {}]]), close: sinon.stub() }
+            } as any;
+            client.connection = { close: sinon.stub() } as any;
+
+            await client.close();
+
+            assert.isTrue(cancel.calledOnce && cancel.calledWith("amq.ctag-1"), "consumer cancelled by its tag");
+            assert.isTrue((client.connection as any).close.called, "connection closed");
+        });
+
+        it("should close the channel and connection when nothing is consuming", async function(){
+            var cancel = sinon.stub();
+            var channelClose = sinon.stub();
+            var client = new Client(settings() as any, async () =>{});
+            client.channel = { _channel: { cancel, consumers: new Map(), close: channelClose } } as any;
+            client.connection = { close: sinon.stub() } as any;
+
+            await client.close();
+
+            assert.isFalse(cancel.called, "nothing to cancel");
+            assert.isTrue(channelClose.called, "channel closed");
+            assert.isTrue((client.connection as any).close.called, "connection closed");
         });
 
         it("should delete the retry queue if autoDelete is enabled", async function(){
@@ -936,7 +964,7 @@ describe("RabbitMQ Client", function() {
             var client = new Client(settingsObject as any, async () =>{});
             client.channel = { 
                 removeSetup: sinon.stub(),
-                _channel: { cancel: sinon.stub(), deleteQueue: sinon.stub(), consumers: {}, close: sinon.stub() },
+                _channel: { cancel: sinon.stub(), deleteQueue: sinon.stub(), consumers: new Map(), close: sinon.stub() },
                 consumers: []
             } as any;
 

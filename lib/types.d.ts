@@ -1,6 +1,5 @@
-/// <reference types="node" />
 import { Bus } from "./index";
-export declare type ServiceConnectConfig = {
+export type ServiceConnectConfig = {
     amqpSettings: {
         queue: {
             name: string;
@@ -42,7 +41,7 @@ export declare type ServiceConnectConfig = {
     client?: IClient;
     logger?: ILogger;
 };
-export declare type BusConfig = {
+export type BusConfig = {
     amqpSettings: {
         queue: {
             name: string;
@@ -88,16 +87,16 @@ export interface Message {
     CorrelationId: string;
     [k: string]: unknown;
 }
-export declare type MessageHandler<T extends Message> = (message: T, headers?: {
+export type MessageHandler<T extends Message> = (message: T, headers?: {
     [k: string]: unknown;
 }, type?: string, replyCallback?: ReplyCallback<Message>) => void | Promise<void>;
-export declare type MessageFilter<T extends Message> = (message: T, headers?: {
+export type MessageFilter<T extends Message> = (message: T, headers?: {
     [k: string]: unknown;
 }, type?: string, bus?: Bus) => boolean | Promise<boolean>;
-export declare type ConsumeMessageCallback = (message: Message, headers: {
+export type ConsumeMessageCallback = (message: Message, headers: {
     [k: string]: unknown;
 }, type: string) => Promise<void>;
-export declare type ReplyCallback<T extends Message> = (type: string, message: T) => Promise<void>;
+export type ReplyCallback<T extends Message> = (type: string, message: T) => Promise<void>;
 export interface IClient {
     connect: () => Promise<void>;
     consumeType: (type: string) => Promise<void>;
@@ -133,7 +132,7 @@ export interface IBus {
     initialized: boolean;
     isConnected: () => Promise<boolean>;
 }
-export declare type RequestReplyCallback<T extends Message> = {
+export type RequestReplyCallback<T extends Message> = {
     endpointCount: number;
     processedCount: number;
     callback: MessageHandler<T>;
