@@ -399,8 +399,10 @@ export default class implements IClient {
       await channelObj._channel.deleteQueue(this.config.amqpSettings.queue.name + ".Retries");
     }
     
-    // Stop consuming messages.
-    await channelObj._channel.cancel(Object.keys(channelObj._channel.consumers)[0])  
+    // Stop consuming messages. amqplib tracks consumers in a Map keyed by consumer tag.
+    for (const consumerTag of [...channelObj._channel.consumers.keys()]) {
+      await channelObj._channel.cancel(consumerTag);
+    }
 
     // Wait until all messages have been processed.
     let timeout = 0;
